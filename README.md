@@ -1,0 +1,2 @@
+# XPS_ADMIN_CONTROL_PLANE
+Admin control to XPS_INTEL_CORE
