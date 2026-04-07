@@ -29,6 +29,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Do not ignore src/lib (React source code)
+!src/lib/
 parts/
 sdist/
 var/
