@@ -589,7 +589,7 @@ function AIAssistantPage({ user }) {
           size={16} color={C.textMuted} />
         <input
           value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !loading && send()}
           placeholder="Ask about leads, sales strategy, proposals…"
           style={{
             flex: 1, background: 'none', border: 'none', outline: 'none',
@@ -743,7 +743,7 @@ function AIChatPanel() {
           }}>
             <input
               value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !loading && send()}
               placeholder="Ask XPS AI…"
               style={{
                 flex: 1, background: C.bgInput, border: `1px solid ${C.border}`,
