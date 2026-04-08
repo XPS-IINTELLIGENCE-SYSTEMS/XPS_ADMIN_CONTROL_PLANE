@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, signIn, signUp, signOut } from './lib/supabaseClient.js';
 import DeploymentStatus from './components/DeploymentStatus.jsx';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = import.meta.env.API_URL || '';
 
 function AuthPanel({ onAuth }) {
   const [email, setEmail] = useState('');
@@ -216,9 +216,9 @@ export default function App() {
             <p>Signed in as <strong>{user.email}</strong></p>
             {page === 'env' && (
               <div style={{ background: '#f6f8fa', padding: 16, borderRadius: 8, fontFamily: 'monospace', fontSize: 13 }}>
-                <div>VITE_SUPABASE_URL: {import.meta.env.VITE_SUPABASE_URL ? '✅ set' : '❌ missing'}</div>
-                <div>VITE_SUPABASE_ANON_KEY: {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ set' : '❌ missing'}</div>
-                <div>VITE_API_URL: {import.meta.env.VITE_API_URL || '(empty – using relative /api)'}</div>
+                <div>SUPABASE_URL: {import.meta.env.SUPABASE_URL ? '✅ set' : '❌ missing'}</div>
+                <div>SUPABASE_ANON_KEY: {import.meta.env.SUPABASE_ANON_KEY ? '✅ set' : '❌ missing'}</div>
+                <div>API_URL: {import.meta.env.API_URL || '(empty – using relative /api)'}</div>
               </div>
             )}
           </div>
