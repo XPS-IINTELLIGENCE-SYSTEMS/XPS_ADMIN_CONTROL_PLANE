@@ -1,53 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { supabase, signIn, signUp, signOut } from './lib/supabaseClient.js';
+import React, { useState } from 'react';
 import DeploymentStatus from './components/DeploymentStatus.jsx';
+import HomePage from './components/HomePage.jsx';
 
 const API_URL = import.meta.env.API_URL || '';
 
-function AuthPanel({ onAuth }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handle = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      if (mode === 'signup') {
-        await signUp(email, password);
-        setError('Check your email to confirm your account.');
-      } else {
-        const data = await signIn(email, password);
-        onAuth(data.user || data.session?.user);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ maxWidth: 360, margin: '80px auto', padding: 24, border: '1px solid #ddd', borderRadius: 8 }}>
-      <h2>XPS Admin – {mode === 'login' ? 'Sign In' : 'Sign Up'}</h2>
-      <form onSubmit={handle}>
-        <input style={inputStyle} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <input style={inputStyle} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
-        {error && <p style={{ color: 'red', fontSize: 13 }}>{error}</p>}
-        <button style={btnStyle} type="submit" disabled={loading}>{loading ? 'Loading…' : mode === 'login' ? 'Sign In' : 'Sign Up'}</button>
-      </form>
-      <p style={{ fontSize: 13, marginTop: 12 }}>
-        {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-        <span style={{ color: '#0070f3', cursor: 'pointer' }} onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
-          {mode === 'login' ? 'Sign Up' : 'Sign In'}
-        </span>
-      </p>
-    </div>
-  );
-}
+// AuthPanel and Supabase session checks have been disabled.
+// The site is now directly accessible without any sign-in requirement.
 
 function ChatPage() {
   const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello! How can I help you today?' }]);
@@ -150,25 +108,14 @@ const btnStyle = { padding: '8px 18px', background: '#0070f3', color: '#fff', bo
 const PAGES = ['dashboard', 'assistant', 'scraper', 'admin', 'systems', 'env', 'status'];
 
 export default function App() {
-  const [page, setPage] = useState('dashboard');
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [page, setPage] = useState('home');
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user || null);
-      setAuthLoading(false);
-    }).catch(() => {
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user || null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  // Auth/sign-in screen disabled – site is directly accessible without login.
+  // if (!user) return <AuthPanel onAuth={setUser} />;
 
-  if (authLoading) return <div style={{ padding: 40 }}>Loading…</div>;
-  if (!user) return <AuthPanel onAuth={setUser} />;
+  if (page === 'home') {
+    return <HomePage onEnterAdmin={() => setPage('dashboard')} />;
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif' }}>
@@ -192,12 +139,11 @@ export default function App() {
           </div>
         ))}
         <div style={{ marginTop: 'auto', paddingTop: 20 }}>
-          <p style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>{user.email}</p>
           <button
-            onClick={() => signOut().catch(console.error)}
-            style={{ ...btnStyle, background: '#e53e3e', fontSize: 12, padding: '5px 10px' }}
+            onClick={() => setPage('home')}
+            style={{ ...btnStyle, background: '#555', fontSize: 12, padding: '5px 10px' }}
           >
-            Sign Out
+            ← Home
           </button>
         </div>
       </aside>
@@ -213,7 +159,6 @@ export default function App() {
         {['dashboard', 'admin', 'systems', 'env'].includes(page) && (
           <div>
             <h1 style={{ textTransform: 'capitalize' }}>{page}</h1>
-            <p>Signed in as <strong>{user.email}</strong></p>
             {page === 'env' && (
               <div style={{ background: '#f6f8fa', padding: 16, borderRadius: 8, fontFamily: 'monospace', fontSize: 13 }}>
                 <div>SUPABASE_URL: {import.meta.env.SUPABASE_URL ? '✅ set' : '❌ missing'}</div>
