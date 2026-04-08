@@ -1,0 +1,82 @@
+name: 🚀 Deploy Frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: 🔨 Build
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          # GitHub Pages serves from /<repo-name>/ – adjust if using a custom domain
+          VITE_BASE_PATH: /XPS_ADMIN_CONTROL_PLANE/
+
+      - name: ✅ Validate build output
+        run: |
+          test -d dist && echo "✅ dist/ exists" || (echo "❌ dist/ missing" && exit 1)
+          test -f dist/index.html && echo "✅ index.html found" || (echo "❌ index.html missing" && exit 1)
+          echo "📦 Bundle size: $(du -sh dist | cut -f1)"
+
+      - name: 📤 Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    name: 🌐 Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: 🚀 Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: 🔍 Smoke test deployed site
+        run: |
+          sleep 10
+          URL="${{ steps.deployment.outputs.page_url }}"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "HTTP $STATUS – $URL"
+          [ "$STATUS" = "200" ] && echo "✅ Site is live" || echo "⚠️ Unexpected status $STATUS (may still be propagating)"

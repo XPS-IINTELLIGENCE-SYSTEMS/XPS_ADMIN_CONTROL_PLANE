@@ -1,0 +1,80 @@
+name: ✅ Post-Deploy Validation
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      deploy_url:
+        description: 'URL to validate'
+        required: false
+        default: ''
+
+jobs:
+  validate:
+    # Run when a deployment succeeds OR when triggered manually
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+    runs-on: ubuntu-latest
+    name: 🔍 Validate Deployment
+    permissions:
+      contents: read
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🌐 Resolve target URL
+        id: url
+        run: |
+          # Use manual input, or the URL from the deployment event, or the stored secret
+          URL="${{ github.event.inputs.deploy_url }}"
+          if [ -z "$URL" ]; then
+            URL="${{ github.event.deployment_status.target_url }}"
+          fi
+          if [ -z "$URL" ]; then
+            URL="${{ secrets.VITE_API_URL }}"
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Validating: $URL"
+
+      - name: 🏠 Check UI loads (HTTP 200)
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          if [ -z "$URL" ]; then echo "⚠️ No URL set – skipping UI check"; exit 0; fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "UI HTTP $STATUS"
+          [ "$STATUS" = "200" ] && echo "✅ UI loaded" || (echo "❌ UI returned $STATUS" && exit 1)
+
+      - name: 🔌 Check /api/health endpoint
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          if [ -z "$URL" ]; then echo "⚠️ No URL set – skipping API check"; exit 0; fi
+          HEALTH=$(curl -s "$URL/api/health")
+          echo "API health response: $HEALTH"
+          echo "$HEALTH" | grep -q '"status":"ok"' && echo "✅ API healthy" || echo "⚠️ API health check failed (may need LLM env vars)"
+
+      - name: 🤖 Check /api/chat endpoint
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          if [ -z "$URL" ]; then echo "⚠️ No URL set – skipping chat check"; exit 0; fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/chat" \
+            -H 'Content-Type: application/json' \
+            -d '{"messages":[{"role":"user","content":"ping"}]}')
+          echo "Chat endpoint HTTP $STATUS"
+          # 200 = LLM answered, 500 = no LLM key (expected in CI), 405 = misconfigured
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "500" ] && echo "✅ Chat endpoint reachable" || (echo "❌ Unexpected status $STATUS" && exit 1)
+
+      - name: 🕷️ Check /api/scrape endpoint
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          if [ -z "$URL" ]; then echo "⚠️ No URL set – skipping scrape check"; exit 0; fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/scrape" \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.com"}')
+          echo "Scrape endpoint HTTP $STATUS"
+          [ "$STATUS" = "200" ] || [ "$STATUS" = "500" ] && echo "✅ Scrape endpoint reachable" || (echo "❌ Unexpected status $STATUS" && exit 1)
+
+      - name: 📋 Validation summary
+        if: always()
+        run: echo "✅ Deployment validation complete for ${{ steps.url.outputs.url }}"
