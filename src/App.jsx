@@ -158,6 +158,8 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user || null);
       setAuthLoading(false);
+    }).catch(() => {
+      setAuthLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user || null);

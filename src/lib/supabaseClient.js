@@ -1,13 +1,18 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not set – auth/data disabled.')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// createClient throws if the URL is an empty string, so fall back to placeholder
+// values that keep the client constructable while still failing gracefully on API calls.
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-anon-key'
+)
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
