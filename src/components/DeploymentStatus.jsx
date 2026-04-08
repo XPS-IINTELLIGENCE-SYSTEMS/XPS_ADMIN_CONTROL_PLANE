@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+const API_URL = import.meta.env.API_URL || ''
 
 export default function DeploymentStatus() {
   const [status, setStatus] = useState(null)
@@ -11,7 +11,7 @@ export default function DeploymentStatus() {
     const run = async () => {
       // 1. Supabase env
       checks.supabase_config = !!(
-        import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+        import.meta.env.SUPABASE_URL && import.meta.env.SUPABASE_ANON_KEY
       )
 
       // 2. API health
