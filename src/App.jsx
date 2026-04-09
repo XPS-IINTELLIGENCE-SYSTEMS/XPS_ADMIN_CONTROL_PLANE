@@ -4,8 +4,9 @@ import Topbar           from './components/Topbar.jsx';
 import CenterWorkspace  from './components/CenterWorkspace.jsx';
 import ChatRail         from './components/ChatRail.jsx';
 
-// DEV_AUTH = true → auth bypassed, app boots directly into operator shell
-const DEV_AUTH = true;
+// DEV_AUTH: when true, auth is bypassed and the app boots directly into the operator shell.
+// Read from env so this can be toggled without code changes; defaults to true for dev safety.
+const DEV_AUTH = import.meta.env.DEV_AUTH !== 'false';
 
 export default function App() {
   const [activePanel, setActivePanel]       = useState('dashboard');

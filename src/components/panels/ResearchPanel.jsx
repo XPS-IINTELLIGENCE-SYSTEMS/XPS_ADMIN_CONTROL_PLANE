@@ -23,6 +23,8 @@ export default function ResearchPanel() {
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
       setResult(data);
     } catch (err) {
+      // Log actual error before showing synthetic fallback
+      console.warn('[ResearchPanel] Search failed, using synthetic fallback:', err.message);
       // Synthetic fallback
       setResult({
         query: query.trim(),

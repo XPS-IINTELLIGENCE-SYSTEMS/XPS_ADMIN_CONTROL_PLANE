@@ -11,7 +11,7 @@ export default function StatusPanel() {
     setLoading(true);
     const checks = {
       ui_loaded:      typeof window !== 'undefined',
-      supabase_config: !!(import.meta.env.SUPABASE_URL && import.meta.env.SUPABASE_ANON_KEY),
+      supabase_config: !!(import.meta.env.SUPABASE_URL) && !!(import.meta.env.SUPABASE_ANON_KEY),
       api_health:     false,
       llm_provider:   false,
     };

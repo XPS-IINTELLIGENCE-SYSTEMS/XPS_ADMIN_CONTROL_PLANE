@@ -322,7 +322,7 @@ function TaskCard({ task, onCancel }) {
         )}
         {task.result && (
           <button
-            onClick={() => setExpanded(e => !e)}
+            onClick={() => setExpanded(prev => !prev)}
             style={{
               padding: '2px 8px', background: 'transparent',
               border: '1px solid rgba(255,255,255,0.1)',
