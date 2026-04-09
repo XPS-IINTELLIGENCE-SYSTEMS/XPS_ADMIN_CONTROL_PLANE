@@ -1,59 +1,61 @@
-import React, { useState } from 'react';
-import Sidebar          from './components/Sidebar.jsx';
-import Topbar           from './components/Topbar.jsx';
-import CenterWorkspace  from './components/CenterWorkspace.jsx';
-import ChatRail         from './components/ChatRail.jsx';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-// DEV_AUTH: when true, auth is bypassed and the app boots directly into the operator shell.
-// Read from env so this can be toggled without code changes; defaults to true for dev safety.
-const DEV_AUTH = import.meta.env.DEV_AUTH !== 'false';
+import Shell from './components/layout/Shell.jsx';
+
+// Pages
+import Dashboard         from './pages/Dashboard.jsx';
+import CRM               from './pages/CRM.jsx';
+import Leads             from './pages/Leads.jsx';
+import AIAssistant       from './pages/AIAssistant.jsx';
+import ResearchLab       from './pages/ResearchLab.jsx';
+import Outreach          from './pages/Outreach.jsx';
+import Proposals         from './pages/Proposals.jsx';
+import Analytics         from './pages/Analytics.jsx';
+import KnowledgeBase     from './pages/KnowledgeBase.jsx';
+import Competition       from './pages/Competition.jsx';
+import Connectors        from './pages/Connectors.jsx';
+import Admin             from './pages/Admin.jsx';
+import Settings          from './pages/Settings.jsx';
+
+// XPS System pages
+import AdminControlPlane from './pages/xps/AdminControlPlane.jsx';
+import VisionCortex      from './pages/xps/VisionCortex.jsx';
+import AutoBuilder       from './pages/xps/AutoBuilder.jsx';
+import IntelCore         from './pages/xps/IntelCore.jsx';
+import Sandbox           from './pages/xps/Sandbox.jsx';
+import Quarantine        from './pages/xps/Quarantine.jsx';
 
 export default function App() {
-  const [activePanel, setActivePanel]       = useState('dashboard');
-  const [workspaceContent, setWorkspaceContent] = useState(null);
-  const [runtimeMode] = useState('synthetic'); // 'live' | 'synthetic' | 'local' | 'blocked'
-
-  // Chat-to-workspace bridge: agent output can update the center panel
-  const handleWorkspaceAction = (action) => {
-    setWorkspaceContent(action);
-    // If the action targets a specific panel, switch to it
-    if (action.panel) setActivePanel(action.panel);
-    else setActivePanel('workspace');
-  };
-
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      overflow: 'hidden',
-      background: '#0a0a0a',
-      fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
-    }}>
-      {/* Top bar spans full width minus sidebar */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left sidebar */}
-        <Sidebar activePanel={activePanel} onSelect={setActivePanel} />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Shell />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard"    element={<Dashboard />} />
+          <Route path="crm"          element={<CRM />} />
+          <Route path="leads"        element={<Leads />} />
+          <Route path="ai-assistant" element={<AIAssistant />} />
+          <Route path="research"     element={<ResearchLab />} />
+          <Route path="outreach"     element={<Outreach />} />
+          <Route path="proposals"    element={<Proposals />} />
+          <Route path="analytics"    element={<Analytics />} />
+          <Route path="knowledge"    element={<KnowledgeBase />} />
+          <Route path="competition"  element={<Competition />} />
+          <Route path="connectors"   element={<Connectors />} />
+          <Route path="admin"        element={<Admin />} />
+          <Route path="settings"     element={<Settings />} />
 
-        {/* Right section: topbar + center + chat rail */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          {/* Topbar */}
-          <Topbar activePanel={activePanel} runtimeMode={runtimeMode} />
+          <Route path="xps/admin"      element={<AdminControlPlane />} />
+          <Route path="xps/vision"     element={<VisionCortex />} />
+          <Route path="xps/builder"    element={<AutoBuilder />} />
+          <Route path="xps/intel"      element={<IntelCore />} />
+          <Route path="xps/sandbox"    element={<Sandbox />} />
+          <Route path="xps/quarantine" element={<Quarantine />} />
 
-          {/* Center + Chat rail */}
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            {/* Center workspace */}
-            <CenterWorkspace
-              activePanel={activePanel}
-              workspaceContent={workspaceContent}
-            />
-
-            {/* Right persistent chat rail */}
-            <ChatRail onWorkspaceAction={handleWorkspaceAction} />
-          </div>
-        </div>
-      </div>
-    </div>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
-
