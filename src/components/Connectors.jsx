@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 const CONNECTORS = [
-  { id: 'github', name: 'GitHub', emoji: '🐙', desc: 'Code repositories, deployments, and CI/CD pipelines', connected: true, detail: 'XPS-IINTELLIGENCE-SYSTEMS' },
+  { id: 'github', name: 'GitHub', emoji: '🐙', desc: 'Code repositories, deployments, and CI/CD pipelines', connected: true, detail: 'XPS-INTELLIGENCE-SYSTEMS' },
   { id: 'supabase', name: 'Supabase', emoji: '⚡', desc: 'Database, auth, and real-time subscriptions', connected: true, detail: 'xps-prod.supabase.co' },
   { id: 'vercel', name: 'Vercel', emoji: '▲', desc: 'Frontend deployments and serverless functions', connected: true, detail: 'xps-admin-control-plane' },
   { id: 'google-drive', name: 'Google Drive', emoji: '📁', desc: 'File storage, documents, and shared resources', connected: false, detail: '' },
