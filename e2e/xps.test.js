@@ -7,10 +7,17 @@
  * - Left toolbar (sidebar) works
  * - Center workspace is interactive
  * - Right chat UI works
+ * - Provider/runtime indicator visible in chat rail
  * - Mode dropdown opens and changes
  * - Agent selector works
  * - Paperclip opens
  * - Attachment UI renders correctly
+ * - Admin: GitHub capability panel
+ * - Admin: Supabase panel
+ * - Admin: Vercel panel
+ * - Admin: Google Workspace panel
+ * - Admin: Blocked ChatGPT/Copilot passthrough state
+ * - Admin: Overview/integration matrix
  * - No emoji remain in primary UI surfaces
  * - Text contrast correctness
  * - Electric gold/silver animated accent visible
@@ -86,6 +93,86 @@ test.describe('XPS Control Plane', () => {
     await page.waitForTimeout(300);
     await screenshot(page, 'admin-access-control');
   });
+
+  // ── New admin panel tests ────────────────────────────────────────────────
+
+  test('Admin — GitHub capability panel renders with capability truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-github"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-github-panel"]')).toBeVisible();
+    // Should show at least one cap-panel (GitHub REST API panel)
+    const panels = await page.locator('[data-testid="admin-github-panel"] [data-testid^="cap-panel-"]').count();
+    expect(panels).toBeGreaterThan(0);
+    await screenshot(page, 'admin-github-panel');
+  });
+
+  test('Admin — Supabase panel renders with capability truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-supabase"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-supabase-panel"]')).toBeVisible();
+    const panels = await page.locator('[data-testid="admin-supabase-panel"] [data-testid^="cap-panel-"]').count();
+    expect(panels).toBeGreaterThan(0);
+    await screenshot(page, 'admin-supabase-panel');
+  });
+
+  test('Admin — Vercel panel renders with capability truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-vercel"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-vercel-panel"]')).toBeVisible();
+    const panels = await page.locator('[data-testid="admin-vercel-panel"] [data-testid^="cap-panel-"]').count();
+    expect(panels).toBeGreaterThan(0);
+    await screenshot(page, 'admin-vercel-panel');
+  });
+
+  test('Admin — Google Workspace panel renders with capability truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-google"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-google-panel"]')).toBeVisible();
+    const panels = await page.locator('[data-testid="admin-google-panel"] [data-testid^="cap-panel-"]').count();
+    expect(panels).toBeGreaterThan(0);
+    await screenshot(page, 'admin-google-workspace-panel');
+  });
+
+  test('Admin — blocked ChatGPT/Copilot passthrough state renders honestly', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    // The overview (integrations) section shows the blocked passthrough panel
+    await page.waitForSelector('[data-testid="blocked-passthrough-panel"]', { timeout: 5000 });
+    await expect(page.locator('[data-testid="blocked-passthrough-panel"]')).toBeVisible();
+    // Should contain "Blocked" text
+    await expect(page.locator('[data-testid="blocked-passthrough-panel"]')).toContainText('Blocked');
+    await screenshot(page, 'admin-blocked-passthrough');
+  });
+
+  test('Admin — active provider banner shows on overview', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.waitForSelector('[data-testid="active-provider-banner"]', { timeout: 5000 });
+    await expect(page.locator('[data-testid="active-provider-banner"]')).toBeVisible();
+    await screenshot(page, 'admin-provider-banner');
+  });
+
+  test('Admin — refresh status button visible', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.waitForSelector('[data-testid="admin-refresh-status"]', { timeout: 5000 });
+    await expect(page.locator('[data-testid="admin-refresh-status"]')).toBeVisible();
+  });
+
+  test('Workspace — provider/runtime indicator visible in chat rail', async ({ page }) => {
+    // Provider indicator should be in the chat rail header
+    await page.waitForSelector('[data-testid="provider-indicator"]', { timeout: 8000 });
+    await expect(page.locator('[data-testid="provider-indicator"]')).toBeVisible();
+    // Should contain one of the known modes
+    const text = await page.locator('[data-testid="provider-indicator"]').innerText();
+    const knownModes = ['OpenAI', 'Groq', 'Ollama', 'Synthetic', 'LIVE', 'LOCAL'];
+    const hasKnownMode = knownModes.some(m => text.includes(m));
+    expect(hasKnownMode).toBe(true);
+    await screenshot(page, 'workspace-provider-indicator');
+  });
+
+  // ── Existing tests ───────────────────────────────────────────────────────
 
   test('Left toolbar (sidebar) — nav items are clickable', async ({ page }) => {
     // Sidebar should be visible on workspace page

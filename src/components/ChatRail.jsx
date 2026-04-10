@@ -3,7 +3,7 @@ import {
   Shield, Search, Globe, Bot, Eye, Lightbulb, Wrench, Sparkles,
   ChevronDown, ChevronUp, Paperclip, X, FileText, Image, File,
   HardDrive, AlertTriangle, Send, CheckCircle,
-  Map, Cpu, Zap, Compass, Radio,
+  Map, Cpu, Zap, Compass, Radio, Activity,
 } from 'lucide-react';
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
@@ -12,6 +12,66 @@ import { persistSearchJob, persistScrapeJob, persistWorkspaceObject } from '../l
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
+
+// ── Provider state hook ───────────────────────────────────────────────────
+function useProviderState() {
+  const [providerState, setProviderState] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setProviderState(data);
+      })
+      .catch(() => {}); // silent — fallback to build-time detection
+  }, []);
+
+  return providerState;
+}
+
+// ── Provider indicator bar ────────────────────────────────────────────────
+const PROVIDER_COLORS = {
+  openai:    { color: '#4ade80', label: 'OpenAI',    mode: 'Live' },
+  groq:      { color: '#4ade80', label: 'Groq',      mode: 'Live' },
+  ollama:    { color: '#60a5fa', label: 'Ollama',    mode: 'Local' },
+  none:      { color: '#fbbf24', label: 'Synthetic', mode: 'Synthetic' },
+};
+
+function ProviderIndicator({ providerState }) {
+  const activeLLM = providerState?.llm?.active || 'none';
+  const model     = providerState?.llm?.model   || null;
+  const meta      = PROVIDER_COLORS[activeLLM] || PROVIDER_COLORS.none;
+
+  return (
+    <div
+      data-testid="provider-indicator"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '5px 10px',
+        background: meta.color + '10',
+        border: `1px solid ${meta.color}25`,
+        borderRadius: 6,
+        marginTop: 6,
+      }}
+    >
+      <div style={{ width: 5, height: 5, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, fontWeight: 600, color: meta.color }}>
+        {meta.label}
+      </span>
+      {model && (
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+          {model}
+        </span>
+      )}
+      <span style={{
+        marginLeft: 'auto', fontSize: 10, fontWeight: 600,
+        color: 'rgba(255,255,255,0.25)', letterSpacing: 0.5,
+      }}>
+        {meta.mode.toUpperCase()}
+      </span>
+    </div>
+  );
+}
 
 // ── Agent registry (no emoji) ─────────────────────────────────────────────
 const AGENTS = [
@@ -76,6 +136,8 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const inputRef  = useRef(null);
   const fileInputRef = useRef(null);
   const currentAttachType = useRef(null);
+
+  const providerState = useProviderState();
 
   const { createObject, setStatus, appendLog, patchObject } = useWorkspace();
 
@@ -371,6 +433,8 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             </div>
           )}
         </div>
+        {/* Provider/runtime indicator */}
+        <ProviderIndicator providerState={providerState} />
       </div>
 
       {/* Message thread */}
