@@ -25,6 +25,12 @@ const SYSTEM_PROMPTS = {
   gpt:          'You are a helpful AI assistant for the XPS Intelligence Command Center. Help the operator with any task.',
 };
 
+const PANEL_NAVIGATION_PHRASES = {
+  'bytebot panel': 'bytebot', 'scraper panel': 'scraper',
+  'research panel': 'research', 'analytics panel': 'analytics',
+  'connectors panel': 'connectors', 'workspace panel': 'workspace',
+};
+
 export default function ChatRail({ onWorkspaceAction }) {
   const [agent, setAgent] = useState('orchestrator');
   const [messages, setMessages] = useState([{
@@ -70,9 +76,15 @@ export default function ChatRail({ onWorkspaceAction }) {
       const reply = data.reply || data.error || 'No response.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply, agent }]);
 
-      // If reply contains a workspace action hint, propagate it
-      if (onWorkspaceAction && (reply.includes('```') || reply.toLowerCase().includes('generating') || reply.toLowerCase().includes('workspace'))) {
-        onWorkspaceAction({ type: 'ai_output', content: reply, agent });
+      // Propagate workspace actions from agent replies
+      if (onWorkspaceAction) {
+        const lower = reply.toLowerCase();
+        if (reply.includes('```') || lower.includes('generating') || lower.includes('workspace')) {
+          onWorkspaceAction({ type: 'ai_output', content: reply, agent });
+        }
+        for (const [phrase, panel] of Object.entries(PANEL_NAVIGATION_PHRASES)) {
+          if (lower.includes(phrase)) { onWorkspaceAction({ type: 'navigate', panel }); break; }
+        }
       }
     } catch (err) {
       // Synthetic fallback
@@ -83,12 +95,17 @@ export default function ChatRail({ onWorkspaceAction }) {
         bytebot:      `[Synthetic] ByteBot: Task acknowledged. Multi-step execution requires live backend. Switch to ByteBot panel for the orchestration surface.`,
         default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
       };
+      const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: syntheticReplies[agent] || syntheticReplies.default,
+        content: syntheticContent,
         agent,
         synthetic: true,
       }]);
+      // Still route bytebot commands to bytebot panel even in synthetic mode
+      if (onWorkspaceAction && agent === 'bytebot') {
+        onWorkspaceAction({ type: 'navigate', panel: 'bytebot' });
+      }
     } finally {
       setLoading(false);
     }
