@@ -173,6 +173,7 @@ export async function callLLM(messages, { model, provider = 'auto', json = false
 }
 
 export function llmMode() {
+  // Legacy helper kept for routes/components that only need coarse runtime mode.
   if (process.env.OPENAI_API_KEY) return 'live';
   if (process.env.GROQ_API_KEY)   return 'live';
   if (process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY) return 'live';

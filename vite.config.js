@@ -26,11 +26,12 @@ function devApiRuntime() {
             return
           }
 
-          await fs.access(apiPath)
+          const stats = await fs.stat(apiPath)
           req.query = Object.fromEntries(requestUrl.searchParams.entries())
           req.body = await readJsonBody(req)
+          decorateResponse(res)
 
-          const mod = await import(`${pathToFileURL(apiPath).href}?t=${Date.now()}`)
+          const mod = await import(`${pathToFileURL(apiPath).href}?v=${stats.mtimeMs}`)
           if (typeof mod.default !== 'function') {
             res.statusCode = 500
             res.end('API handler missing default export')
@@ -39,6 +40,12 @@ function devApiRuntime() {
 
           await mod.default(req, res)
         } catch (err) {
+          if (err?.name === 'MalformedJsonBodyError') {
+            res.statusCode = 400
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: err.message }))
+            return
+          }
           if (err?.code === 'ENOENT') {
             return next()
           }
@@ -60,7 +67,34 @@ async function readJsonBody(req) {
   try {
     return JSON.parse(raw)
   } catch {
-    return {}
+    const err = new Error('Malformed JSON request body')
+    err.name = 'MalformedJsonBodyError'
+    throw err
+  }
+}
+
+function decorateResponse(res) {
+  if (typeof res.status !== 'function') {
+    res.status = (code) => {
+      res.statusCode = code
+      return res
+    }
+  }
+  if (typeof res.json !== 'function') {
+    res.json = (payload) => {
+      if (!res.headersSent) res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(payload))
+      return res
+    }
+  }
+  if (typeof res.send !== 'function') {
+    res.send = (payload) => {
+      if (typeof payload === 'object' && payload !== null) {
+        return res.json(payload)
+      }
+      res.end(payload)
+      return res
+    }
   }
 }
 
