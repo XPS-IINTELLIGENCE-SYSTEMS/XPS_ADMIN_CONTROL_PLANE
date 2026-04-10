@@ -1,7 +1,27 @@
 // Shared LLM caller for Vercel serverless functions
 // Priority: OpenAI → Groq → Ollama
 
-export async function callLLM(messages, { model, json = false } = {}) {
+export async function callLLM(messages, { model, provider = 'auto', json = false } = {}) {
+  const resolved = provider?.toLowerCase?.() || 'auto';
+  if (resolved !== 'auto') {
+    switch (resolved) {
+      case 'openai':
+        if (!process.env.OPENAI_API_KEY) throw new Error('OpenAI provider not configured.');
+        return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json);
+      case 'groq':
+        if (!process.env.GROQ_API_KEY) throw new Error('Groq provider not configured.');
+        return callGroq(messages, model || process.env.GROQ_MODEL || 'llama3-8b-8192');
+      case 'gemini':
+        if (!(process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY)) throw new Error('Gemini provider not configured.');
+        return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json);
+      case 'ollama':
+        if (!process.env.OLLAMA_BASE_URL) throw new Error('Ollama provider not configured.');
+        return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3');
+      default:
+        throw new Error(`Unknown provider: ${provider}`);
+    }
+  }
+
   if (process.env.OPENAI_API_KEY) {
     return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json);
   }

@@ -116,6 +116,23 @@ test.describe('XPS Control Plane', () => {
     await screenshot(page, 'admin-access-control');
   });
 
+  test('Admin page — governance section loads', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-governance"]');
+    await page.waitForTimeout(300);
+    await screenshot(page, 'admin-governance');
+  });
+
+  test('Admin page — auth controls render', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-users"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('[data-testid="auth-google-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="auth-github-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="auth-email-btn"]')).toBeVisible();
+    await screenshot(page, 'admin-auth-controls');
+  });
+
   // ── New admin panel tests ────────────────────────────────────────────────
 
   test('Admin — GitHub capability panel renders with capability truth', async ({ page }) => {
@@ -250,6 +267,42 @@ test.describe('XPS Control Plane', () => {
 
     await page.locator('[data-testid="attach-btn"]').hover();
     await screenshotElement(page.locator('[data-testid="chat-rail"]'), 'chat-controls-hover');
+  });
+
+  test('Chat rail — provider dropdown opens', async ({ page }) => {
+    const providerSelector = page.locator('[data-testid="provider-selector"]');
+    await expect(providerSelector).toBeVisible();
+    await providerSelector.click();
+    await expect(page.locator('[data-testid="provider-option-openai"]')).toBeVisible();
+    await screenshot(page, 'provider-model-dropdown');
+  });
+
+  test('Workspace — UI editor preview/apply/rollback flow', async ({ page }) => {
+    await page.locator('aside nav button', { hasText: 'Editor' }).click();
+    await page.waitForTimeout(300);
+    const uiBtn = page.locator('[data-testid="quick-create-ui"]');
+    if (await uiBtn.isVisible()) {
+      await uiBtn.click();
+      await page.waitForTimeout(300);
+    }
+    await page.getByText('Preview Changes').click();
+    await page.waitForTimeout(300);
+    await screenshot(page, 'ui-preview-confirm');
+    await page.getByText('Confirm Apply').click();
+    await page.waitForTimeout(300);
+    await page.getByText('UI Editor Canvas').first().click();
+    await page.waitForTimeout(200);
+    await page.getByText('History').click();
+    await page.waitForTimeout(200);
+    await screenshot(page, 'ui-rollback-history');
+  });
+
+  test('Orchestrator — chat-driven UI change preview', async ({ page }) => {
+    const input = page.locator('[data-testid="chat-input"]');
+    await input.fill('Add button to the UI');
+    await page.locator('[data-testid="send-btn"]').click();
+    await page.waitForTimeout(600);
+    await screenshot(page, 'orchestrator-ui-preview');
   });
 
   test('Mode dropdown — opens and shows all modes', async ({ page }) => {

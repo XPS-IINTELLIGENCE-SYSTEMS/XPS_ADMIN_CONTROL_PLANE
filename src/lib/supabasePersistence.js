@@ -232,6 +232,91 @@ export async function persistParallelGroup({ groupId, title, jobIds = [], status
   }
 }
 
+// ── UI mutation pipeline ───────────────────────────────────────────────────────
+
+export async function persistUiPreview({ previewId, targetId, state, summary, source = 'manual', status = 'preview' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('ui_mutation_previews')
+      .insert({
+        id: previewId,
+        target_id: targetId,
+        state,
+        summary,
+        source,
+        status,
+      })
+      .select()
+      .single();
+    if (err) console.warn('[persist] ui preview insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] ui preview error:', e.message);
+    return null;
+  }
+}
+
+export async function persistUiVersion({ versionId, targetId, state, summary, source = 'apply' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('ui_versions')
+      .insert({
+        id: versionId,
+        target_id: targetId,
+        state,
+        summary,
+        source,
+      })
+      .select()
+      .single();
+    if (err) console.warn('[persist] ui version insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] ui version error:', e.message);
+    return null;
+  }
+}
+
+export async function persistUiRollback({ rollbackId, targetId, fromVersion, toVersion, summary }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('ui_rollbacks')
+      .insert({
+        id: rollbackId,
+        target_id: targetId,
+        from_version: fromVersion,
+        to_version: toVersion,
+        summary,
+      })
+      .select()
+      .single();
+    if (err) console.warn('[persist] ui rollback insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] ui rollback error:', e.message);
+    return null;
+  }
+}
+
+export async function persistGovernanceSettings(settings) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('governance_settings')
+      .insert({ settings })
+      .select()
+      .single();
+    if (err) console.warn('[persist] governance insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] governance error:', e.message);
+    return null;
+  }
+}
+
 // ── Page snapshots ────────────────────────────────────────────────────────────
 
 export async function persistSnapshot({ jobId, url, snapshotText, extractedData = null }) {

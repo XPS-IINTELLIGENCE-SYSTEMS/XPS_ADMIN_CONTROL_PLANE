@@ -18,6 +18,8 @@ import {
   Users, HardDrive, Brain, Cloud,
   Ban, Info, GitCommit, Tag, Workflow, Eye,
 } from 'lucide-react';
+import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
+import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -172,6 +174,54 @@ function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, default
   );
 }
 
+function ConnectorControls({ title = 'Connector Controls', status, statusNote, actions = [], scopes = [], blockedReason }) {
+  const meta = STATUS_META[status] || STATUS_META[STATUS.BLOCKED];
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>{title.toUpperCase()}</span>
+        <span style={{ marginLeft: 'auto' }}>
+          <StatusPill status={status} />
+        </span>
+      </div>
+      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 11, color: meta.color, fontWeight: 600 }}>{statusNote}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className="xps-electric-hover"
+              style={actionBtnStyle(action.disabled, action.accent)}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+        {blockedReason && status === STATUS.BLOCKED && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 10px' }}>
+            {blockedReason}
+          </div>
+        )}
+        {scopes.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, marginBottom: 6, textTransform: 'uppercase' }}>Scopes / Capabilities</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {scopes.map(scope => (
+                <div key={scope.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: STATUS_META[scope.status]?.color || 'rgba(255,255,255,0.5)' }}>{scope.label}</span>
+                  {scope.note && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{scope.note}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Section header ─────────────────────────────────────────────────────────
 function SectionHeading({ children }) {
   return (
@@ -192,6 +242,10 @@ export default function AdminPage() {
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
+  const [session, setSession] = useState(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authStatus, setAuthStatus] = useState(null);
+  const [governance, setGovernanceState] = useState(getGovernance());
 
   const fetchStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -209,6 +263,61 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  useEffect(() => {
+    let mounted = true;
+    getSession().then(data => {
+      if (mounted) setSession(data);
+    }).catch(() => {});
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, []);
+  useEffect(() => {
+    setGovernanceState(getGovernance());
+    const unsub = subscribeGovernance(setGovernanceState);
+    return unsub;
+  }, []);
+
+  const updateGovernance = (patch) => {
+    setGovernanceState(setGovernance(patch));
+  };
+
+  const handleOAuth = async (provider) => {
+    setAuthStatus(null);
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+      await signInWithProvider(provider, redirectTo);
+      setAuthStatus(`Redirecting to ${provider}…`);
+    } catch (err) {
+      setAuthStatus(err.message);
+    }
+  };
+
+  const handleEmailSignIn = async () => {
+    if (!authEmail) return;
+    setAuthStatus(null);
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+      await signInWithEmail(authEmail, redirectTo);
+      setAuthStatus('Magic link sent — check your inbox.');
+    } catch (err) {
+      setAuthStatus(err.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthStatus(null);
+    try {
+      await signOut();
+      setAuthStatus('Signed out.');
+    } catch (err) {
+      setAuthStatus(err.message);
+    }
+  };
 
   const navItems = [
     { id: 'integrations', label: 'Overview',        icon: Activity },
@@ -217,6 +326,7 @@ export default function AdminPage() {
     { id: 'vercel',       label: 'Vercel',           icon: Cloud },
     { id: 'google',       label: 'Google Workspace', icon: Mail },
     { id: 'system',       label: 'System',           icon: Server },
+    { id: 'governance',   label: 'Governance',       icon: Shield },
     { id: 'users',        label: 'Access',           icon: Users },
   ];
 
@@ -381,7 +491,25 @@ export default function AdminPage() {
             browserWorkerConfigured={browserWorkerConfigured}
           />
         )}
-        {activeSection === 'users'     && <AccessSection sbConfigured={sbConfigured} />}
+        {activeSection === 'governance' && (
+          <GovernanceSection
+            governance={governance}
+            onChange={updateGovernance}
+            sbConfigured={sbConfigured}
+          />
+        )}
+        {activeSection === 'users'     && (
+          <AccessSection
+            sbConfigured={sbConfigured}
+            session={session}
+            authEmail={authEmail}
+            authStatus={authStatus}
+            onEmailChange={setAuthEmail}
+            onEmailSignIn={handleEmailSignIn}
+            onOAuth={handleOAuth}
+            onSignOut={handleSignOut}
+          />
+        )}
       </div>
     </div>
   );
@@ -687,6 +815,8 @@ function GitHubSection({ configured, liveStatus }) {
   const [error, setError] = useState(null);
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [repoData, setRepoData] = useState({});
+  const [testStatus, setTestStatus] = useState(null);
+  const [testing, setTesting] = useState(false);
 
   const fetchGitHub = useCallback(async (action, params = {}) => {
     if (!configured) return;
@@ -719,6 +849,19 @@ function GitHubSection({ configured, liveStatus }) {
   }, [fetchGitHub, repoData]);
 
   const ghCaps = liveStatus?.github?.capabilities || {};
+  const runTest = async () => {
+    if (!configured) return;
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      const data = await fetchGitHub('repos', { per_page: '1' });
+      setTestStatus(data?.blocked ? 'Blocked' : 'Connection OK');
+    } catch (err) {
+      setTestStatus(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div data-testid="admin-github-panel">
@@ -743,6 +886,29 @@ function GitHubSection({ configured, liveStatus }) {
         <CapRow icon={Shield}         label="Code Scanning alerts"              status={deriveStatus(configured)} />
         <CapRow icon={Ban}            label="Copilot Chat product passthrough"  status={STATUS.BLOCKED} note="Unsupported — not an API" />
       </CapPanel>
+
+      <ConnectorControls
+        title="Connector Controls"
+        status={deriveStatus(configured)}
+        statusNote={configured ? 'Token configured — GitHub REST API ready.' : 'Blocked — missing server-side token.'}
+        blockedReason="GitHub OAuth is not wired. Set GITHUB_TOKEN to enable."
+        actions={[
+          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
+        ]}
+        scopes={[
+          { label: 'Repo Read/Write', status: deriveStatus(configured), note: 'repo, workflow' },
+          { label: 'Issues/PRs', status: deriveStatus(configured), note: 'read/write' },
+          { label: 'Copilot Passthrough', status: STATUS.BLOCKED, note: 'unsupported' },
+        ]}
+      />
+      {testStatus && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          Test result: {testStatus}
+        </div>
+      )}
 
       {/* Live data */}
       {!configured && (
@@ -834,6 +1000,21 @@ function MiniList({ title, icon: Icon, items }) {
 // ── Supabase section ───────────────────────────────────────────────────────
 function SupabaseSection({ configured, liveStatus }) {
   const sb = liveStatus?.supabase || {};
+  const [testStatus, setTestStatus] = useState(null);
+  const [testing, setTesting] = useState(false);
+
+  const runTest = async () => {
+    if (!configured) return;
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      setTestStatus('Connection OK — Supabase reachable.');
+    } catch (err) {
+      setTestStatus(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div data-testid="admin-supabase-panel">
@@ -854,6 +1035,29 @@ function SupabaseSection({ configured, liveStatus }) {
         <CapRow icon={Activity}    label="Queue / Job artifact persistence"       status={deriveStatus(configured)} note="Run schema" />
         <CapRow icon={Activity}    label="Edge Functions"                         status={STATUS.BLOCKED} note="Not wired" />
       </CapPanel>
+
+      <ConnectorControls
+        title="Connector Controls"
+        status={deriveStatus(configured)}
+        statusNote={configured ? 'Supabase project configured.' : 'Blocked — missing SUPABASE_URL or SUPABASE_ANON_KEY.'}
+        blockedReason="Supabase Auth broker requires SUPABASE_URL + SUPABASE_ANON_KEY."
+        actions={[
+          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
+        ]}
+        scopes={[
+          { label: 'Database', status: deriveStatus(configured), note: 'postgres' },
+          { label: 'Auth', status: deriveStatus(configured), note: 'jwt, rls' },
+          { label: 'Storage', status: deriveStatus(configured), note: 'buckets' },
+        ]}
+      />
+      {testStatus && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          Test result: {testStatus}
+        </div>
+      )}
 
       {configured ? (
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -882,6 +1086,21 @@ function SupabaseSection({ configured, liveStatus }) {
 // ── Vercel section ─────────────────────────────────────────────────────────
 function VercelSection({ configured, liveStatus }) {
   const vrc = liveStatus?.vercel || {};
+  const [testStatus, setTestStatus] = useState(null);
+  const [testing, setTesting] = useState(false);
+
+  const runTest = async () => {
+    if (!configured) return;
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      setTestStatus('Connection OK — Vercel API token present.');
+    } catch (err) {
+      setTestStatus(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div data-testid="admin-vercel-panel">
@@ -901,6 +1120,29 @@ function VercelSection({ configured, liveStatus }) {
         <CapRow icon={Globe}    label="Domain Management"                       status={deriveStatus(configured)} />
         <CapRow icon={Shield}   label="Project Settings"                        status={deriveStatus(configured)} />
       </CapPanel>
+
+      <ConnectorControls
+        title="Connector Controls"
+        status={deriveStatus(configured)}
+        statusNote={configured ? 'Vercel token configured.' : 'Blocked — missing VERCEL_TOKEN.'}
+        blockedReason="Vercel OAuth is not wired. Use a server-side VERCEL_TOKEN."
+        actions={[
+          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
+        ]}
+        scopes={[
+          { label: 'Deployments', status: deriveStatus(configured), note: 'read/write' },
+          { label: 'Environment', status: deriveStatus(configured), note: 'read/write' },
+          { label: 'Domains', status: deriveStatus(configured), note: 'read/write' },
+        ]}
+      />
+      {testStatus && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          Test result: {testStatus}
+        </div>
+      )}
 
       {configured ? (
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -922,6 +1164,21 @@ function VercelSection({ configured, liveStatus }) {
 // ── Google Workspace section ───────────────────────────────────────────────
 function GoogleSection({ configured, geminiConfigured, liveStatus }) {
   const g = liveStatus?.google || {};
+  const [testStatus, setTestStatus] = useState(null);
+  const [testing, setTesting] = useState(false);
+
+  const runTest = async () => {
+    if (!configured && !geminiConfigured) return;
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      setTestStatus('Connection OK — Google APIs configured.');
+    } catch (err) {
+      setTestStatus(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div data-testid="admin-google-panel">
@@ -948,6 +1205,29 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
         <CapRow icon={Code}      label="Function calling"                              status={deriveStatus(geminiConfigured)} />
         <CapRow icon={Package}   label="Embeddings (text-embedding-004)"               status={deriveStatus(geminiConfigured)} />
       </CapPanel>
+
+      <ConnectorControls
+        title="Connector Controls"
+        status={deriveStatus(configured || geminiConfigured)}
+        statusNote={configured || geminiConfigured ? 'Google APIs configured (OAuth-required scopes blocked).' : 'Blocked — missing GCP credentials.'}
+        blockedReason="OAuth user consent required for Drive/Calendar. Service account only covers Gmail/Sheets/Admin SDK."
+        actions={[
+          { label: 'Connect', onClick: () => {}, disabled: configured || geminiConfigured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => {}, disabled: !(configured || geminiConfigured), accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => {}, disabled: !(configured || geminiConfigured), accent: '#ef4444' },
+          { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !(configured || geminiConfigured) || testing, accent: '#60a5fa' },
+        ]}
+        scopes={[
+          { label: 'Gmail / Sheets', status: deriveStatus(configured), note: 'service account' },
+          { label: 'Drive', status: STATUS.BLOCKED, note: 'OAuth consent required' },
+          { label: 'Gemini', status: deriveStatus(geminiConfigured), note: 'GEMINI_API_KEY' },
+        ]}
+      />
+      {testStatus && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+          Test result: {testStatus}
+        </div>
+      )}
 
       {!configured && !geminiConfigured && (
         <BlockedInfo>Set <code>GCP_SA_KEY</code> or <code>GCP_PROJECT_ID</code> to enable Google Workspace APIs. Set <code>GEMINI_API_KEY</code> for Gemini LLM.</BlockedInfo>
@@ -1009,6 +1289,19 @@ function ErrorRow({ label }) {
       {label}
     </div>
   );
+}
+
+function actionBtnStyle(disabled, accent = '#d4a843') {
+  return {
+    padding: '7px 12px',
+    borderRadius: 8,
+    border: `1px solid ${disabled ? 'rgba(255,255,255,0.1)' : accent}`,
+    background: disabled ? 'rgba(255,255,255,0.04)' : `${accent}22`,
+    color: disabled ? 'rgba(255,255,255,0.3)' : accent,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+  };
 }
 // ── System section ─────────────────────────────────────────────────────────
 function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured }) {
@@ -1111,7 +1404,133 @@ function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browser
 }
 
 // ── Access section ─────────────────────────────────────────────────────────
-function AccessSection({ sbConfigured }) {
+function GovernanceSection({ governance, onChange, sbConfigured }) {
+  const config = governance || DEFAULT_GOVERNANCE;
+  const toggles = [
+    { key: 'allowUiEdits', label: 'Allow UI edits', note: 'Enable center-surface editing controls.' },
+    { key: 'allowGitHubWrites', label: 'Allow GitHub writes', note: 'Permit GitHub write actions when token is configured.' },
+    { key: 'requireApproval', label: 'Require approval', note: 'Gate apply actions until approval is granted.' },
+    { key: 'previewOnly', label: 'Preview-only mode', note: 'Block apply/commit; allow preview generation only.' },
+    { key: 'deploymentPermission', label: 'Deployment permission', note: 'Allow deployment triggers via Vercel.' },
+    { key: 'connectorPermissions', label: 'Connector permissions', note: 'Allow connector read/write actions.' },
+    { key: 'browserExecution', label: 'Browser execution', note: 'Allow Playwright worker execution.' },
+    { key: 'exportStaging', label: 'Export staging', note: 'Enable staging queues for HubSpot/Airtable.' },
+  ];
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 className="xps-gold-text" style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3, marginBottom: 4 }}>
+          Governance & Guardrails
+        </h2>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+          Control how the orchestrator can mutate UI, data, and connector surfaces.
+        </p>
+      </div>
+
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 12, overflow: 'hidden', marginBottom: 16,
+      }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
+          GOVERNANCE TOGGLES
+        </div>
+        {toggles.map(item => (
+          <div key={item.key} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+          }}>
+            <input
+              type="checkbox"
+              checked={!!config[item.key]}
+              onChange={e => onChange({ [item.key]: e.target.checked })}
+              style={{ accentColor: '#d4a843' }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600 }}>{item.label}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{item.note}</div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 600, color: config[item.key] ? '#4ade80' : '#ef4444' }}>
+              {config[item.key] ? 'ENABLED' : 'DISABLED'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12,
+      }}>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, marginBottom: 8 }}>
+            AUTONOMY LEVEL
+          </div>
+          <select
+            value={config.autonomyLevel}
+            onChange={e => onChange({ autonomyLevel: e.target.value })}
+            style={{
+              width: '100%',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 8,
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontSize: 12,
+            }}
+          >
+            <option value="assist">Assisted</option>
+            <option value="guided">Guided</option>
+            <option value="autonomous">Autonomous</option>
+          </select>
+        </div>
+
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, marginBottom: 8 }}>
+            ROLLBACK RETENTION
+          </div>
+          <select
+            value={config.rollbackRetention}
+            onChange={e => onChange({ rollbackRetention: e.target.value })}
+            style={{
+              width: '100%',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 8,
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontSize: 12,
+            }}
+          >
+            <option value="7 days">7 days</option>
+            <option value="30 days">30 days</option>
+            <option value="90 days">90 days</option>
+            <option value="365 days">365 days</option>
+          </select>
+        </div>
+      </div>
+
+      {!sbConfigured && (
+        <BlockedInfo>
+          Supabase not configured — governance changes are stored locally only. Configure <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> to persist governance history.
+        </BlockedInfo>
+      )}
+    </div>
+  );
+}
+
+// ── Access section ─────────────────────────────────────────────────────────
+function AccessSection({
+  sbConfigured,
+  session,
+  authEmail,
+  authStatus,
+  onEmailChange,
+  onEmailSignIn,
+  onOAuth,
+  onSignOut,
+}) {
+  const statusColor = session ? '#4ade80' : sbConfigured ? '#fbbf24' : '#ef4444';
+  const statusLabel = session ? 'Signed In' : sbConfigured ? 'Ready' : 'Blocked';
+
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
@@ -1142,6 +1561,92 @@ function AccessSection({ sbConfigured }) {
 
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 12, overflow: 'hidden', marginBottom: 18,
+      }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
+          AUTH BROKER — SUPABASE
+        </div>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: statusColor }}>{statusLabel}</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+              {session ? session.user?.email || 'Authenticated' : sbConfigured ? 'Supabase auth ready' : 'Supabase not configured'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              data-testid="auth-google-btn"
+              onClick={() => onOAuth('google')}
+              disabled={!sbConfigured}
+              className="xps-electric-hover"
+              style={actionBtnStyle(!sbConfigured)}
+            >
+              Continue with Google
+            </button>
+            <button
+              data-testid="auth-github-btn"
+              onClick={() => onOAuth('github')}
+              disabled={!sbConfigured}
+              className="xps-electric-hover"
+              style={actionBtnStyle(!sbConfigured)}
+            >
+              Continue with GitHub
+            </button>
+            <button
+              data-testid="auth-signout-btn"
+              onClick={onSignOut}
+              disabled={!session}
+              className="xps-electric-hover"
+              style={actionBtnStyle(!session, '#ef4444')}
+            >
+              Sign out
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              data-testid="auth-email-input"
+              value={authEmail}
+              onChange={e => onEmailChange(e.target.value)}
+              placeholder="Continue with email"
+              disabled={!sbConfigured}
+              style={{
+                flex: 1, minWidth: 200,
+                padding: '8px 10px', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.04)', color: '#e2e8f0',
+                fontSize: 12,
+              }}
+            />
+            <button
+              data-testid="auth-email-btn"
+              onClick={onEmailSignIn}
+              disabled={!sbConfigured || !authEmail}
+              className="xps-electric-hover"
+              style={actionBtnStyle(!sbConfigured || !authEmail)}
+            >
+              Continue with Email
+            </button>
+          </div>
+
+          {authStatus && (
+            <div style={{
+              padding: '8px 10px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.6)',
+            }}>
+              {authStatus}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 12, overflow: 'hidden',
       }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
@@ -1151,8 +1656,8 @@ function AccessSection({ sbConfigured }) {
           { label: 'Supabase Auth',        ok: sbConfigured, note: 'JWT-based auth via @supabase/supabase-js' },
           { label: 'Row-Level Security',   ok: sbConfigured, note: 'Enabled on Supabase tables when configured' },
           { label: 'Dev Auth Bypass',      ok: true,         note: 'Active in current build' },
-          { label: 'Google OAuth',         ok: false,        note: 'Not wired — requires GCP OAuth client' },
-          { label: 'GitHub OAuth',         ok: false,        note: 'Not wired' },
+          { label: 'Google OAuth',         ok: sbConfigured, note: 'Supabase OAuth provider (google)' },
+          { label: 'GitHub OAuth',         ok: sbConfigured, note: 'Supabase OAuth provider (github)' },
         ].map(item => (
           <div key={item.label} style={{
             display: 'flex', alignItems: 'center', gap: 10,

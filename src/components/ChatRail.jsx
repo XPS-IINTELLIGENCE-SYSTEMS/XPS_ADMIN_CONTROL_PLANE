@@ -8,7 +8,9 @@ import {
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
 import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
-import { persistSearchJob, persistScrapeJob, persistWorkspaceObject } from '../lib/supabasePersistence.js';
+import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPreview, persistUiVersion, persistUiRollback } from '../lib/supabasePersistence.js';
+import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState } from '../lib/uiMutations.js';
+import { getGovernance, subscribeGovernance } from '../lib/governance.js';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -27,6 +29,28 @@ function useProviderState() {
   }, []);
 
   return providerState;
+}
+
+function buildFallbackState() {
+  const env = import.meta.env;
+  const hasOpenAI = !!env.OPENAI_API_KEY;
+  const hasGroq = !!env.GROQ_API_KEY;
+  const hasGemini = !!env.GEMINI_API_KEY;
+  const hasOllama = !!env.OLLAMA_BASE_URL;
+  const active = hasOpenAI ? 'openai' : hasGroq ? 'groq' : hasGemini ? 'gemini' : hasOllama ? 'ollama' : 'none';
+  return {
+    llm: {
+      active,
+      model: active === 'openai' ? 'gpt-4o-mini' : active === 'groq' ? 'llama3-8b-8192' : active === 'gemini' ? 'gemini-1.5-flash' : active === 'ollama' ? 'llama3' : null,
+      mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
+      providers: {
+        openai: { configured: hasOpenAI, model: 'gpt-4o-mini' },
+        groq: { configured: hasGroq, model: 'llama3-8b-8192' },
+        gemini: { configured: hasGemini, model: 'gemini-1.5-flash' },
+        ollama: { configured: hasOllama, model: 'llama3' },
+      },
+    },
+  };
 }
 
 // ── Provider indicator bar ────────────────────────────────────────────────
@@ -72,6 +96,69 @@ function ProviderIndicator({ providerState }) {
       </span>
     </div>
   );
+}
+
+const PROVIDER_STATUS_META = {
+  live:      { color: '#4ade80', label: 'Live' },
+  local:     { color: '#60a5fa', label: 'Local' },
+  blocked:   { color: '#ef4444', label: 'Blocked' },
+  synthetic: { color: '#fbbf24', label: 'Synthetic' },
+};
+
+function buildProviderOptions(state) {
+  const providers = state?.llm?.providers || {};
+  const active = state?.llm?.active || 'none';
+  const activeModel = state?.llm?.model || '';
+  return [
+    {
+      id: 'auto',
+      label: 'Auto',
+      model: activeModel || 'auto',
+      status: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
+      available: true,
+      note: active === 'none' ? 'No provider configured' : `Uses ${active}`,
+    },
+    {
+      id: 'openai',
+      label: 'OpenAI',
+      model: providers.openai?.model || 'gpt-4o-mini',
+      status: providers.openai?.configured ? 'live' : 'blocked',
+      available: !!providers.openai?.configured,
+      note: providers.openai?.configured ? 'OPENAI_API_KEY' : 'Missing OPENAI_API_KEY',
+    },
+    {
+      id: 'groq',
+      label: 'Groq',
+      model: providers.groq?.model || 'llama3-8b-8192',
+      status: providers.groq?.configured ? 'live' : 'blocked',
+      available: !!providers.groq?.configured,
+      note: providers.groq?.configured ? 'GROQ_API_KEY' : 'Missing GROQ_API_KEY',
+    },
+    {
+      id: 'gemini',
+      label: 'Gemini',
+      model: providers.gemini?.model || 'gemini-1.5-flash',
+      status: providers.gemini?.configured ? 'live' : 'blocked',
+      available: !!providers.gemini?.configured,
+      note: providers.gemini?.configured ? 'GEMINI_API_KEY' : 'Missing GEMINI_API_KEY',
+    },
+    {
+      id: 'ollama',
+      label: 'Ollama',
+      model: providers.ollama?.model || 'llama3',
+      status: providers.ollama?.configured ? 'local' : 'blocked',
+      available: !!providers.ollama?.configured,
+      note: providers.ollama?.configured ? 'OLLAMA_BASE_URL' : 'Missing OLLAMA_BASE_URL',
+    },
+    {
+      id: 'synthetic',
+      label: 'Synthetic',
+      model: 'fallback',
+      status: 'synthetic',
+      available: true,
+      note: 'No live provider',
+    },
+  ];
 }
 
 // ── Agent registry (no emoji) ─────────────────────────────────────────────
@@ -120,6 +207,9 @@ const ATTACH_SOURCES = [
 export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [agent, setAgent] = useState('orchestrator');
   const [mode, setMode]   = useState('agent');
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState('auto');
+  const [selectedModel, setSelectedModel] = useState('');
   const [messages, setMessages] = useState([{
     role: 'assistant',
     content: '— awaiting configuration —\n\nSelect an agent and configure your API key to begin live orchestration. Running in synthetic mode.',
@@ -133,14 +223,16 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [attachments, setAttachments] = useState([]);
   const [activeRuns, setActiveRuns] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
+  const [governance, setGovernanceState] = useState(getGovernance());
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
   const fileInputRef = useRef(null);
   const currentAttachType = useRef(null);
 
   const providerState = useProviderState();
+  const githubConfigured = providerState?.github?.configured;
 
-  const { createObject, setStatus, appendLog, patchObject } = useWorkspace();
+  const { objects, createObject, setStatus, appendLog, patchObject } = useWorkspace();
 
   useEffect(() => {
     const isActive = r => r.status === 'running' || r.status === 'queued';
@@ -162,13 +254,29 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   // Close dropdowns when clicking outside
   useEffect(() => {
-    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); };
+    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); setProviderOpen(false); };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, []);
 
+  useEffect(() => {
+    setGovernanceState(getGovernance());
+    const unsub = subscribeGovernance(setGovernanceState);
+    return unsub;
+  }, []);
+
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
   const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
+  const resolvedProviderState = providerState || buildFallbackState();
+  const providerOptions = buildProviderOptions(resolvedProviderState);
+  const providerMap = Object.fromEntries(providerOptions.map(opt => [opt.id, opt]));
+  const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
+
+  useEffect(() => {
+    if (selectedProviderOption?.model) {
+      setSelectedModel(selectedProviderOption.model);
+    }
+  }, [selectedProviderOption?.model, selectedProvider]);
 
   const commitToWorkspace = useCallback((wsObj, agentId, prompt) => {
     const { type, title, content, steps = [], meta = {} } = wsObj;
@@ -184,6 +292,158 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     onNavigate?.('workspace');
     persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
   }, [createObject, onNavigate]);
+
+  const ensureUiEditor = useCallback(() => {
+    const existing = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor);
+    if (existing) return existing;
+    const initialState = createDefaultUiState();
+    const history = [createHistoryEntry(initialState, 'Initial UI state', 'seed')];
+    const uiObj = {
+      id: genId(),
+      type: OBJ_TYPE.UI,
+      title: 'UI Editor Canvas',
+      content: 'Editable UI canvas',
+      status: RUN_STATUS.IDLE,
+      meta: { uiEditor: true, uiState: initialState, history },
+    };
+    createObject(uiObj);
+    onNavigate?.('workspace');
+    return uiObj;
+  }, [objects, createObject, onNavigate]);
+
+  const createUiPreview = useCallback((patch, summary, source = 'chat') => {
+    const target = ensureUiEditor();
+    const currentState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
+    const history = Array.isArray(target.meta?.history) && target.meta.history.length
+      ? target.meta.history
+      : [createHistoryEntry(currentState, 'Initial UI state', 'seed')];
+    const nextState = patch ? applyUiPatch(currentState, patch) : currentState;
+    const previewId = genId();
+    const previewMeta = {
+      id: previewId,
+      summary,
+      source,
+      createdAt: new Date().toISOString(),
+      state: nextState,
+    };
+    patchObject(target.id, {
+      meta: {
+        ...target.meta,
+        uiEditor: true,
+        uiState: currentState,
+        history,
+        preview: previewMeta,
+      },
+    });
+    createObject({
+      type: OBJ_TYPE.PREVIEW,
+      title: `UI Preview — ${summary}`,
+      content: summary,
+      status: RUN_STATUS.IDLE,
+      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source },
+    });
+    persistUiPreview({ previewId, targetId: target.id, state: nextState, summary, source }).catch(() => {});
+    return { target, previewMeta };
+  }, [ensureUiEditor, patchObject, createObject]);
+
+  const applyUiPreview = useCallback((target, previewMeta, source = 'chat') => {
+    if (!target || !previewMeta) return null;
+    const nextState = normalizeUiState(previewMeta.state);
+    const history = Array.isArray(target.meta?.history) ? [...target.meta.history] : [];
+    history.push(createHistoryEntry(nextState, previewMeta.summary || 'Apply preview', source));
+    patchObject(target.id, {
+      meta: {
+        ...target.meta,
+        uiEditor: true,
+        uiState: nextState,
+        history,
+        preview: null,
+      },
+    });
+    persistUiVersion({
+      versionId: history[history.length - 1]?.id || genId(),
+      targetId: target.id,
+      state: nextState,
+      summary: previewMeta.summary || 'Apply preview',
+      source,
+    }).catch(() => {});
+    if (previewMeta.source === 'rollback' && history.length > 1) {
+      persistUiRollback({
+        rollbackId: genId(),
+        targetId: target.id,
+        fromVersion: history[history.length - 2]?.id,
+        toVersion: history[history.length - 1]?.id,
+        summary: previewMeta.summary || 'Rollback apply',
+      }).catch(() => {});
+    }
+    return history;
+  }, [patchObject]);
+
+  const createRollbackPreview = useCallback((target, source = 'chat') => {
+    const history = Array.isArray(target?.meta?.history) ? target.meta.history : [];
+    if (history.length < 2) return null;
+    const previous = history[history.length - 2];
+    const summary = `Rollback to ${previous.summary || previous.id}`;
+    return createUiPreview({ theme: previous.state?.theme, components: previous.state?.components }, summary, source);
+  }, [createUiPreview]);
+
+  const parseUiCommand = (prompt) => {
+    const lower = prompt.toLowerCase();
+    if (/rollback|revert|undo/.test(lower)) return { intent: 'rollback' };
+    if (/apply|confirm/.test(lower) && /preview|changes|mutation/.test(lower)) return { intent: 'apply' };
+    if (/cancel.*preview|discard.*preview|reject/.test(lower)) return { intent: 'cancel' };
+
+    const colorMap = {
+      gold: '#d4a843',
+      silver: '#e2e8f0',
+      blue: '#60a5fa',
+      purple: '#a855f7',
+      green: '#4ade80',
+      red: '#ef4444',
+      black: '#0f0f0f',
+      white: '#ffffff',
+    };
+    const colorMatch = prompt.match(/(primary|accent|background|text) color to ([#\w]+)/i);
+    if (colorMatch) {
+      const key = colorMatch[1].toLowerCase();
+      const raw = colorMatch[2].toLowerCase();
+      const color = raw.startsWith('#') ? raw : (colorMap[raw] || raw);
+      return { intent: 'preview', patch: { theme: { [`${key}Color`]: color } }, summary: `Update ${key} color` };
+    }
+
+    const fontMatch = prompt.match(/font(?: family)?(?: to)? ([\w\s-]+)/i);
+    if (fontMatch) {
+      return { intent: 'preview', patch: { theme: { fontFamily: fontMatch[1].trim() } }, summary: 'Update font family' };
+    }
+
+    const radiusMatch = prompt.match(/border radius (\d+)/i);
+    if (radiusMatch) {
+      return { intent: 'preview', patch: { theme: { borderRadius: Number(radiusMatch[1]) } }, summary: 'Update border radius' };
+    }
+
+    if (/add button/.test(lower)) return { intent: 'preview', patch: { addComponent: 'button' }, summary: 'Add button' };
+    if (/add card|add panel/.test(lower)) return { intent: 'preview', patch: { addComponent: 'card' }, summary: 'Add card' };
+    if (/add section/.test(lower)) return { intent: 'preview', patch: { addComponent: 'section' }, summary: 'Add section' };
+    if (/add tab|add tabs/.test(lower)) return { intent: 'preview', patch: { addComponent: 'tabs' }, summary: 'Add tabs' };
+    if (/add page/.test(lower)) return { intent: 'preview', patch: { addComponent: 'section' }, summary: 'Add page section' };
+
+    if (/add gradient/.test(lower)) {
+      return { intent: 'preview', patch: { theme: { gradient: 'linear-gradient(135deg, rgba(212,168,67,0.2), rgba(59,130,246,0.2))' } }, summary: 'Add gradient' };
+    }
+    if (/add animation/.test(lower)) {
+      return { intent: 'preview', patch: { theme: { animation: 'pulse 3s ease-in-out infinite' } }, summary: 'Add animation' };
+    }
+
+    return null;
+  };
+
+  const parseGitHubCommand = (prompt) => {
+    const lower = prompt.toLowerCase();
+    if (/pull request|create pr|open pr/.test(lower)) return { intent: 'pr' };
+    if (/commit|patch|diff/.test(lower)) return { intent: 'patch' };
+    if (/github/.test(lower)) return { intent: 'status' };
+    return null;
+  };
 
   const send = async (e) => {
     e?.preventDefault();
@@ -201,6 +461,114 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     setInput('');
     setAttachments([]);
     setLoading(true);
+
+    if (agent === 'orchestrator' || agent === 'builder') {
+      const uiCommand = parseUiCommand(prompt);
+      if (uiCommand) {
+        if (!governance.allowUiEdits) {
+          setMessages(prev => [...prev, { role: 'assistant', content: 'UI edits are blocked by governance settings.', agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        const target = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor) || ensureUiEditor();
+        if (uiCommand.intent === 'preview') {
+          const summary = uiCommand.summary || summarizeUiPatch(uiCommand.patch || {});
+          createUiPreview(uiCommand.patch || {}, summary, 'chat');
+          setMessages(prev => [...prev, { role: 'assistant', content: `Preview created: ${summary}. Confirm to apply.`, agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        if (uiCommand.intent === 'apply') {
+          if (governance.previewOnly || governance.requireApproval) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Apply blocked by governance (preview-only or approval required).', agent, mode: 'synthetic' }]);
+            setLoading(false);
+            return;
+          }
+          const previewMeta = target?.meta?.preview;
+          if (!previewMeta) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'No pending preview found to apply.', agent, mode: 'synthetic' }]);
+            setLoading(false);
+            return;
+          }
+          applyUiPreview(target, previewMeta, 'chat');
+          setMessages(prev => [...prev, { role: 'assistant', content: `Applied preview: ${previewMeta.summary || 'UI update'}. Rollback available.`, agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        if (uiCommand.intent === 'cancel') {
+          if (target?.meta?.preview) {
+            patchObject(target.id, { meta: { ...target.meta, preview: null } });
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Preview cancelled.', agent, mode: 'synthetic' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'No preview to cancel.', agent, mode: 'synthetic' }]);
+          }
+          setLoading(false);
+          return;
+        }
+        if (uiCommand.intent === 'rollback') {
+          const created = createRollbackPreview(target, 'chat');
+          if (created) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Rollback preview created. Confirm to apply.', agent, mode: 'synthetic' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'No prior versions available to rollback.', agent, mode: 'synthetic' }]);
+          }
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
+    if (agent === 'orchestrator' || agent === 'builder') {
+      const ghCommand = parseGitHubCommand(prompt);
+      if (ghCommand) {
+        if (!governance.allowGitHubWrites) {
+          createObject({
+            type: OBJ_TYPE.CONNECTOR_ACTION,
+            title: 'GitHub write blocked',
+            content: 'GitHub write actions are blocked by governance. Enable "Allow GitHub writes" in Admin → Governance.',
+            status: RUN_STATUS.DONE,
+            meta: { connector: 'github', mode: 'blocked', reason: 'governance' },
+          });
+          setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub writes are blocked by governance settings.', agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        if (!githubConfigured) {
+          createObject({
+            type: OBJ_TYPE.CONNECTOR_ACTION,
+            title: 'GitHub write blocked',
+            content: 'GitHub token not configured. Set GITHUB_TOKEN and re-run to enable write actions.',
+            status: RUN_STATUS.DONE,
+            meta: { connector: 'github', mode: 'blocked', reason: 'missing token' },
+          });
+          setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub token not configured — cannot write or open PRs.', agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        createObject({
+          type: OBJ_TYPE.PRE_STAGE,
+          title: 'GitHub Patch Staging',
+          content: `Intent: ${ghCommand.intent}\nPrompt: ${prompt}\n\nDraft patch staged. Awaiting approval before write-through.`,
+          status: RUN_STATUS.QUEUED,
+          meta: { connector: 'github', intent: ghCommand.intent, approvalRequired: governance.requireApproval, mode: 'staged' },
+        });
+        setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub patch staged. Review preview and approve before apply.', agent, mode: 'synthetic' }]);
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (selectedProvider === 'synthetic') {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Provider set to synthetic — no live call executed.', agent, mode: 'synthetic' }]);
+      setLoading(false);
+      return;
+    }
+
+    if (selectedProvider !== 'auto' && !selectedProviderOption?.available) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, agent, mode: 'synthetic' }]);
+      setLoading(false);
+      return;
+    }
 
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
@@ -328,7 +696,15 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, agent, runId, mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          agent,
+          runId,
+          mode,
+          provider: selectedProvider,
+          model: selectedModel || selectedProviderOption?.model,
+          attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -522,7 +898,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           )}
         </div>
         {/* Provider/runtime indicator */}
-        <ProviderIndicator providerState={providerState} />
+        <ProviderIndicator providerState={resolvedProviderState} />
       </div>
 
       {/* Message thread */}
@@ -633,6 +1009,69 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             })}
           </div>
         )}
+
+        <div style={{ position: 'relative', marginBottom: 8 }} onClick={e => e.stopPropagation()}>
+          <button
+            data-testid="provider-selector"
+            onClick={() => { setProviderOpen(o => !o); setAgentOpen(false); setModeOpen(false); }}
+            className="xps-electric-hover"
+            data-active={providerOpen ? 'true' : undefined}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 10px', background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+              color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Cpu size={12} className="xps-icon" />
+              <span>{selectedProviderOption?.label || 'Provider'}</span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                {selectedProviderOption?.model}
+              </span>
+            </span>
+            <span style={{ fontSize: 10, color: PROVIDER_STATUS_META[selectedProviderOption?.status || 'synthetic']?.color }}>
+              {PROVIDER_STATUS_META[selectedProviderOption?.status || 'synthetic']?.label}
+            </span>
+          </button>
+
+          {providerOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, zIndex: 50, overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+            }}>
+              {providerOptions.map(option => {
+                const statusMeta = PROVIDER_STATUS_META[option.status] || PROVIDER_STATUS_META.synthetic;
+                const disabled = option.id !== 'auto' && !option.available;
+                return (
+                  <button
+                    key={option.id}
+                    data-testid={`provider-option-${option.id}`}
+                    onClick={() => { setSelectedProvider(option.id); setSelectedModel(option.model); setProviderOpen(false); }}
+                    disabled={disabled}
+                    className="xps-electric-hover"
+                    data-active={selectedProvider === option.id ? 'true' : undefined}
+                    style={{
+                      position: 'relative',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '8px 12px',
+                      background: selectedProvider === option.id ? 'rgba(212,168,67,0.12)' : 'transparent',
+                      border: 'none', color: disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.75)',
+                      fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{option.label}</span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{option.model}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: statusMeta.color }}>{statusMeta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <form onSubmit={send} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <textarea
