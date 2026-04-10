@@ -1,5 +1,7 @@
 // Vercel serverless function: POST /api/search
-// Web search / research queries routed through LLM with web browsing context
+// Returns structured search_result contract
+import { callLLM, llmMode, hasLLM } from './_llm.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -10,18 +12,29 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { query, context } = req.body || {};
+  const { query, context, runId } = req.body || {};
   if (!query) {
     return res.status(400).json({ error: 'query is required' });
   }
 
-  // If no LLM configured, return synthetic response
-  if (!process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY && !process.env.OLLAMA_BASE_URL) {
+  const mode = llmMode();
+  const ts   = new Date().toISOString();
+
+  if (!hasLLM()) {
     return res.status(200).json({
+      event_type: 'search_result',
+      run_id:     runId || null,
       query,
-      summary: `[Synthetic] Search query received: "${query}"\n\nNo LLM provider configured. Set OPENAI_API_KEY to enable live web research.`,
-      sources: [],
-      mode: 'synthetic',
+      summary:    `[Synthetic] Search query received: "${query}"\n\nNo LLM provider configured. Set OPENAI_API_KEY to enable live web research.`,
+      sources:    [],
+      mode:       'synthetic',
+      workspace_object: {
+        type:    'search',
+        title:   `Search: ${query.slice(0, 50)}`,
+        content: `[Synthetic] Search for: ${query}\n\nNo live backend — set OPENAI_API_KEY.`,
+        meta:    { query, sources: [], mode: 'synthetic' },
+      },
+      timestamp: ts,
     });
   }
 
@@ -33,48 +46,35 @@ ${context ? `Additional context: ${context}` : ''}`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: query },
+      { role: 'user',   content: query },
     ];
 
     const summary = await callLLM(messages);
+
     return res.status(200).json({
+      event_type: 'search_result',
+      run_id:     runId || null,
       query,
       summary,
-      sources: [], // Note: live web search requires additional browser tooling
-      mode: 'live',
+      sources:    [], // live web search requires additional browser tooling
+      mode,
+      workspace_object: {
+        type:    'search',
+        title:   `Search: ${query.slice(0, 50)}`,
+        content: summary,
+        meta:    { query, sources: [], mode },
+      },
+      timestamp: ts,
     });
   } catch (err) {
     console.error('[search] error:', err.message);
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-async function callLLM(messages) {
-  if (process.env.OPENAI_API_KEY) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({ model: 'gpt-4o-mini', messages }),
+    return res.status(500).json({
+      event_type: 'run_failed',
+      run_id:     runId || null,
+      query,
+      mode,
+      error:      err.message,
+      timestamp:  ts,
     });
-    if (!response.ok) throw new Error(`OpenAI error ${response.status}`);
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
-  if (process.env.GROQ_API_KEY) {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({ model: 'llama3-8b-8192', messages }),
-    });
-    if (!response.ok) throw new Error(`Groq error ${response.status}`);
-    const data = await response.json();
-    return data.choices[0].message.content;
-  }
-  throw new Error('No LLM provider configured.');
 }
