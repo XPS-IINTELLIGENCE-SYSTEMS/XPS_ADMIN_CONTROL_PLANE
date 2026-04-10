@@ -15,6 +15,7 @@ import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
 const GREEN  = '#4ade80';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // ── Status dot colours ────────────────────────────────────────────────────────
 
@@ -78,7 +79,10 @@ function TabBar({ objects, activeId, onSelect, onClose }) {
           <div
             key={obj.id}
             onClick={() => onSelect(obj.id)}
+            className="xps-electric-hover"
+            data-active={active ? 'true' : undefined}
             style={{
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -121,7 +125,9 @@ function TabBar({ objects, activeId, onSelect, onClose }) {
 
             <button
               onClick={e => { e.stopPropagation(); onClose(obj.id); }}
+              className="xps-electric-hover"
               style={{
+                position: 'relative',
                 background: 'none',
                 border: 'none',
                 color: 'rgba(255,255,255,0.3)',
@@ -427,7 +433,7 @@ function LogLine({ entry }) {
   const lower = entry.line.toLowerCase();
   const isErr  = lower.startsWith('error') || lower.startsWith('err ') || lower.includes('[error]');
   const isWarn = lower.startsWith('warn') || lower.includes('[warn]');
-  const isDone = lower.startsWith('✓') || lower.includes('done') || lower.includes('complete') || lower.includes('[done]');
+  const isDone = lower.includes('done') || lower.includes('complete');
 
   const color = isErr ? RED : isWarn ? '#fbbf24' : isDone ? GREEN : 'rgba(255,255,255,0.72)';
 
@@ -566,15 +572,18 @@ function EmptyState({ createObject, setActive }) {
       alignItems: 'center', justifyContent: 'center',
       gap: 18, padding: 40,
     }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: 18,
-        background: 'rgba(212,168,67,0.07)', border: '1px solid rgba(212,168,67,0.18)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28, color: 'rgba(196,158,60,0.5)', fontWeight: 800, letterSpacing: -2,
-        overflow: 'hidden', position: 'relative',
-      }}>
-        <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 18, opacity: 0.12 }} />
-        <span style={{ position: 'relative', zIndex: 1 }}>XPS</span>
+      <div
+        className="xps-logo"
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 18,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
 
       <div style={{ textAlign: 'center', maxWidth: 440 }}>
@@ -918,13 +927,13 @@ function WorkflowBody({ obj }) {
                 : step.status === 'error' ? RED
                 : step.status === 'running' ? GOLD
                 : 'rgba(255,255,255,0.25)';
-              const icon = step.status === 'complete' ? '✓'
-                : step.status === 'error' ? '✗'
-                : step.status === 'running' ? '▶'
-                : '○';
+              const label = step.status === 'complete' ? 'DONE'
+                : step.status === 'error' ? 'ERROR'
+                : step.status === 'running' ? 'RUN'
+                : 'IDLE';
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                  <span style={{ color, fontSize: 12, minWidth: 14, fontWeight: 700, marginTop: 1 }}>{icon}</span>
+                  <span style={{ color, fontSize: 10, minWidth: 32, fontWeight: 700, marginTop: 1 }}>{label}</span>
                   <div>
                     <span style={{ fontSize: 12, color, fontWeight: 500 }}>Step {step.step}: {step.label}</span>
                     {step.action && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginLeft: 8 }}>{step.action}</span>}
@@ -972,7 +981,7 @@ function ConnectorActionBody({ obj }) {
             {Object.entries(connectors).map(([name, info]) => (
               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, color: info.mode === 'live' ? GREEN : info.mode === 'blocked' ? RED : '#fbbf24' }}>
-                  {info.mode === 'live' ? '✓' : info.mode === 'blocked' ? 'X' : '~'}
+                  {info.mode === 'live' ? 'LIVE' : info.mode === 'blocked' ? 'BLOCKED' : 'SYNTH'}
                 </span>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{name}</span>
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{info.status}</span>
@@ -1045,14 +1054,14 @@ function AgentRunBody({ obj }) {
                 : step.status === 'running' ? GOLD
                 : step.status === 'skipped' ? 'rgba(255,255,255,0.2)'
                 : 'rgba(255,255,255,0.4)';
-              const icon = step.status === 'complete' ? '✓'
-                : step.status === 'error' ? '✗'
-                : step.status === 'running' ? '▶'
-                : step.status === 'skipped' ? '–'
-                : '○';
+              const label = step.status === 'complete' ? 'DONE'
+                : step.status === 'error' ? 'ERROR'
+                : step.status === 'running' ? 'RUN'
+                : step.status === 'skipped' ? 'SKIP'
+                : 'IDLE';
               return (
                 <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 6, alignItems: 'flex-start' }}>
-                  <span style={{ color, fontSize: 12, fontWeight: 700, minWidth: 14, marginTop: 1 }}>{icon}</span>
+                  <span style={{ color, fontSize: 10, fontWeight: 700, minWidth: 32, marginTop: 1 }}>{label}</span>
                   <span style={{ fontSize: 12, color, flex: 1 }}>
                     Step {step.step}: {step.label}
                   </span>

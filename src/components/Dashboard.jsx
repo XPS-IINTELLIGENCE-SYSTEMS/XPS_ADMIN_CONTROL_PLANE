@@ -3,6 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
+import { Users, DollarSign, FileText, Target, BarChart3 } from 'lucide-react';
 
 const GOLD = '#d4a843';
 const GOLD_DIM = 'rgba(212,168,67,0.18)';
@@ -62,10 +63,10 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="kpi-grid">
-        <KpiCard icon="👤" trend="+12.4%" up value="2,847" label="Active Leads" />
-        <KpiCard icon="💵" trend="+8.7%" up value="$4.2M" label="Pipeline Value" />
-        <KpiCard icon="📄" trend="+23.1%" up value="342" label="Proposals Sent" />
-        <KpiCard icon="🎯" trend="-1.3%" up={false} value="34.2%" label="Close Rate" />
+        <KpiCard icon={Users} trend="+12.4%" up value="2,847" label="Active Leads" />
+        <KpiCard icon={DollarSign} trend="+8.7%" up value="$4.2M" label="Pipeline Value" />
+        <KpiCard icon={FileText} trend="+23.1%" up value="342" label="Proposals Sent" />
+        <KpiCard icon={Target} trend="-1.3%" up={false} value="34.2%" label="Close Rate" />
       </div>
 
       {/* Charts */}
@@ -77,9 +78,7 @@ export default function Dashboard() {
               <div className="chart-title">Revenue Pipeline</div>
               <div className="chart-sub">Monthly pipeline value trend</div>
             </div>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.8">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="9" y2="15"/><line x1="12" y1="6" x2="12" y2="15"/><line x1="15" y1="12" x2="15" y2="15"/>
-            </svg>
+            <BarChart3 size={18} className="xps-icon" />
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={revenueData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
@@ -183,11 +182,13 @@ export default function Dashboard() {
   );
 }
 
-function KpiCard({ icon, trend, up, value, label }) {
+function KpiCard({ icon: Icon, trend, up, value, label }) {
   return (
     <div className="kpi-card">
       <div className="kpi-top">
-        <div className="kpi-icon" style={{ fontSize: 18 }}>{icon}</div>
+        <div className="kpi-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={18} className="xps-icon" />
+        </div>
         <div className={`kpi-trend ${up ? 'up' : 'down'}`}>
           {up ? '↑' : '↓'} {trend}
         </div>

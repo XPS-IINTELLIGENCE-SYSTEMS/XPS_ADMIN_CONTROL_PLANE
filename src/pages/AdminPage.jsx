@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.API_URL || '';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // ── Runtime truth detection (build-time, client-side supplement) ──────────
 const env = import.meta.env;
@@ -74,7 +75,7 @@ function StatusPill({ status }) {
       border: `1px solid ${meta.color}30`,
       fontSize: 11, fontWeight: 600, color: meta.color,
     }}>
-      <Icon size={10} />
+      <Icon size={10} className="xps-icon" style={{ color: 'var(--icon-silver)' }} />
       {meta.label}
     </span>
   );
@@ -88,7 +89,7 @@ function CapRow({ icon: Icon, label, status, note }) {
       padding: '9px 16px',
       borderBottom: '1px solid rgba(255,255,255,0.04)',
     }}>
-      <Icon size={13} style={{ color: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />
+      <Icon size={13} className="xps-icon xps-icon-muted" style={{ flexShrink: 0 }} />
       <span style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{label}</span>
       {note && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{note}</span>}
       <StatusPill status={status} />
@@ -101,13 +102,17 @@ function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, default
   const meta = STATUS_META[status] || STATUS_META[STATUS.BLOCKED];
 
   return (
-    <div data-testid={`cap-panel-${title.toLowerCase().replace(/\s+/g, '-')}`} style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      overflow: 'hidden',
-      marginBottom: 14,
-    }}>
+    <div
+      data-testid={`cap-panel-${title.toLowerCase().replace(/\s+/g, '-')}`}
+      className="xps-electric-hover"
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginBottom: 14,
+      }}
+    >
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -124,14 +129,16 @@ function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, default
           border: `1px solid ${meta.color}25`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <HeaderIcon size={15} style={{ color: meta.color }} />
+          <HeaderIcon size={15} className="xps-icon" style={{ color: 'var(--icon-silver)' }} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>{title}</div>
           {subtitle && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>{subtitle}</div>}
         </div>
         <StatusPill status={status} />
-        {open ? <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />}
+        {open
+          ? <ChevronDown size={14} className="xps-icon xps-icon-muted" style={{ flexShrink: 0 }} />
+          : <ChevronRight size={14} className="xps-icon xps-icon-muted" style={{ flexShrink: 0 }} />}
       </button>
 
       {open && (
@@ -148,7 +155,7 @@ function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, default
               color: 'rgba(255,255,255,0.45)',
               display: 'flex', alignItems: 'flex-start', gap: 8,
             }}>
-              <Lock size={12} style={{ color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+              <Lock size={12} className="xps-icon" style={{ color: 'var(--icon-silver)', flexShrink: 0, marginTop: 1 }} />
               <span>
                 Not configured — set the required environment variable(s) in{' '}
                 <code style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code>
@@ -230,6 +237,29 @@ export default function AdminPage() {
         display: 'flex', flexDirection: 'column',
         padding: '16px 8px',
       }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 12px' }}>
+          <div
+            className="xps-logo"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              overflow: 'hidden',
+              flexShrink: 0,
+            }}
+          >
+            <img
+              src={BRAND_LOGO}
+              alt="XPS"
+              data-testid="brand-logo-admin"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--text-primary)' }}>XPS ADMIN</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: 1.4 }}>CONTROL PLANE</div>
+          </div>
+        </div>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: 'rgba(255,255,255,0.3)', padding: '4px 8px 10px' }}>
           ADMIN
         </div>
@@ -241,7 +271,10 @@ export default function AdminPage() {
               key={item.id}
               data-testid={`admin-nav-${item.id}`}
               onClick={() => setActiveSection(item.id)}
+              className="xps-electric-hover"
+              data-active={active ? 'true' : undefined}
               style={{
+                position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 9,
                 padding: '8px 10px', borderRadius: 6,
                 border: 'none', background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
@@ -250,15 +283,13 @@ export default function AdminPage() {
                 color: active ? '#e2e8f0' : 'rgba(255,255,255,0.45)',
                 marginBottom: 2,
               }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon size={13} strokeWidth={active ? 2.2 : 1.8} />
+              <Icon size={13} strokeWidth={active ? 2.2 : 1.8} className="xps-icon" />
               {item.label}
               {active && (
                 <span style={{
                   marginLeft: 'auto', width: 4, height: 4, borderRadius: '50%',
-                  background: 'linear-gradient(90deg, #c49e3c, #e8d5a3)',
+                  background: 'linear-gradient(90deg, var(--electric-gold), var(--electric-silver-bright))',
                 }} />
               )}
             </button>
@@ -271,7 +302,9 @@ export default function AdminPage() {
             data-testid="admin-refresh-status"
             onClick={fetchStatus}
             disabled={statusLoading}
+            className="xps-electric-hover"
             style={{
+              position: 'relative',
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               padding: '7px 8px', borderRadius: 6,
               border: '1px solid rgba(255,255,255,0.1)',
@@ -280,7 +313,7 @@ export default function AdminPage() {
               fontSize: 11, cursor: statusLoading ? 'not-allowed' : 'pointer',
             }}
           >
-            <RefreshCw size={11} style={{ animation: statusLoading ? 'spin 1s linear infinite' : 'none' }} />
+            <RefreshCw size={11} className="xps-icon" style={{ animation: statusLoading ? 'spin 1s linear infinite' : 'none' }} />
             {statusLoading ? 'Refreshing…' : 'Refresh Status'}
           </button>
           {statusError && (

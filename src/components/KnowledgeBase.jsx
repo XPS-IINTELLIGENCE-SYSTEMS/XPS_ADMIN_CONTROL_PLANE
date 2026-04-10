@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
+import { Factory, Briefcase, BarChart3, Target, FileText, Microscope, Phone, Trophy, Workflow } from 'lucide-react';
 
 const GOLD = '#d4a843';
 
 const articles = [
-  { icon: '🏭', title: 'Floor Coating Types & Applications', desc: 'Epoxy, urethane, and polyaspartic systems for industrial floors', tags: ['Product', 'Technical'], updated: '2 days ago' },
-  { icon: '💼', title: 'Sales Objection Playbook', desc: 'Scripts and responses for the 15 most common objections', tags: ['Sales', 'Playbook'], updated: '1 week ago' },
-  { icon: '📊', title: 'Competitive Pricing Matrix', desc: 'Current market pricing vs XPS positioning across verticals', tags: ['Competitive', 'Pricing'], updated: '3 days ago' },
-  { icon: '🎯', title: 'Territory Coverage Guide — Florida', desc: 'Territory boundaries, key accounts, and coverage strategy', tags: ['Territory', 'Strategy'], updated: '5 days ago' },
-  { icon: '📝', title: 'Proposal Writing Best Practices', desc: 'Proven templates and copy patterns that close deals', tags: ['Proposals', 'Templates'], updated: '1 week ago' },
-  { icon: '🔬', title: 'Technical Spec Sheets Library', desc: 'Full product specification documents for all XPS systems', tags: ['Technical', 'Product'], updated: 'Today' },
-  { icon: '📞', title: 'Cold Outreach Scripts', desc: 'Phone and email scripts for each vertical and stage', tags: ['Outreach', 'Sales'], updated: '4 days ago' },
-  { icon: '🏆', title: 'Case Studies & Win Reports', desc: 'Documented wins with ROI data for customer proof', tags: ['Case Studies'], updated: '1 week ago' },
-  { icon: '[A]', title: 'CRM Workflow SOPs', desc: 'Standard operating procedures for pipeline management', tags: ['Process', 'CRM'], updated: '2 weeks ago' },
+  { icon: Factory, title: 'Floor Coating Types & Applications', desc: 'Epoxy, urethane, and polyaspartic systems for industrial floors', tags: ['Product', 'Technical'], updated: '2 days ago' },
+  { icon: Briefcase, title: 'Sales Objection Playbook', desc: 'Scripts and responses for the 15 most common objections', tags: ['Sales', 'Playbook'], updated: '1 week ago' },
+  { icon: BarChart3, title: 'Competitive Pricing Matrix', desc: 'Current market pricing vs XPS positioning across verticals', tags: ['Competitive', 'Pricing'], updated: '3 days ago' },
+  { icon: Target, title: 'Territory Coverage Guide — Florida', desc: 'Territory boundaries, key accounts, and coverage strategy', tags: ['Territory', 'Strategy'], updated: '5 days ago' },
+  { icon: FileText, title: 'Proposal Writing Best Practices', desc: 'Proven templates and copy patterns that close deals', tags: ['Proposals', 'Templates'], updated: '1 week ago' },
+  { icon: Microscope, title: 'Technical Spec Sheets Library', desc: 'Full product specification documents for all XPS systems', tags: ['Technical', 'Product'], updated: 'Today' },
+  { icon: Phone, title: 'Cold Outreach Scripts', desc: 'Phone and email scripts for each vertical and stage', tags: ['Outreach', 'Sales'], updated: '4 days ago' },
+  { icon: Trophy, title: 'Case Studies & Win Reports', desc: 'Documented wins with ROI data for customer proof', tags: ['Case Studies'], updated: '1 week ago' },
+  { icon: Workflow, title: 'CRM Workflow SOPs', desc: 'Standard operating procedures for pipeline management', tags: ['Process', 'CRM'], updated: '2 weeks ago' },
 ];
 
 export default function KnowledgeBase() {
@@ -50,7 +51,10 @@ export default function KnowledgeBase() {
             onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(212,168,67,0.3)'}
             onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'}
           >
-            <div style={{ fontSize: 28, marginBottom: 10 }}>{a.icon}</div>
+            {(() => {
+              const Icon = a.icon;
+              return <Icon size={28} className="xps-icon" style={{ marginBottom: 10 }} />;
+            })()}
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{a.title}</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 12, lineHeight: 1.5 }}>{a.desc}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>

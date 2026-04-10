@@ -332,7 +332,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           <button
             data-testid="agent-selector"
             onClick={() => { setAgentOpen(o => !o); setModeOpen(false); }}
+            className="xps-electric-hover"
+            data-active={agentOpen ? 'true' : undefined}
             style={{
+              position: 'relative',
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '7px 10px', background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
@@ -340,10 +343,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <AgentIcon size={13} style={{ color: gold, flexShrink: 0 }} />
+              <AgentIcon size={13} className="xps-icon" style={{ flexShrink: 0 }} />
               <span>{selectedAgent.label}</span>
             </span>
-            {agentOpen ? <ChevronUp size={12} style={{ color: 'rgba(255,255,255,0.4)' }} /> : <ChevronDown size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />}
+            {agentOpen ? <ChevronUp size={12} className="xps-icon" /> : <ChevronDown size={12} className="xps-icon" />}
           </button>
 
           {agentOpen && (
@@ -359,7 +362,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
                   <button
                     key={a.id}
                     onClick={() => { setAgent(a.id); setAgentOpen(false); }}
+                    className="xps-electric-hover"
+                    data-active={agent === a.id ? 'true' : undefined}
                     style={{
+                      position: 'relative',
                       display: 'flex', alignItems: 'center', gap: 8,
                       width: '100%', padding: '8px 12px',
                       background: agent === a.id ? 'rgba(212,168,67,0.12)' : 'transparent',
@@ -367,12 +373,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
                       fontSize: 12, cursor: 'pointer', textAlign: 'left',
                       borderBottom: '1px solid rgba(255,255,255,0.05)',
                     }}
-                    onMouseEnter={e => { if (agent !== a.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                    onMouseLeave={e => { if (agent !== a.id) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <AIcon size={12} />
+                    <AIcon size={12} className="xps-icon" />
                     <span style={{ fontWeight: agent === a.id ? 600 : 400 }}>{a.label}</span>
-                    {agent === a.id && <CheckCircle size={11} style={{ marginLeft: 'auto', color: gold }} />}
+                    {agent === a.id && <CheckCircle size={11} className="xps-icon" style={{ marginLeft: 'auto' }} />}
                   </button>
                 );
               })}
@@ -385,7 +389,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           <button
             data-testid="mode-selector"
             onClick={() => { setModeOpen(o => !o); setAgentOpen(false); }}
+            className="xps-electric-hover"
+            data-active={modeOpen ? 'true' : undefined}
             style={{
+              position: 'relative',
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '6px 10px', background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7,
@@ -393,10 +400,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <ModeIcon size={11} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              <ModeIcon size={11} className="xps-icon" />
               <span>{selectedMode.label}</span>
             </span>
-            {modeOpen ? <ChevronUp size={11} style={{ color: 'rgba(255,255,255,0.3)' }} /> : <ChevronDown size={11} style={{ color: 'rgba(255,255,255,0.3)' }} />}
+            {modeOpen ? <ChevronUp size={11} className="xps-icon" /> : <ChevronDown size={11} className="xps-icon" />}
           </button>
 
           {modeOpen && (
@@ -413,7 +420,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
                     key={m.id}
                     data-testid={`mode-option-${m.id}`}
                     onClick={() => { setMode(m.id); setModeOpen(false); }}
+                    className="xps-electric-hover"
+                    data-active={mode === m.id ? 'true' : undefined}
                     style={{
+                      position: 'relative',
                       display: 'flex', alignItems: 'center', gap: 8,
                       width: '100%', padding: '7px 12px',
                       background: mode === m.id ? 'rgba(255,255,255,0.06)' : 'transparent',
@@ -421,12 +431,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
                       fontSize: 12, cursor: 'pointer', textAlign: 'left',
                       borderBottom: '1px solid rgba(255,255,255,0.04)',
                     }}
-                    onMouseEnter={e => { if (mode !== m.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                    onMouseLeave={e => { if (mode !== m.id) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <MIcon size={11} />
+                    <MIcon size={11} className="xps-icon" />
                     <span style={{ fontWeight: mode === m.id ? 600 : 400 }}>{m.label}</span>
-                    {mode === m.id && <CheckCircle size={10} style={{ marginLeft: 'auto', color: gold }} />}
+                    {mode === m.id && <CheckCircle size={10} className="xps-icon" style={{ marginLeft: 'auto' }} />}
                   </button>
                 );
               })}
@@ -501,37 +509,38 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             {ATTACH_SOURCES.map(src => {
               const SIcon = src.icon;
               return (
-                <button
-                  key={src.id}
-                  data-testid={`attach-source-${src.id}`}
-                  disabled={!src.available}
-                  onClick={() => {
-                    if (src.available && !src.blocked) {
-                      openFileChooser(src.accept || '*/*');
-                    }
-                  }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    width: '100%', padding: '9px 12px',
-                    background: 'transparent',
-                    border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                    color: src.available ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)',
-                    fontSize: 12, cursor: src.available ? 'pointer' : 'not-allowed',
-                    textAlign: 'left',
-                  }}
-                  onMouseEnter={e => { if (src.available) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <SIcon size={13} style={{ flexShrink: 0 }} />
-                  <span style={{ flex: 1 }}>{src.label}</span>
-                  {src.blocked && (
-                    <span style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      fontSize: 10, fontWeight: 600,
-                      color: '#ef4444', padding: '2px 7px', borderRadius: 99,
-                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-                    }}>
-                      <AlertTriangle size={9} />
+                  <button
+                    key={src.id}
+                    data-testid={`attach-source-${src.id}`}
+                    disabled={!src.available}
+                    onClick={() => {
+                      if (src.available && !src.blocked) {
+                        openFileChooser(src.accept || '*/*');
+                      }
+                    }}
+                    className="xps-electric-hover"
+                    data-active={false}
+                    style={{
+                      position: 'relative',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      width: '100%', padding: '9px 12px',
+                      background: 'transparent',
+                      border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                      color: src.available ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)',
+                      fontSize: 12, cursor: src.available ? 'pointer' : 'not-allowed',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <SIcon size={13} className="xps-icon" style={{ flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>{src.label}</span>
+                    {src.blocked && (
+                      <span style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        fontSize: 10, fontWeight: 600,
+                        color: '#ef4444', padding: '2px 7px', borderRadius: 99,
+                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                      }}>
+                      <AlertTriangle size={9} className="xps-icon" />
                       {src.note || 'Blocked'}
                     </span>
                   )}
@@ -569,7 +578,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               data-testid="attach-btn"
               onClick={() => { setAttachOpen(o => !o); setAgentOpen(false); setModeOpen(false); }}
               title="Attach file"
+              className="xps-electric-hover"
+              data-active={attachOpen ? 'true' : undefined}
               style={{
+                position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: 30, height: 30,
                 background: attachOpen ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
@@ -578,7 +590,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
                 flexShrink: 0,
               }}
             >
-              <Paperclip size={13} />
+              <Paperclip size={13} className="xps-icon" />
             </button>
 
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', flex: 1 }}>
@@ -593,7 +605,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               type="submit"
               data-testid="send-btn"
               disabled={loading || !input.trim()}
+              className="xps-electric-hover"
+              data-active={!!input.trim() && !loading ? 'true' : undefined}
               style={{
+                position: 'relative',
                 padding: '6px 14px',
                 background: input.trim() && !loading ? gold : 'rgba(255,255,255,0.08)',
                 color: input.trim() && !loading ? '#0a0a0a' : 'rgba(255,255,255,0.3)',
@@ -604,7 +619,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               }}
             >
               {loading ? '…' : 'Send'}
-              {!loading && <Send size={11} />}
+              {!loading && <Send size={11} className="xps-icon" />}
             </button>
           </div>
         </form>
@@ -720,4 +735,3 @@ function ThinkingDots() {
     </div>
   );
 }
-

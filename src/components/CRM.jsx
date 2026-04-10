@@ -1,5 +1,6 @@
 import React from 'react';
 import { StageBadge } from './Dashboard.jsx';
+import { Users, Building, Star, MapPin } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -32,10 +33,10 @@ export default function CRM() {
 
       {/* KPI Cards */}
       <div className="kpi-grid">
-        <CrmKpi icon="👤" value="1,842" label="Total Contacts" />
-        <CrmKpi icon="🏢" value="647" label="Companies" />
-        <CrmKpi icon="⭐" value="234" label="Active Deals" />
-        <CrmKpi icon="📍" value="$8.4M" label="Pipeline Value" />
+        <CrmKpi icon={Users} value="1,842" label="Total Contacts" />
+        <CrmKpi icon={Building} value="647" label="Companies" />
+        <CrmKpi icon={Star} value="234" label="Active Deals" />
+        <CrmKpi icon={MapPin} value="$8.4M" label="Pipeline Value" />
       </div>
 
       {/* Pipeline Stages */}
@@ -74,11 +75,13 @@ export default function CRM() {
   );
 }
 
-function CrmKpi({ icon, value, label }) {
+function CrmKpi({ icon: Icon, value, label }) {
   return (
     <div className="kpi-card">
       <div className="kpi-top">
-        <div className="kpi-icon" style={{ fontSize: 18 }}>{icon}</div>
+        <div className="kpi-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon size={18} className="xps-icon" />
+        </div>
       </div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-label">{label}</div>

@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
+import {
+  Github,
+  Database,
+  Cloud,
+  Folder,
+  Brain,
+  Circle,
+  Cpu,
+  Link,
+  Plug,
+} from 'lucide-react';
 
 const CONNECTORS = [
-  { id: 'github', name: 'GitHub', emoji: '🐙', desc: 'Code repositories, deployments, and CI/CD pipelines', connected: true, detail: 'XPS-INTELLIGENCE-SYSTEMS' },
-  { id: 'supabase', name: 'Supabase', emoji: '⚡', desc: 'Database, auth, and real-time subscriptions', connected: true, detail: 'xps-prod.supabase.co' },
-  { id: 'vercel', name: 'Vercel', emoji: '▲', desc: 'Frontend deployments and serverless functions', connected: true, detail: 'xps-admin-control-plane' },
-  { id: 'google-drive', name: 'Google Drive', emoji: '📁', desc: 'File storage, documents, and shared resources', connected: false, detail: '' },
-  { id: 'groq', name: 'Groq', emoji: '🧠', desc: 'Ultra-fast LLM inference for AI assistant', connected: false, detail: '' },
-  { id: 'redis', name: 'Redis', emoji: '🔴', desc: 'Job queues, caching, and session state', connected: false, detail: '' },
-  { id: 'openai', name: 'OpenAI', emoji: 'AI', desc: 'GPT-4o for reasoning, chat, and content generation', connected: false, detail: '' },
-  { id: 'google-cloud', name: 'Google Cloud', emoji: '☁️', desc: 'GCS storage, BigQuery, and service account APIs', connected: false, detail: '' },
-  { id: 'zapier', name: 'Zapier', emoji: '⚡', desc: 'Workflow automation and third-party integrations', connected: false, detail: '' },
+  { id: 'github', name: 'GitHub', icon: Github, desc: 'Code repositories, deployments, and CI/CD pipelines', connected: true, detail: 'XPS-INTELLIGENCE-SYSTEMS' },
+  { id: 'supabase', name: 'Supabase', icon: Database, desc: 'Database, auth, and real-time subscriptions', connected: true, detail: 'xps-prod.supabase.co' },
+  { id: 'vercel', name: 'Vercel', icon: Cloud, desc: 'Frontend deployments and serverless functions', connected: true, detail: 'xps-admin-control-plane' },
+  { id: 'google-drive', name: 'Google Drive', icon: Folder, desc: 'File storage, documents, and shared resources', connected: false, detail: '' },
+  { id: 'groq', name: 'Groq', icon: Brain, desc: 'Ultra-fast LLM inference for AI assistant', connected: false, detail: '' },
+  { id: 'redis', name: 'Redis', icon: Circle, desc: 'Job queues, caching, and session state', connected: false, detail: '' },
+  { id: 'openai', name: 'OpenAI', icon: Cpu, desc: 'GPT-4o for reasoning, chat, and content generation', connected: false, detail: '' },
+  { id: 'google-cloud', name: 'Google Cloud', icon: Cloud, desc: 'GCS storage, BigQuery, and service account APIs', connected: false, detail: '' },
+  { id: 'zapier', name: 'Zapier', icon: Link, desc: 'Workflow automation and third-party integrations', connected: false, detail: '' },
 ];
 
 export default function Connectors() {
@@ -41,7 +52,7 @@ export default function Connectors() {
           <div key={c.id} className="connector-card">
             <div className="conn-header">
               <div className="conn-logo" style={{ background: c.connected ? 'rgba(212,168,67,0.1)' : 'rgba(255,255,255,0.05)', fontSize: 22 }}>
-                {c.emoji}
+                <c.icon size={20} className="xps-icon" />
               </div>
               <span className={`conn-status ${c.connected ? 'conn-connected' : 'conn-disconnected'}`}>
                 {c.connected ? 'Connected' : 'Not Connected'}
@@ -58,7 +69,7 @@ export default function Connectors() {
               className={`conn-btn ${c.connected ? 'connected' : ''}`}
               onClick={() => toggle(c.id)}
             >
-              {c.connected ? '✓ Disconnect' : '+ Connect'}
+              {c.connected ? 'Disconnect' : 'Connect'}
             </button>
           </div>
         ))}

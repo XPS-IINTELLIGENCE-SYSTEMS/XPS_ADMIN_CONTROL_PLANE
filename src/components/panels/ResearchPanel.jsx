@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Search, XCircle } from 'lucide-react';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -70,13 +71,14 @@ export default function ResearchPanel() {
             cursor: (!loading && query.trim()) ? 'pointer' : 'not-allowed',
           }}
         >
-          {loading ? '[...] Searching…' : 'Research'}
+          {loading ? 'Searching…' : 'Research'}
         </button>
       </form>
 
       {error && (
         <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 8, color: '#f87171', fontSize: 13 }}>
-          ✕ {error}
+          <XCircle size={12} className="xps-icon" style={{ marginRight: 6 }} />
+          {error}
         </div>
       )}
 
@@ -131,7 +133,8 @@ function EmptyState() {
           borderRadius: 8, fontSize: 13,
           color: 'rgba(255,255,255,0.4)', cursor: 'default',
         }}>
-          🔍 {s}
+          <Search size={12} className="xps-icon" style={{ marginRight: 6 }} />
+          {s}
         </div>
       ))}
     </div>

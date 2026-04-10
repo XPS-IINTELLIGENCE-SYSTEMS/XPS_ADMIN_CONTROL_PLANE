@@ -31,18 +31,27 @@ const panelLabels = {
   status:           'System Status',
 };
 
-// Inline animated gradient logo accent
-function GradientLogo() {
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
+
+function BrandLogo() {
   return (
-    <div style={{ position: 'relative', width: 24, height: 24, borderRadius: 5, overflow: 'hidden', flexShrink: 0 }}>
-      <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 5 }} />
-      <div style={{
-        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <svg width="11" height="13" viewBox="0 0 14 16" fill="none">
-          <path d="M7 1L1 4.5V8.5C1 11.8 3.7 14.8 7 16C10.3 14.8 13 11.8 13 8.5V4.5L7 1Z" fill="#0a0b0c"/>
-        </svg>
-      </div>
+    <div
+      className="xps-logo"
+      style={{
+        position: 'relative',
+        width: 26,
+        height: 26,
+        borderRadius: 6,
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}
+    >
+      <img
+        src={BRAND_LOGO}
+        alt="XPS"
+        data-testid="brand-logo-header"
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
     </div>
   );
 }
@@ -70,8 +79,8 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
     }}>
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <GradientLogo />
-        <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1.2, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+        <BrandLogo />
+        <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1.2, whiteSpace: 'nowrap' }}>
           XPS
         </span>
       </div>
@@ -91,8 +100,11 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
             <button
               key={tab.id}
               data-testid={`page-tab-${tab.id}`}
+              className="xps-electric-hover"
+              data-active={active ? 'true' : undefined}
               onClick={() => onPageChange(tab.id)}
               style={{
+                position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '5px 12px',
                 borderRadius: 6,
@@ -100,13 +112,11 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
                 fontSize: 12, fontWeight: active ? 600 : 400,
                 cursor: 'pointer',
                 background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
-                color: active ? 'transparent' : 'rgba(255,255,255,0.45)',
+                color: active ? 'var(--text-primary)' : 'rgba(255,255,255,0.45)',
               }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon size={13} strokeWidth={active ? 2.2 : 1.8} className={active ? 'xps-gold-text' : ''} style={active ? {} : { color: 'rgba(255,255,255,0.45)' }} />
-              <span className={active ? 'xps-gold-text' : ''}>{tab.label}</span>
+              <Icon size={13} strokeWidth={active ? 2.2 : 1.8} className="xps-icon" />
+              <span className={active ? 'xps-electric-text' : ''}>{tab.label}</span>
             </button>
           );
         })}
@@ -118,10 +128,11 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
       {sidebarVisible && (
         <button
           onClick={onToggleSidebar}
-          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', padding: 4, borderRadius: 4, display: 'flex', cursor: 'pointer' }}
+          className="xps-electric-hover"
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', padding: 4, borderRadius: 4, display: 'flex', cursor: 'pointer', position: 'relative' }}
           title="Toggle sidebar"
         >
-          <PanelLeft size={16} />
+          <PanelLeft size={16} className="xps-icon" />
         </button>
       )}
 
@@ -132,7 +143,7 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
       )}
 
       <div style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
-        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+        <Search size={13} className="xps-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -157,14 +168,14 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
         {modeLabel}
       </div>
 
-      <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', padding: 4, borderRadius: 4, position: 'relative', cursor: 'pointer' }}>
-        <Bell size={15} />
-        <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%' }} className="xps-gold-accent" />
+      <button className="xps-electric-hover" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', padding: 4, borderRadius: 4, position: 'relative', cursor: 'pointer' }}>
+        <Bell size={15} className="xps-icon" />
+        <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%' }} className="xps-electric-accent" />
       </button>
 
       {typeof userContext.location === 'string' && userContext.location.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
-          <MapPin size={12} />
+          <MapPin size={12} className="xps-icon" />
           {userContext.location}
         </div>
       )}
@@ -175,7 +186,7 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
         fontWeight: 700, fontSize: 11, flexShrink: 0, overflow: 'hidden',
         position: 'relative',
       }}>
-        <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: '50%' }} />
+        <div className="xps-electric-accent" style={{ position: 'absolute', inset: 0, borderRadius: '50%' }} />
         <span style={{ position: 'relative', color: '#0a0b0c', zIndex: 1 }}>{userContext.avatar || 'XP'}</span>
       </div>
     </header>

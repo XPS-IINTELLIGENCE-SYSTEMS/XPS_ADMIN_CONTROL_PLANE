@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Package } from 'lucide-react';
 
 const GOLD = '#d4a843';
 
@@ -107,10 +108,10 @@ export default function Artifacts() {
             </div>
           </div>
         ) : (
-          <div className="chart-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'rgba(255,255,255,0.3)', minHeight: 300 }}>
-            <div style={{ fontSize: 40 }}>📦</div>
-            <div style={{ fontSize: 14 }}>Select an artifact to preview</div>
-          </div>
+            <div className="chart-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'rgba(255,255,255,0.3)', minHeight: 300 }}>
+              <Package size={40} className="xps-icon" />
+              <div style={{ fontSize: 14 }}>Select an artifact to preview</div>
+            </div>
         )}
       </div>
     </div>

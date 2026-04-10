@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle, Zap, CheckCircle } from 'lucide-react';
 
 const GOLD = '#d4a843';
 
@@ -48,16 +49,21 @@ export default function Competition() {
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
         {[
-          { icon: '⚠️', label: 'High Threat', value: '2 competitors', color: '#ef4444' },
-          { icon: '⚡', label: 'Medium Threat', value: '2 competitors', color: '#fbbf24' },
-          { icon: '✅', label: 'Low Threat', value: '1 competitor', color: '#22c55e' },
-        ].map((s) => (
+          { icon: AlertTriangle, label: 'High Threat', value: '2 competitors', color: '#ef4444' },
+          { icon: Zap, label: 'Medium Threat', value: '2 competitors', color: '#fbbf24' },
+          { icon: CheckCircle, label: 'Low Threat', value: '1 competitor', color: '#22c55e' },
+        ].map((s) => {
+          const Icon = s.icon;
+          return (
           <div key={s.label} className="kpi-card">
-            <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
+            <div style={{ marginBottom: 8 }}>
+              <Icon size={22} className="xps-icon" />
+            </div>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</div>
             <div className="kpi-label">{s.label}</div>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Competitor Table */}

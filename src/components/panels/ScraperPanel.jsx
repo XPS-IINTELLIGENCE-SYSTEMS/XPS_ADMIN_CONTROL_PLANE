@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Globe, XCircle } from 'lucide-react';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -104,9 +105,9 @@ export default function ScraperPanel() {
             }}
           >
             {loading ? (
-              <>[...] Scraping…</>
+              <>Scraping…</>
             ) : (
-              <><span>[W]</span> Scrape &amp; Summarise</>
+              <><Globe size={14} className="xps-icon" /> Scrape &amp; Summarise</>
             )}
           </button>
         </form>
@@ -120,7 +121,8 @@ export default function ScraperPanel() {
           border: '1px solid rgba(248,113,113,0.25)',
           borderRadius: 8, color: '#f87171', fontSize: 13,
         }}>
-          ✕ {error}
+          <XCircle size={12} className="xps-icon" style={{ marginRight: 6 }} />
+          {error}
         </div>
       )}
 
@@ -160,7 +162,7 @@ export default function ScraperPanel() {
                 borderRadius: 8, padding: '10px 14px',
                 display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                <span style={{ fontSize: 12 }}>[W]</span>
+                <Globe size={12} className="xps-icon" />
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.url}

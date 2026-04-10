@@ -201,7 +201,7 @@ async function _executeJob(jobId, url, action, prompt, workspaceCtx) {
       });
     }
 
-    _emitLog(jobId, workspaceCtx, `✓ Browser job complete`);
+    _emitLog(jobId, workspaceCtx, `Browser job complete`);
     persistBrowserJob({ jobId, url, action, status: 'complete', mode, result: resultText }).catch(() => {});
 
   } catch (err) {

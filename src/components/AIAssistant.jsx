@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Search, Mail, BookOpen, Clock } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 const GOLD = '#d4a843';
@@ -17,10 +18,10 @@ const INIT_MESSAGES = [
 ];
 
 const QUICK_ACTIONS = [
-  { icon: '[S]', color: 'rgba(212,168,67,0.12)', title: 'Research a lead', desc: 'Get AI-powered intelligence on any company', prompt: 'Research Ace Hardware Distribution and give me competitive intelligence.' },
-  { icon: '✉️', color: 'rgba(59,130,246,0.12)', title: 'Draft outreach email', desc: 'Create personalized cold outreach for a lead', prompt: 'Draft a personalized follow-up email for Gulf Coast Logistics.' },
-  { icon: '📖', color: 'rgba(168,85,247,0.12)', title: 'Objection handling', desc: 'Get rebuttals for common sales objections', prompt: 'Help me handle the objection: "We already have a vendor for floor polishing."' },
-  { icon: '⏱️', color: 'rgba(34,197,94,0.12)', title: 'Follow-up strategy', desc: 'AI-recommended next steps for stale leads', prompt: 'Generate a follow-up strategy for my 5 stale leads.' },
+  { icon: Search, color: 'rgba(212,168,67,0.12)', title: 'Research a lead', desc: 'Get AI-powered intelligence on any company', prompt: 'Research Ace Hardware Distribution and give me competitive intelligence.' },
+  { icon: Mail, color: 'rgba(59,130,246,0.12)', title: 'Draft outreach email', desc: 'Create personalized cold outreach for a lead', prompt: 'Draft a personalized follow-up email for Gulf Coast Logistics.' },
+  { icon: BookOpen, color: 'rgba(168,85,247,0.12)', title: 'Objection handling', desc: 'Get rebuttals for common sales objections', prompt: 'Help me handle the objection: "We already have a vendor for floor polishing."' },
+  { icon: Clock, color: 'rgba(34,197,94,0.12)', title: 'Follow-up strategy', desc: 'AI-recommended next steps for stale leads', prompt: 'Generate a follow-up strategy for my 5 stale leads.' },
 ];
 
 export default function AIAssistant() {
@@ -114,7 +115,9 @@ export default function AIAssistant() {
           <div className="ai-panel-title">Quick Actions</div>
           {QUICK_ACTIONS.map((qa) => (
             <div key={qa.title} className="quick-action" onClick={() => send(qa.prompt)}>
-              <div className="qa-icon" style={{ background: qa.color }}>{qa.icon}</div>
+              <div className="qa-icon" style={{ background: qa.color }}>
+                <qa.icon size={14} className="xps-icon" />
+              </div>
               <div>
                 <div className="qa-title">{qa.title}</div>
                 <div className="qa-desc">{qa.desc}</div>

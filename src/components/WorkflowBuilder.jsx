@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Zap, Play, HelpCircle, Bot, Clock, Mail } from 'lucide-react';
 
 const GOLD = '#d4a843';
 
@@ -11,20 +12,20 @@ const WORKFLOW_TEMPLATES = [
 ];
 
 const STEP_TYPES = [
-  { type: 'trigger', icon: '⚡', label: 'Trigger', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
-  { type: 'action', icon: '[A]', label: 'Action', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
-  { type: 'condition', icon: '❓', label: 'Condition', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
-  { type: 'ai', icon: '[AI]', label: 'AI Step', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
-  { type: 'wait', icon: '⏱️', label: 'Wait / Delay', color: 'rgba(255,255,255,0.07)', border: 'rgba(255,255,255,0.15)' },
-  { type: 'notify', icon: '📧', label: 'Notify', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
+  { type: 'trigger', icon: Zap, label: 'Trigger', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
+  { type: 'action', icon: Play, label: 'Action', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
+  { type: 'condition', icon: HelpCircle, label: 'Condition', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
+  { type: 'ai', icon: Bot, label: 'AI Step', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
+  { type: 'wait', icon: Clock, label: 'Wait / Delay', color: 'rgba(255,255,255,0.07)', border: 'rgba(255,255,255,0.15)' },
+  { type: 'notify', icon: Mail, label: 'Notify', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
 ];
 
 const INIT_STEPS = [
-  { id: 1, type: 'trigger', icon: '⚡', label: 'New Lead Added', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
-  { id: 2, type: 'ai', icon: '[AI]', label: 'AI: Research Company', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
-  { id: 3, type: 'condition', icon: '❓', label: 'Score ≥ 70?', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
-  { id: 4, type: 'action', icon: '[A]', label: 'Assign to Sales Rep', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
-  { id: 5, type: 'notify', icon: '📧', label: 'Send Welcome Email', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
+  { id: 1, type: 'trigger', icon: Zap, label: 'New Lead Added', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
+  { id: 2, type: 'ai', icon: Bot, label: 'AI: Research Company', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
+  { id: 3, type: 'condition', icon: HelpCircle, label: 'Score ≥ 70?', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
+  { id: 4, type: 'action', icon: Play, label: 'Assign to Sales Rep', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
+  { id: 5, type: 'notify', icon: Mail, label: 'Send Welcome Email', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
 ];
 
 export default function WorkflowBuilder() {
@@ -71,10 +72,10 @@ export default function WorkflowBuilder() {
           <div className="chart-card">
             <div style={{ fontSize: 10, letterSpacing: 1.2, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', marginBottom: 12 }}>Add Step</div>
             {STEP_TYPES.map(s => (
-              <button key={s.type} className="btn-outline" style={{ width: '100%', marginBottom: 6, fontSize: 12, justifyContent: 'flex-start' }} onClick={() => addStep(s.type)}>
-                {s.icon} {s.label}
-              </button>
-            ))}
+               <button key={s.type} className="btn-outline" style={{ width: '100%', marginBottom: 6, fontSize: 12, justifyContent: 'flex-start' }} onClick={() => addStep(s.type)}>
+                 <s.icon size={14} className="xps-icon" style={{ marginRight: 6 }} /> {s.label}
+               </button>
+             ))}
           </div>
         </div>
 
@@ -97,9 +98,9 @@ export default function WorkflowBuilder() {
             {steps.map((step, i) => (
               <React.Fragment key={step.id}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: step.color, border: `1.5px solid ${step.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                    {step.icon}
-                  </div>
+                   <div style={{ width: 40, height: 40, borderRadius: 10, background: step.color, border: `1.5px solid ${step.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                     <step.icon size={18} className="xps-icon" />
+                   </div>
                   <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 }}>{step.type}</div>

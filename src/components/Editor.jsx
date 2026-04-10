@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { BarChart3, Palette } from 'lucide-react';
 
 const GOLD = '#d4a843';
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -194,7 +195,7 @@ Context:
 
           {tab === 'Chart' && (
             <div style={{ padding: 20, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'rgba(255,255,255,0.3)' }}>
-              <div style={{ fontSize: 32 }}>📊</div>
+              <div style={{ fontSize: 32 }}><BarChart3 size={32} className="xps-icon" /></div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>Chart Builder</div>
               <div style={{ fontSize: 12 }}>Compose custom charts from your pipeline data</div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -207,7 +208,7 @@ Context:
 
           {tab === 'UI Builder' && (
             <div style={{ padding: 20, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'rgba(255,255,255,0.3)' }}>
-              <div style={{ fontSize: 32 }}>🎨</div>
+              <div style={{ fontSize: 32 }}><Palette size={32} className="xps-icon" /></div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>UI Generator</div>
               <div style={{ fontSize: 12 }}>Describe a UI component to generate it with AI</div>
               <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 480 }}>

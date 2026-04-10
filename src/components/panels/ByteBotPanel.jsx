@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -147,7 +148,7 @@ export default function ByteBotPanel() {
           color: 'rgba(255,255,255,0.5)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <span style={{ color: '#fbbf24', fontSize: 14 }}>⚠</span>
+          <AlertTriangle size={14} className="xps-icon" />
           Running in <strong style={{ color: '#fbbf24' }}>synthetic mode</strong> — configure OPENAI_API_KEY and deploy <code style={{ fontSize: 11 }}>/api/agents/run</code> for live execution
         </div>
       </div>
@@ -317,7 +318,7 @@ function TaskCard({ task, onCancel }) {
               fontSize: 10, cursor: 'pointer', flexShrink: 0,
             }}
           >
-            ✕
+            <X size={12} className="xps-icon" />
           </button>
         )}
         {task.result && (

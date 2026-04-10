@@ -1,16 +1,26 @@
 import React, { useState } from 'react';
+import {
+  Square,
+  Code2,
+  Globe,
+  Search,
+  Image,
+  Table,
+  FileText,
+} from 'lucide-react';
 
 const gold = '#d4a843';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // Panel types that can appear in the workspace canvas
 const PANEL_TYPES = [
-  { id: 'blank',   label: 'Blank Canvas',   icon: '□', desc: 'Empty editor surface' },
-  { id: 'code',    label: 'Code Output',    icon: '</>', desc: 'Generated code / scripts' },
-  { id: 'scrape',  label: 'Scrape Result',  icon: '[W]', desc: 'Web scraping output' },
-  { id: 'search',  label: 'Search Results', icon: '[S]', desc: 'Research / web search' },
-  { id: 'image',   label: 'Image Output',   icon: '🖼️', desc: 'AI image generation result' },
-  { id: 'data',    label: 'Structured Data',icon: '📊', desc: 'JSON / table data output' },
-  { id: 'report',  label: 'Report',         icon: '📄', desc: 'AI-generated report' },
+  { id: 'blank',   label: 'Blank Canvas',   icon: Square, desc: 'Empty editor surface' },
+  { id: 'code',    label: 'Code Output',    icon: Code2, desc: 'Generated code / scripts' },
+  { id: 'scrape',  label: 'Scrape Result',  icon: Globe, desc: 'Web scraping output' },
+  { id: 'search',  label: 'Search Results', icon: Search, desc: 'Research / web search' },
+  { id: 'image',   label: 'Image Output',   icon: Image, desc: 'AI image generation result' },
+  { id: 'data',    label: 'Structured Data',icon: Table, desc: 'JSON / table data output' },
+  { id: 'report',  label: 'Report',         icon: FileText, desc: 'AI-generated report' },
 ];
 
 export default function WorkspacePanel({ workspaceContent }) {
@@ -33,10 +43,16 @@ export default function WorkspacePanel({ workspaceContent }) {
       }}>
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, color: 'rgba(255,255,255,0.3)', marginRight: 4, whiteSpace: 'nowrap' }}>VIEW AS</span>
         {PANEL_TYPES.map(pt => (
+          (() => {
+            const Icon = pt.icon;
+            return (
           <button
             key={pt.id}
             onClick={() => setActiveType(pt.id)}
+            className="xps-electric-hover"
+            data-active={activeType === pt.id ? 'true' : undefined}
             style={{
+              position: 'relative',
               padding: '4px 12px',
               background: activeType === pt.id ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.04)',
               border: `1px solid ${activeType === pt.id ? 'rgba(212,168,67,0.35)' : 'rgba(255,255,255,0.08)'}`,
@@ -49,9 +65,11 @@ export default function WorkspacePanel({ workspaceContent }) {
               display: 'flex', alignItems: 'center', gap: 5,
             }}
           >
-            <span style={{ fontSize: 11 }}>{pt.icon}</span>
+            <Icon size={13} className="xps-icon" />
             {pt.label}
           </button>
+            );
+          })()
         ))}
       </div>
 
@@ -78,14 +96,18 @@ function BlankCanvas() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 14,
     }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: 16,
-        background: 'rgba(212,168,67,0.08)',
-        border: '1px solid rgba(212,168,67,0.2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28,
-      }}>
-        XPS
+      <div
+        className="xps-logo"
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 16,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 6 }}>XPS Command Workspace</div>
@@ -188,14 +210,17 @@ function AIOutputRenderer({ content, agent }) {
 function EmptyViewPlaceholder({ type }) {
   if (!type) return null;
   return (
-    <div style={{
-      height: '100%', minHeight: 300,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 10,
-      border: '1px dashed rgba(255,255,255,0.08)',
-      borderRadius: 12,
-    }}>
-      <span style={{ fontSize: 32, opacity: 0.3 }}>{type.icon}</span>
+      <div style={{
+        height: '100%', minHeight: 300,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 10,
+        border: '1px dashed rgba(255,255,255,0.08)',
+        borderRadius: 12,
+      }}>
+      {(() => {
+        const Icon = type.icon || Square;
+        return <Icon size={32} className="xps-icon" style={{ opacity: 0.5 }} />;
+      })()}
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.3)' }}>{type.label}</div>
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>{type.desc}</div>

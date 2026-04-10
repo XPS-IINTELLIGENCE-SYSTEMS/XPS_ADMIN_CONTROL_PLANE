@@ -39,10 +39,10 @@ function LevelBadge({ level }) {
 
 function RunStatus({ status }) {
   const map = {
-    success: { color: '#4ade80', label: '✓ Success' },
-    partial: { color: '#fbbf24', label: '⚠ Partial' },
-    failed: { color: '#f87171', label: '✗ Failed' },
-    running: { color: '#60a5fa', label: '⚡ Running' },
+    success: { color: '#4ade80', label: 'Success' },
+    partial: { color: '#fbbf24', label: 'Partial' },
+    failed: { color: '#f87171', label: 'Failed' },
+    running: { color: '#60a5fa', label: 'Running' },
   };
   const s = map[status] || map.running;
   return <span style={{ fontSize: 12, color: s.color, fontWeight: 600 }}>{s.label}</span>;
