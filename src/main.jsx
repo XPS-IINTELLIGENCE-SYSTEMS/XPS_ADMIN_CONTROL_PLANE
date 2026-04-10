@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AlertTriangle } from 'lucide-react';
 import App from './App.jsx';
 import './styles.css';
 
@@ -23,7 +24,7 @@ class ErrorBoundary extends React.Component {
           fontFamily: "'Inter', sans-serif", padding: 40,
         }}>
           <div style={{ maxWidth: 520, width: '100%' }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
+            <div style={{ marginBottom: 12 }}><AlertTriangle size={28} color="#ef4444" /></div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: '#ef4444' }}>
               XPS Platform Error
             </h2>

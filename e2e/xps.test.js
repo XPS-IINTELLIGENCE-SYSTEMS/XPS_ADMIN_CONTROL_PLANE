@@ -321,6 +321,32 @@ test.describe('XPS Control Plane', () => {
     // Check chat rail
     const chatText = await page.locator('[data-testid="chat-rail"]').innerText();
     expect(emojiPattern.test(chatText)).toBe(false);
+
+    // Check workspace/editor panel (no emoji in workspace chrome or empty state)
+    await page.locator('aside nav button', { hasText: 'Editor' }).click();
+    await page.waitForTimeout(200);
+    const workspaceText = await page.locator('main').innerText();
+    expect(emojiPattern.test(workspaceText)).toBe(false);
+  });
+
+  test('No emoji in active workspace object renderer', async ({ page }) => {
+    // Navigate to editor and create a code object to trigger the workspace renderer
+    await page.locator('aside nav button', { hasText: 'Editor' }).click();
+    await page.waitForTimeout(200);
+
+    const emptyState = page.locator('[data-testid="workspace-empty-state"]');
+    if (await emptyState.isVisible()) {
+      // Create an object via quick-create
+      await page.locator('[data-testid^="quick-create-"]').first().click();
+      await page.waitForTimeout(300);
+    }
+
+    // Check center workspace active state has no emoji
+    const emojiPattern = /[\u{1F300}-\u{1F9FF}]/u;
+    const mainText = await page.locator('main').innerText();
+    expect(emojiPattern.test(mainText)).toBe(false);
+
+    await screenshot(page, 'center-workspace-renderer');
   });
 
   test('Electric gold accent is present in the DOM', async ({ page }) => {
