@@ -164,6 +164,12 @@ function ObjectBody({ obj }) {
     case 'connector_action': return <ConnectorActionBody obj={obj} />;
     case 'agent_run':        return <AgentRunBody obj={obj} />;
     case 'runtime_state':    return <RuntimeStateBody obj={obj} />;
+    // Phase 4 — browser + parallel
+    case 'browser_session':    return <BrowserSessionBody obj={obj} />;
+    case 'browser_result':     return <BrowserResultBody obj={obj} />;
+    case 'page_snapshot':      return <PageSnapshotBody obj={obj} />;
+    case 'evidence_bundle':    return <EvidenceBundleBody obj={obj} />;
+    case 'parallel_run_group': return <ParallelRunGroupBody obj={obj} />;
     case 'report':
     default:                 return <RichBody obj={obj} accentColor={GOLD} />;
   }
@@ -1178,6 +1184,307 @@ function modeColor(mode) {
   if (mode === 'blocked')   return RED;
   if (mode === 'local')     return '#60a5fa';
   return '#fbbf24'; // synthetic
+}
+
+// ── Phase 4: Browser / Parallel renderers ─────────────────────────────────────
+
+function BrowserSessionBody({ obj }) {
+  const meta   = obj.meta || {};
+  const mode   = meta.mode || 'blocked';
+  const status = obj.status || 'queued';
+  const isBlocked = mode === 'blocked';
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{
+        background: '#0e0e18',
+        border: `1px solid ${isBlocked ? 'rgba(239,68,68,0.25)' : 'rgba(212,168,67,0.15)'}`,
+        borderRadius: 12,
+        padding: '18px 22px',
+        maxWidth: 700,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>🌐</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Browser Session</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase', letterSpacing: 0.8 }}>{mode}</span>
+        </div>
+        {meta.url && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, wordBreak: 'break-all' }}>
+            🔗 {meta.url}
+          </div>
+        )}
+        {meta.action && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+            Action: <span style={{ color: GOLD }}>{meta.action}</span>
+          </div>
+        )}
+        {isBlocked && (
+          <div style={{
+            background: 'rgba(239,68,68,0.07)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            marginBottom: 14,
+          }}>
+            <div style={{ fontSize: 12, color: '#fca5a5', fontWeight: 700, marginBottom: 6 }}>⛔ Browser Automation Blocked</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+              Playwright cannot run inside Vercel serverless functions.<br />
+              To enable: set <code style={{ color: GOLD }}>BROWSER_WORKER_URL</code> to a local Playwright worker.
+            </div>
+            {meta.instructions && (
+              <div style={{ marginTop: 10 }}>
+                {meta.instructions.map((inst, i) => (
+                  <div key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace', marginTop: 4 }}>$ {inst}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {obj.logs?.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 }}>Logs</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 6, padding: '8px 10px', maxHeight: 120, overflowY: 'auto' }}>
+              {obj.logs.map((l, i) => (
+                <div key={i} style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>{l.line}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BrowserResultBody({ obj }) {
+  const meta = obj.meta || {};
+  const mode = meta.mode || 'blocked';
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ maxWidth: 800 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>📸</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Browser Result</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase' }}>{mode}</span>
+        </div>
+        {meta.url && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all' }}>🔗 {meta.url}</div>
+        )}
+
+        {/* Screenshot slot */}
+        <div style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <span style={{ fontSize: 24 }}>🖼️</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Screenshot</div>
+            {meta.screenshot_url
+              ? <img src={meta.screenshot_url} alt="screenshot" style={{ maxWidth: '100%', marginTop: 8, borderRadius: 6 }} />
+              : <div style={{ fontSize: 10, color: mode === 'blocked' ? '#fca5a5' : 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                  {mode === 'blocked' ? '⛔ Screenshot blocked — no browser worker' : 'No screenshot captured'}
+                </div>
+            }
+          </div>
+        </div>
+
+        {/* Extracted text */}
+        {(meta.extracted_text || obj.content) && (
+          <div style={{
+            background: '#0e0e18',
+            border: '1px solid rgba(212,168,67,0.12)',
+            borderRadius: 10,
+            padding: '14px 16px',
+            marginBottom: 14,
+          }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>Extracted Content</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+              {meta.extracted_text || obj.content}
+            </div>
+          </div>
+        )}
+
+        {/* Evidence items */}
+        {meta.evidence?.length > 0 && (
+          <div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>Evidence ({meta.evidence.length})</div>
+            {meta.evidence.map((ev, i) => (
+              <div key={i} style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                marginBottom: 6,
+              }}>
+                {ev.title && <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{ev.title}</div>}
+                {ev.url && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{ev.url}</div>}
+                {ev.summary && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{ev.summary}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PageSnapshotBody({ obj }) {
+  const meta = obj.meta || {};
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ maxWidth: 800 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>🖼️</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Page Snapshot</span>
+        </div>
+        {meta.url && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all' }}>🔗 {meta.url}</div>
+        )}
+        {meta.raw_html_length && (
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 10 }}>
+            Raw HTML: {meta.raw_html_length.toLocaleString()} chars
+          </div>
+        )}
+        <div style={{
+          background: '#0e0e18',
+          border: '1px solid rgba(212,168,67,0.12)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: 'rgba(255,255,255,0.65)',
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.6,
+          maxHeight: 500,
+          overflowY: 'auto',
+        }}>
+          {meta.snapshot_text || obj.content || '(empty snapshot)'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EvidenceBundleBody({ obj }) {
+  const meta  = obj.meta || {};
+  const items = meta.items || [];
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ maxWidth: 750 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>🗂️</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Evidence Bundle</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+        </div>
+        {meta.source_url && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>Source: {meta.source_url}</div>
+        )}
+        {items.length === 0 && (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>No evidence items collected.</div>
+        )}
+        {items.map((item, i) => (
+          <div key={i} style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(212,168,67,0.1)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            marginBottom: 10,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 14, marginTop: 2 }}>
+                {item.source_type === 'image' ? '🖼️' : item.source_type === 'pdf' ? '📄' : '🔗'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {item.title && (
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)', marginBottom: 3 }}>{item.title}</div>
+                )}
+                {item.url && (
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 5, wordBreak: 'break-all' }}>{item.url}</div>
+                )}
+                {item.summary && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>{item.summary}</div>
+                )}
+                {item.source_type && (
+                  <div style={{ fontSize: 10, color: GOLD, marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.6 }}>{item.source_type}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ParallelRunGroupBody({ obj }) {
+  const meta = obj.meta || {};
+  const jobs = meta.jobs || [];
+  const statusColor = (s) => {
+    if (s === 'complete') return GREEN;
+    if (s === 'error')    return RED;
+    if (s === 'running')  return GOLD;
+    if (s === 'blocked')  return '#f97316';
+    if (s === 'cancelled')return '#94a3b8';
+    return 'rgba(255,255,255,0.3)';
+  };
+  const done  = jobs.filter(j => ['complete','error','cancelled','blocked'].includes(j.status)).length;
+  const total = jobs.length;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : obj.progress || 0;
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ maxWidth: 750 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>⚡</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Parallel Run Group</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{done}/{total} done</span>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 4, marginBottom: 16, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: GOLD, borderRadius: 4, transition: 'width 0.4s ease' }} />
+        </div>
+
+        {jobs.length === 0 && (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>No jobs in group.</div>
+        )}
+        {jobs.map((job, i) => (
+          <div key={i} style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: `1px solid ${statusColor(job.status)}22`,
+            borderRadius: 10,
+            padding: '10px 14px',
+            marginBottom: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor(job.status), flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>{job.title || job.jobId}</div>
+              {job.type && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{job.type}</div>}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: statusColor(job.status), textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              {job.status || 'queued'}
+            </div>
+          </div>
+        ))}
+
+        {meta.summary && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(212,168,67,0.06)', border: `1px solid ${GOLD}22`, borderRadius: 8, fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+            {meta.summary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Running indicators ────────────────────────────────────────────────────────

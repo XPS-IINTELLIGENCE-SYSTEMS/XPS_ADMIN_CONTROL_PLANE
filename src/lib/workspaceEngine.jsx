@@ -31,6 +31,12 @@ export const OBJ_TYPE = {
   CONNECTOR_ACTION: 'connector_action',
   AGENT_RUN:        'agent_run',
   RUNTIME_STATE:    'runtime_state',
+  // Phase 4 — browser automation + parallel execution
+  BROWSER_SESSION:   'browser_session',
+  BROWSER_RESULT:    'browser_result',
+  PAGE_SNAPSHOT:     'page_snapshot',
+  EVIDENCE_BUNDLE:   'evidence_bundle',
+  PARALLEL_RUN_GROUP:'parallel_run_group',
 };
 
 export const OBJ_TYPE_META = {
@@ -52,6 +58,12 @@ export const OBJ_TYPE_META = {
   connector_action: { label: 'Connector',        icon: '🔌' },
   agent_run:        { label: 'Agent Run',        icon: '🤖' },
   runtime_state:    { label: 'Runtime State',    icon: '⚙️' },
+  // Phase 4
+  browser_session:    { label: 'Browser Session',    icon: '🌐' },
+  browser_result:     { label: 'Browser Result',     icon: '📸' },
+  page_snapshot:      { label: 'Page Snapshot',      icon: '🖼️' },
+  evidence_bundle:    { label: 'Evidence Bundle',    icon: '🗂️' },
+  parallel_run_group: { label: 'Parallel Group',     icon: '⚡' },
 };
 
 // ── Object statuses ───────────────────────────────────────────────────────────

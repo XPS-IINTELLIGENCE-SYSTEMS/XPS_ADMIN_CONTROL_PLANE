@@ -167,3 +167,72 @@ export async function fetchRecentRuns(limit = 20) {
 }
 
 export { enabled as supabaseEnabled };
+
+// ── Browser jobs ──────────────────────────────────────────────────────────────
+
+export async function persistBrowserJob({ jobId, url, action, status, mode, result = null, evidence = null }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('browser_jobs')
+      .upsert({
+        id:           jobId,
+        url,
+        action,
+        status,
+        mode,
+        result:       result ?? null,
+        evidence:     evidence ?? null,
+        completed_at: ['complete','error','blocked'].includes(status) ? new Date().toISOString() : null,
+      }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (err) console.warn('[persist] browser_job upsert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] browser_job error:', e.message);
+    return null;
+  }
+}
+
+// ── Parallel run groups ───────────────────────────────────────────────────────
+
+export async function persistParallelGroup({ groupId, title, jobIds = [], status }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('parallel_run_groups')
+      .upsert({
+        id:      groupId,
+        title,
+        job_ids: jobIds,
+        status,
+        completed_at: ['complete','error'].includes(status) ? new Date().toISOString() : null,
+      }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (err) console.warn('[persist] parallel_group upsert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] parallel_group error:', e.message);
+    return null;
+  }
+}
+
+// ── Page snapshots ────────────────────────────────────────────────────────────
+
+export async function persistSnapshot({ jobId, url, snapshotText, extractedData = null }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('page_snapshots')
+      .insert({ job_id: jobId, url, snapshot_text: snapshotText, extracted_data: extractedData })
+      .select()
+      .single();
+    if (err) console.warn('[persist] snapshot insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] snapshot error:', e.message);
+    return null;
+  }
+}
