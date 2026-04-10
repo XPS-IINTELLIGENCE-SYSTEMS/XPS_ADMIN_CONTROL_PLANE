@@ -30,10 +30,10 @@ jobs:
       - name: 🏗️ Build frontend (Vercel also builds, but validate locally first)
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_BASE_PATH: /
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          API_URL: ${{ secrets.VITE_API_URL }}
+          BASE_PATH: /
 
       - name: ✅ Validate build
         run: |

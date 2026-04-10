@@ -1,6 +1,5 @@
 import React from 'react';
 import DashboardPanel    from './panels/DashboardPanel.jsx';
-import WorkspacePanel    from './panels/WorkspacePanel.jsx';
 import ByteBotPanel      from './panels/ByteBotPanel.jsx';
 import ResearchPanel     from './panels/ResearchPanel.jsx';
 import ScraperPanel      from './panels/ScraperPanel.jsx';
@@ -10,6 +9,9 @@ import ConnectorsPanel   from './panels/ConnectorsPanel.jsx';
 import AdminPanel        from './panels/AdminPanel.jsx';
 import StatusPanel       from './panels/StatusPanel.jsx';
 import SettingsPanel     from './panels/SettingsPanel.jsx';
+
+// Active workspace engine renderer
+import ActiveWorkspace   from './workspace/ActiveWorkspace.jsx';
 
 // Page-level components mounted as center panels
 import CRM               from '../pages/CRM.jsx';
@@ -38,7 +40,7 @@ function PagePanel({ children }) {
   );
 }
 
-export default function CenterWorkspace({ activePanel, workspaceContent }) {
+export default function CenterWorkspace({ activePanel }) {
   const panel = (() => {
     switch (activePanel) {
       case 'dashboard':       return <DashboardPanel />;
@@ -52,7 +54,7 @@ export default function CenterWorkspace({ activePanel, workspaceContent }) {
       case 'knowledge':       return <PagePanel><KnowledgeBase /></PagePanel>;
       case 'competition':     return <PagePanel><Competition /></PagePanel>;
       case 'connectors':      return <ConnectorsPanel />;
-      case 'workspace':       return <WorkspacePanel workspaceContent={workspaceContent} />;
+      case 'workspace':       return <ActiveWorkspace />;
       case 'scraper':         return <ScraperPanel />;
       case 'workflows':       return <PagePanel><WorkflowBuilder /></PagePanel>;
       case 'logs':            return <PagePanel><JobLogs /></PagePanel>;
