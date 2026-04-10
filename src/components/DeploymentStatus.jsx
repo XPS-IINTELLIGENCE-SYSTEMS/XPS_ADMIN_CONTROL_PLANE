@@ -17,7 +17,12 @@ export default function DeploymentStatus() {
       // 2. API health
       try {
         const r = await fetch(`${API_URL}/api/health`)
-        checks.api_health = r.ok
+        if (r.ok) {
+          const data = await r.json()
+          checks.api_health = data.status === 'ok' && data.apiRoutes === true
+        } else {
+          checks.api_health = false
+        }
       } catch {
         checks.api_health = false
       }

@@ -1,6 +1,6 @@
 // Vercel serverless function: POST /api/chat
 // Returns a structured workspace render contract instead of freeform text.
-import { callLLM, llmMode, hasLLM } from './_llm.js';
+import { callLLM, resolveProviderRequest } from './_llm.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -17,23 +17,27 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'messages array is required' })
   }
 
-  const mode = llmMode();
+  const routing = resolveProviderRequest({ provider, model });
+  const mode = routing.mode;
   const attachmentNote = attachments.length
     ? `Attachment context:\n${attachments.map(a => `- ${a.name} (${a.type || 'file'}, ${Math.round((a.size || 0) / 1024)}kb)`).join('\n')}`
     : '';
   const promptMessages = attachmentNote ? [...messages, { role: 'system', content: attachmentNote }] : messages;
 
-  if (provider === 'synthetic') {
+  if (routing.explicitSynthetic) {
     return res.status(200).json({
       event_type: 'run_completed',
       run_id:     runId || null,
       agent,
-      mode:       'synthetic',
+      provider:   routing.provider,
+      model:      routing.model,
+      mode:       routing.mode,
       reply: `[Synthetic] ${agent} received your message. Provider explicitly set to synthetic.`,
       workspace_object: {
         type:    'report',
         title:   'Synthetic Response',
         content: `[Synthetic] ${agent} — provider forced to synthetic mode.`,
+        meta:    { provider: routing.provider, model: routing.model, mode: routing.mode, reason: routing.reason },
       },
       steps: [
         { step: 1, label: 'Message received', status: 'complete' },
@@ -43,46 +47,52 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!hasLLM()) {
-    // Structured synthetic response
+  if (!routing.ok) {
     return res.status(200).json({
-      event_type: 'run_completed',
+      event_type: 'run_blocked',
       run_id:     runId || null,
       agent,
-      mode:       'synthetic',
-      reply: `[Synthetic] ${agent} received your message. No LLM configured — set OPENAI_API_KEY to enable live responses.`,
+      provider:   routing.provider,
+      model:      routing.model,
+      mode:       'blocked',
+      blocked_reason: routing.reason,
+      reply: `Blocked: ${routing.reason}`,
       workspace_object: {
-        type:    'report',
-        title:   'Synthetic Response',
-        content: `[Synthetic] ${agent} — no live backend configured.\n\nSet OPENAI_API_KEY in environment to enable live AI responses.`,
+        type:    'runtime_state',
+        title:   'Provider Blocked',
+        content: `Chat request blocked.\n\nReason: ${routing.reason}`,
+        meta:    { provider: routing.provider, model: routing.model, mode: 'blocked', reason: routing.reason },
       },
       steps: [
         { step: 1, label: 'Message received',   status: 'complete' },
-        { step: 2, label: 'LLM unavailable',    status: 'skipped'  },
-        { step: 3, label: 'Synthetic fallback', status: 'complete' },
+        { step: 2, label: 'Provider routing resolved', status: 'complete' },
+        { step: 3, label: 'Blocked — provider unavailable', status: 'blocked' },
       ],
       timestamp: new Date().toISOString(),
     });
   }
 
   try {
-    const reply = await callLLM(promptMessages, { model, provider })
+    const reply = await callLLM(promptMessages, { model: routing.model, provider: routing.provider })
     const wsType = inferWsType(reply, agent);
 
     return res.status(200).json({
       event_type: 'run_completed',
       run_id:     runId || null,
       agent,
-      mode,
+      provider:   routing.provider,
+      model:      routing.model,
+      mode:       routing.mode,
       reply,
       workspace_object: {
         type:    wsType,
         title:   deriveTitle(reply, agent),
         content: reply,
+        meta:    { provider: routing.provider, model: routing.model, mode: routing.mode },
       },
       steps: [
         { step: 1, label: 'Message received', status: 'complete' },
-        { step: 2, label: 'LLM executed',     status: 'complete' },
+        { step: 2, label: `Provider routed: ${routing.provider}`, status: 'complete' },
         { step: 3, label: 'Result ready',     status: 'complete' },
       ],
       timestamp: new Date().toISOString(),
@@ -93,7 +103,9 @@ export default async function handler(req, res) {
       event_type: 'run_failed',
       run_id:     runId || null,
       agent,
-      mode,
+      provider:   routing.provider,
+      model:      routing.model,
+      mode:       routing.mode,
       error:      err.message || 'LLM request failed',
       timestamp:  new Date().toISOString(),
     });

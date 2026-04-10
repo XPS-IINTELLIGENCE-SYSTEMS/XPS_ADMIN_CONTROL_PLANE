@@ -64,7 +64,7 @@ function getRunList() {
  * @returns {string} runId
  */
 export async function startRun(opts, workspaceCtx, onNavigate) {
-  const { task, agent = 'bytebot', context = {} } = opts;
+  const { task, agent = 'bytebot', context = {}, provider = 'auto', model = null } = opts;
   const runId  = genId();
   const now    = Date.now();
 
@@ -78,7 +78,9 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
     logs:      [],
     result:    null,
     error:     null,
-    mode:      'synthetic',
+    mode:      'blocked',
+    provider,
+    model,
     createdAt: now,
     updatedAt: now,
     cancelled: false,
@@ -104,7 +106,7 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
   onNavigate?.('workspace');
 
   // Persist run start
-  persistRun({ runId, agent, task, status: 'queued', mode: 'synthetic', steps: [] }).catch(() => {});
+  persistRun({ runId, agent, task, status: 'queued', mode: 'blocked', steps: [] }).catch(() => {});
 
   // Advance to running
   _patchRun(runId, { status: 'running' });
@@ -112,7 +114,7 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
   _emitLog(runId, workspaceCtx, `[${agent}] Starting run: ${task}`);
 
   // Execute the run in background
-  _executeRun(runId, task, agent, context, workspaceCtx).catch(err => {
+  _executeRun(runId, task, agent, context, provider, model, workspaceCtx).catch(err => {
     _patchRun(runId, { status: 'error', error: err.message });
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
     _emitLog(runId, workspaceCtx, `Error: ${err.message}`);
@@ -139,7 +141,7 @@ export { getRunList };
 
 // ── Internal execution ────────────────────────────────────────────────────────
 
-async function _executeRun(runId, task, agent, context, workspaceCtx) {
+async function _executeRun(runId, task, agent, context, provider, model, workspaceCtx) {
   const run = _runs.get(runId);
   if (!run || run.cancelled) return;
 
@@ -154,7 +156,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       const res = await fetch(`${API_URL}/api/agents/run`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ task, agent, context, runId }),
+        body:    JSON.stringify({ task, agent, context, runId, provider, model }),
       });
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       return res.json();
@@ -165,6 +167,8 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
     const plan        = Array.isArray(data.plan) ? data.plan : [];
     const result      = data.result || data.error || 'No result';
     const mode        = data.mode || 'synthetic';
+    const providerUsed = data.provider || provider || 'auto';
+    const modelUsed    = data.model || model || null;
     const summary     = data.summary || task.slice(0, 60);
     const artifacts   = Array.isArray(data.artifacts) ? data.artifacts : [];
     const steps       = normalizeSteps(data.steps || plan, agent);
@@ -173,7 +177,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
     const blockedCaps = Array.isArray(data.blocked_capabilities) ? data.blocked_capabilities : [];
 
     _emitLog(runId, workspaceCtx, `[${agent}] Plan received — ${steps.length || 0} steps`);
-    _patchRun(runId, { steps, mode });
+    _patchRun(runId, { steps, mode, provider: providerUsed, model: modelUsed });
     workspaceCtx.patchObject(wsObjId, { steps, progress: 12 });
 
     if (plan.length) {
@@ -262,18 +266,19 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       }
     }
 
-    _patchRun(runId, { status: 'complete', progress: 100, result, mode, steps });
-    workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
+    const finalStatus = data.event_type === 'run_blocked' ? 'error' : 'complete';
+    _patchRun(runId, { status: finalStatus, progress: 100, result, mode, steps, provider: providerUsed, model: modelUsed });
+    workspaceCtx.setStatus(wsObjId, finalStatus === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       steps,
       content: result,
-      meta: { agent, mode, summary, artifacts, runId },
+      meta: { agent, mode, provider: providerUsed, model: modelUsed, summary, artifacts, runId },
     });
-    _emitLog(runId, workspaceCtx, `Run complete — ${summary}`);
+    _emitLog(runId, workspaceCtx, `${finalStatus === 'error' ? 'Run blocked' : 'Run complete'} — ${summary}`);
 
-    persistRun({ runId, agent, task, status: 'complete', mode, steps, result, summary, artifacts }).catch(() => {});
-    persistLog(runId, 'info', `Run completed: ${summary}`).catch(() => {});
+    persistRun({ runId, agent, task, status: finalStatus === 'error' ? 'error' : 'complete', mode, steps, result, summary, artifacts }).catch(() => {});
+    persistLog(runId, finalStatus === 'error' ? 'warn' : 'info', `${finalStatus === 'error' ? 'Run blocked' : 'Run completed'}: ${summary}`).catch(() => {});
 
     const wsType = data.workspace_object?.type || inferWsType(result, agent);
     createWorkspaceObject(workspaceCtx, {
@@ -284,7 +289,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       status: RUN_STATUS.DONE,
       steps,
       progress: 100,
-      meta: { agent, mode, summary, runId, artifacts },
+      meta: { agent, mode, provider: providerUsed, model: modelUsed, summary, runId, artifacts },
     }, runId);
 
     for (const art of artifacts) {
@@ -317,29 +322,30 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
   } catch (err) {
     if (run.cancelled) return;
 
-    const syntheticResult = buildSyntheticResult(task, agent);
-    _patchRun(runId, { status: 'complete', progress: 100, result: syntheticResult, mode: 'synthetic' });
-    workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
+    const blockedResult = `Run failed before completion.\n\nTask: ${task}\n\nReason: ${err.message}`;
+    _patchRun(runId, { status: 'error', progress: 100, result: blockedResult, mode: 'blocked' });
+    workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
-      content:  syntheticResult,
-      meta:     { agent, mode: 'synthetic', error: err.message },
+      content:  blockedResult,
+      meta:     { agent, mode: 'blocked', error: err.message, provider, model },
     });
-    _emitLog(runId, workspaceCtx, `[synthetic] Backend unavailable — synthetic fallback`);
+    _emitLog(runId, workspaceCtx, `[blocked] Backend unavailable — ${err.message}`);
+    persistRun({ runId, agent, task, status: 'error', mode: 'blocked', steps: [], result: blockedResult, error: err.message, summary: err.message }).catch(() => {});
 
     createWorkspaceObject(workspaceCtx, {
-      type:     OBJ_TYPE.AGENT_RUN,
-      title:    `[Synthetic] ${agent}: ${task.slice(0, 45)}`,
-      content:  syntheticResult,
+      type:     OBJ_TYPE.RUNTIME_STATE,
+      title:    `Blocked ${agent}: ${task.slice(0, 45)}`,
+      content:  blockedResult,
       agent,
-      status:   RUN_STATUS.DONE,
+      status:   RUN_STATUS.ERROR,
       steps:    [
         { step: 1, label: 'Task received',     status: 'complete' },
-        { step: 2, label: 'Backend offline',   status: 'skipped'  },
-        { step: 3, label: 'Synthetic fallback',status: 'complete' },
+        { step: 2, label: 'Backend offline',   status: 'error'  },
+        { step: 3, label: 'Run blocked',status: 'error' },
       ],
       progress: 100,
-      meta:     { agent, mode: 'synthetic', error: err.message },
+      meta:     { agent, mode: 'blocked', error: err.message, provider, model },
     }, runId);
   }
 }
@@ -539,7 +545,14 @@ async function runSubAgent(stepAgent, stepTask, runId, context, workspaceCtx) {
   const res = await fetch(`${API_URL}/api/agents/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ task: stepTask, agent: stepAgent, context, runId: `${runId}-${stepAgent}` }),
+    body: JSON.stringify({
+      task: stepTask,
+      agent: stepAgent,
+      context,
+      runId: `${runId}-${stepAgent}`,
+      provider: context?.requestedProvider || 'auto',
+      model: context?.requestedModel || null,
+    }),
   });
   if (!res.ok) throw new Error(`Sub-agent ${stepAgent} returned ${res.status}`);
   const data = await res.json();
@@ -560,7 +573,7 @@ async function runSearch(query, runId, workspaceCtx) {
   const res = await fetch(`${API_URL}/api/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, runId }),
+    body: JSON.stringify({ query, runId, provider: _runs.get(runId)?.provider || 'auto', model: _runs.get(runId)?.model || null }),
   });
   if (!res.ok) throw new Error(`Search returned ${res.status}`);
   const data = await res.json();
@@ -574,7 +587,7 @@ async function runSearch(query, runId, workspaceCtx) {
       meta: data.workspace_object.meta,
     }, runId);
   }
-  persistSearchJob({ query, context: null, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+  persistSearchJob({ query, context: null, status: data.mode === 'blocked' ? 'blocked' : 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'blocked' }).catch(() => {});
   return data;
 }
 

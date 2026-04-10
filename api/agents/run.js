@@ -1,6 +1,6 @@
 // Vercel serverless function: POST /api/agents/run
 // Autonomous agent task execution — emits structured run contracts
-import { callLLM, llmMode, hasLLM, connectorState } from '../_llm.js';
+import { callLLM, resolveProviderRequest, connectorState, getProviderCatalog } from '../_llm.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,12 +12,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { task, agent = 'bytebot', context = {}, history = [], runId } = req.body || {};
+  const { task, agent = 'bytebot', context = {}, history = [], runId, provider = 'auto', model } = req.body || {};
   if (!task) {
     return res.status(400).json({ error: 'task is required' });
   }
 
-  const mode       = llmMode();
+  const routing    = resolveProviderRequest({ provider, model });
+  const mode       = routing.mode;
   const ts         = new Date().toISOString();
   const connectors = connectorState();
 
@@ -130,26 +131,28 @@ Break the task into independent parallel subtasks. Return JSON:
 }`,
   };
 
-  // Synthetic fallback
-  if (!hasLLM()) {
+  if (!routing.ok) {
     const steps = [
       { step: 1, label: 'Task received',           status: 'complete', parallel: false },
       { step: 2, label: 'Connector state checked', status: 'complete', parallel: false },
-      { step: 3, label: 'LLM provider offline',    status: 'skipped',  parallel: false },
-      { step: 4, label: 'Synthetic fallback',      status: 'complete', parallel: false },
+      { step: 3, label: 'Provider routing resolved', status: 'complete', parallel: false },
+      { step: 4, label: 'Blocked — provider unavailable', status: 'blocked', parallel: false },
     ];
     return res.status(200).json({
-      event_type: 'run_completed',
+      event_type: 'run_blocked',
       run_id:     runId || null,
       task,
       agent,
-      mode:       'synthetic',
+      provider:   routing.provider,
+      model:      routing.model,
+      mode:       'blocked',
+      blocked_reason: routing.reason,
       plan:       steps.map(s => ({ step: s.step, label: s.label, action: 'synth', parallel: false })),
-      result:     `[Synthetic] ${agent} received task: "${task}"\n\nConnector state: ${connectorSummary}\n\nNo LLM provider configured. Set GROQ_API_KEY or OPENAI_API_KEY to enable live agent execution.`,
-      summary:    `Synthetic execution of: ${task}`,
+      result:     `Run blocked.\n\nTask: ${task}\n\nReason: ${routing.reason}\n\nConnector state: ${connectorSummary}`,
+      summary:    `Blocked: ${routing.reason}`,
       steps,
       artifacts:  [],
-      connector_actions: [],
+      connector_actions: [{ connector: 'llm', action: 'blocked', status: 'blocked', reason: routing.reason }],
       staging: {
         pre_stage: [],
         stage: [],
@@ -159,14 +162,14 @@ Break the task into independent parallel subtasks. Return JSON:
         recovery_queue: [],
       },
       parallel_groups: {},
-      blocked_capabilities: deriveBlockedCapabilities(),
+      blocked_capabilities: deriveBlockedCapabilities(routing.reason),
       connector_state: connectors,
       workspace_object: {
-        type:    'agent_run',
-        title:   `[Synthetic] ${agent}: ${task.slice(0, 50)}`,
-        content: `Task: ${task}\n\nConnectors: ${connectorSummary}\n\nStatus: synthetic — no LLM configured.`,
+        type:    'runtime_state',
+        title:   `Blocked Run — ${agent}`,
+        content: `Task: ${task}\n\nBlocked reason: ${routing.reason}\n\nConnectors: ${connectorSummary}`,
         steps,
-        meta:    { agent, mode: 'synthetic', connectors },
+        meta:    { agent, mode: 'blocked', connectors, provider: routing.provider, model: routing.model, reason: routing.reason },
       },
       timestamp: ts,
     });
@@ -181,7 +184,7 @@ Break the task into independent parallel subtasks. Return JSON:
       { role: 'user', content: buildUserPrompt(task, context) },
     ];
 
-    const raw    = await callLLM(messages, { model: process.env.OPENAI_MODEL || 'gpt-4o', json: !!process.env.OPENAI_API_KEY });
+    const raw    = await callLLM(messages, { model: routing.model, provider: routing.provider, json: routing.provider === 'openai' });
     const parsed = safeParseJSON(raw);
 
     const plan = Array.isArray(parsed?.plan) ? parsed.plan : [];
@@ -216,6 +219,8 @@ Break the task into independent parallel subtasks. Return JSON:
       run_id:     runId || null,
       task,
       agent,
+      provider:   routing.provider,
+      model:      routing.model,
       mode,
       plan,
       result,
@@ -233,7 +238,7 @@ Break the task into independent parallel subtasks. Return JSON:
         title:   summary,
         content: result,
         steps,
-        meta:    { agent, mode, artifacts, connector_actions, parallel_groups, staging, connectors },
+        meta:    { agent, mode, provider: routing.provider, model: routing.model, artifacts, connector_actions, parallel_groups, staging, connectors },
       },
       timestamp: ts,
     });
@@ -244,6 +249,8 @@ Break the task into independent parallel subtasks. Return JSON:
       run_id:     runId || null,
       task,
       agent,
+      provider:   routing.provider,
+      model:      routing.model,
       mode,
       error:      err.message,
       timestamp:  ts,
@@ -280,10 +287,11 @@ function normalizeStaging(staging) {
   };
 }
 
-function deriveBlockedCapabilities() {
+function deriveBlockedCapabilities(llmReason = null) {
+  const providers = getProviderCatalog();
   const blocked = [];
-  if (!process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY && !process.env.GCP_GEMINI_KEY && !process.env.OLLAMA_BASE_URL) {
-    blocked.push({ capability: 'llm', reason: 'No LLM provider configured', required_env: ['OPENAI_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'OLLAMA_BASE_URL'] });
+  if (!providers.openai.configured && !providers.groq.configured && !providers.gemini.configured && !providers.ollama.configured) {
+    blocked.push({ capability: 'llm', reason: llmReason || 'No LLM provider configured', required_env: ['OPENAI_API_KEY', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'GCP_GEMINI_KEY', 'OLLAMA_BASE_URL'] });
   }
   if (!process.env.SUPABASE_URL) {
     blocked.push({ capability: 'supabase', reason: 'SUPABASE_URL not set', required_env: ['SUPABASE_URL', 'SUPABASE_ANON_KEY'] });

@@ -55,6 +55,11 @@ function deriveStatus(configured) {
   return configured ? STATUS.LIVE : STATUS.BLOCKED;
 }
 
+function statusFromMode(mode, fallbackConfigured = false) {
+  if (mode === STATUS.LIVE || mode === STATUS.LOCAL || mode === STATUS.BLOCKED || mode === STATUS.SYNTHETIC) return mode;
+  return fallbackConfigured ? STATUS.LIVE : STATUS.BLOCKED;
+}
+
 // Resolve status from live API data if available, else fall back to build-time
 function resolveStatus(liveConfigured, buildConfigured) {
   if (liveConfigured !== undefined) return liveConfigured ? STATUS.LIVE : STATUS.BLOCKED;
@@ -102,7 +107,7 @@ function CapRow({ icon: Icon, label, status, note }) {
   );
 }
 
-function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, defaultOpen = true }) {
+function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, defaultOpen = true, blockedReason = null }) {
   const [open, setOpen] = useState(defaultOpen);
   const meta = STATUS_META[status] || STATUS_META[STATUS.BLOCKED];
 
@@ -162,9 +167,13 @@ function CapPanel({ icon: HeaderIcon, title, subtitle, status, children, default
             }}>
               <Lock size={12} className="xps-icon" style={{ color: 'var(--icon-silver)', flexShrink: 0, marginTop: 1 }} />
               <span>
-                Not configured — set the required environment variable(s) in{' '}
-                <code style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code>
-                {' '}or Vercel project settings to enable this integration.
+                {blockedReason || (
+                  <>
+                    Not configured — set the required environment variable(s) in{' '}
+                    <code style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code>
+                    {' '}or Vercel project settings to enable this integration.
+                  </>
+                )}
               </span>
             </div>
           )}
@@ -532,8 +541,17 @@ function IntegrationsSection({
   const live = liveStatus || {};
   const activeLLM  = live.llm?.active || (openaiConfigured ? 'openai' : groqConfigured ? 'groq' : 'none');
   const llmModel   = live.llm?.model  || null;
-  const llmMode    = live.llm?.mode   || (activeLLM === 'none' ? 'synthetic' : 'live');
-  const browserStatus = live.browser?.mode === 'local' || browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED;
+  const llmMode    = live.llm?.mode   || (activeLLM === 'none' ? 'blocked' : 'live');
+  const openaiStatus = statusFromMode(live.llm?.providers?.openai?.mode, openaiConfigured);
+  const groqStatus = statusFromMode(live.llm?.providers?.groq?.mode, groqConfigured);
+  const geminiStatus = statusFromMode(live.llm?.providers?.gemini?.mode, geminiConfigured);
+  const supabaseStatus = statusFromMode(live.supabase?.mode, sbConfigured);
+  const githubStatus = statusFromMode(live.github?.mode, ghConfigured);
+  const vercelStatus = statusFromMode(live.vercel?.mode, vercelConfigured);
+  const googleStatus = statusFromMode(live.google?.mode, googleConfigured);
+  const hubspotStatus = statusFromMode(live.hubspot?.mode, hubspotConfigured);
+  const airtableStatus = statusFromMode(live.airtable?.mode, airtableConfigured);
+  const browserStatus = statusFromMode(live.browser?.mode, browserWorkerConfigured);
 
   return (
     <div>
@@ -568,11 +586,11 @@ function IntegrationsSection({
           </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
             {activeLLM === 'none'
-              ? 'Set OPENAI_API_KEY or GROQ_API_KEY to enable live AI inference.'
+              ? (live.llm?.reason || 'Set OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL to enable live AI inference.')
               : `Mode: ${llmMode} — Chat Completions API routed through backend. No consumer product passthrough.`}
           </div>
         </div>
-        <StatusPill status={activeLLM === 'none' ? STATUS.SYNTHETIC : llmMode === 'local' ? STATUS.LOCAL : STATUS.LIVE} />
+        <StatusPill status={activeLLM === 'none' ? STATUS.BLOCKED : llmMode === 'local' ? STATUS.LOCAL : STATUS.LIVE} />
       </div>
 
       <SectionHeading>BLOCKED — Unsupported Direct Passthrough</SectionHeading>
@@ -585,40 +603,43 @@ function IntegrationsSection({
         icon={Cpu}
         title="OpenAI / GPT"
         subtitle="Chat completions, embeddings, vision, function calling"
-        status={deriveStatus(openaiConfigured)}
+        status={openaiStatus}
+        blockedReason={live.llm?.providers?.openai?.reason}
         defaultOpen
       >
-        <CapRow icon={Brain}       label="Chat Completions (GPT-4o, GPT-4-turbo, GPT-3.5-turbo)" status={deriveStatus(openaiConfigured)} note="OPENAI_API_KEY" />
-        <CapRow icon={Package}     label="Embeddings (text-embedding-3-small/large)"               status={deriveStatus(openaiConfigured)} />
-        <CapRow icon={BookOpen}    label="Vision / Image Input (GPT-4o)"                           status={deriveStatus(openaiConfigured)} />
-        <CapRow icon={Code}        label="Function Calling / Tool Use"                             status={deriveStatus(openaiConfigured)} />
-        <CapRow icon={RefreshCw}   label="Streaming Responses"                                     status={deriveStatus(openaiConfigured)} />
-        <CapRow icon={Shield}      label="Moderation Endpoint"                                     status={deriveStatus(openaiConfigured)} />
+        <CapRow icon={Brain}       label="Chat Completions (GPT-4o, GPT-4-turbo, GPT-3.5-turbo)" status={openaiStatus} note={live.llm?.providers?.openai?.envKey || 'OPENAI_API_KEY'} />
+        <CapRow icon={Package}     label="Embeddings (text-embedding-3-small/large)"               status={openaiStatus} />
+        <CapRow icon={BookOpen}    label="Vision / Image Input (GPT-4o)"                           status={openaiStatus} />
+        <CapRow icon={Code}        label="Function Calling / Tool Use"                             status={openaiStatus} />
+        <CapRow icon={RefreshCw}   label="Streaming Responses"                                     status={openaiStatus} />
+        <CapRow icon={Shield}      label="Moderation Endpoint"                                     status={openaiStatus} />
       </CapPanel>
 
       <CapPanel
         icon={Zap}
         title="Groq"
         subtitle="Ultra-fast LLaMA/Mixtral inference"
-        status={deriveStatus(groqConfigured)}
+        status={groqStatus}
+        blockedReason={live.llm?.providers?.groq?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Brain}       label="LLaMA 3 70B / 8B"                  status={deriveStatus(groqConfigured)} note="GROQ_API_KEY" />
-        <CapRow icon={Zap}         label="Mixtral 8x7B"                      status={deriveStatus(groqConfigured)} />
-        <CapRow icon={RefreshCw}   label="Streaming"                         status={deriveStatus(groqConfigured)} />
+        <CapRow icon={Brain}       label="LLaMA 3 70B / 8B"                  status={groqStatus} note={live.llm?.providers?.groq?.envKey || 'GROQ_API_KEY'} />
+        <CapRow icon={Zap}         label="Mixtral 8x7B"                      status={groqStatus} />
+        <CapRow icon={RefreshCw}   label="Streaming"                         status={groqStatus} />
       </CapPanel>
 
       <CapPanel
         icon={Sparkles}
         title="Google Gemini"
         subtitle="Gemini Pro / Flash multimodal"
-        status={deriveStatus(geminiConfigured)}
+        status={geminiStatus}
+        blockedReason={live.llm?.providers?.gemini?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Brain}       label="Gemini 1.5 Pro / Flash"            status={deriveStatus(geminiConfigured)} note="GEMINI_API_KEY" />
-        <CapRow icon={BookOpen}    label="Multimodal (image + text)"         status={deriveStatus(geminiConfigured)} />
-        <CapRow icon={Code}        label="Function Calling"                  status={deriveStatus(geminiConfigured)} />
-        <CapRow icon={Package}     label="Embeddings (text-embedding-004)"   status={deriveStatus(geminiConfigured)} />
+        <CapRow icon={Brain}       label="Gemini 1.5 Pro / Flash"            status={geminiStatus} note={live.llm?.providers?.gemini?.envKey || 'GEMINI_API_KEY'} />
+        <CapRow icon={BookOpen}    label="Multimodal (image + text)"         status={geminiStatus} />
+        <CapRow icon={Code}        label="Function Calling"                  status={geminiStatus} />
+        <CapRow icon={Package}     label="Embeddings (text-embedding-004)"   status={geminiStatus} />
       </CapPanel>
 
       <SectionHeading>Data / Storage</SectionHeading>
@@ -627,13 +648,14 @@ function IntegrationsSection({
         icon={Database}
         title="Supabase"
         subtitle="PostgreSQL + Auth + Storage + Realtime"
-        status={deriveStatus(sbConfigured)}
+        status={supabaseStatus}
+        blockedReason={live.supabase?.reason}
         defaultOpen
       >
-        <CapRow icon={HardDrive}   label="PostgreSQL Database"               status={deriveStatus(sbConfigured)} note="SUPABASE_URL" />
-        <CapRow icon={Shield}      label="Auth (JWT / Row-Level Security)"   status={deriveStatus(sbConfigured)} />
-        <CapRow icon={Package}     label="File Storage (S3-compatible)"      status={deriveStatus(sbConfigured)} />
-        <CapRow icon={RefreshCw}   label="Realtime Subscriptions"            status={deriveStatus(sbConfigured)} />
+        <CapRow icon={HardDrive}   label="PostgreSQL Database"               status={supabaseStatus} note={live.supabase?.envKey || 'SUPABASE_URL'} />
+        <CapRow icon={Shield}      label="Auth (JWT / Row-Level Security)"   status={supabaseStatus} />
+        <CapRow icon={Package}     label="File Storage (S3-compatible)"      status={supabaseStatus} />
+        <CapRow icon={RefreshCw}   label="Realtime Subscriptions"            status={supabaseStatus} />
         <CapRow icon={Activity}    label="Edge Functions"                    status={STATUS.BLOCKED} note="Not wired" />
       </CapPanel>
 
@@ -643,28 +665,30 @@ function IntegrationsSection({
         icon={GitBranch}
         title="GitHub"
         subtitle="Repos, Actions, Issues, PRs, Deployments"
-        status={deriveStatus(ghConfigured)}
+        status={githubStatus}
+        blockedReason={live.github?.reason}
         defaultOpen
       >
-        <CapRow icon={GitBranch}      label="Repository Access (read/write)"    status={deriveStatus(ghConfigured)} note="GITHUB_TOKEN" />
-        <CapRow icon={GitPullRequest} label="Pull Requests + Code Review"       status={deriveStatus(ghConfigured)} />
-        <CapRow icon={Activity}       label="GitHub Actions (trigger / status)"  status={deriveStatus(ghConfigured)} />
-        <CapRow icon={Package}        label="Releases + Artifacts"               status={deriveStatus(ghConfigured)} />
-        <CapRow icon={Shield}         label="Code Scanning / Security Alerts"    status={deriveStatus(ghConfigured)} />
-        <CapRow icon={GitCommit}      label="Commits / Branch History"           status={deriveStatus(ghConfigured)} />
+        <CapRow icon={GitBranch}      label="Repository Access (read/write)"    status={githubStatus} note={live.github?.envKey || 'GITHUB_TOKEN'} />
+        <CapRow icon={GitPullRequest} label="Pull Requests + Code Review"       status={githubStatus} />
+        <CapRow icon={Activity}       label="GitHub Actions (trigger / status)"  status={githubStatus} />
+        <CapRow icon={Package}        label="Releases + Artifacts"               status={githubStatus} />
+        <CapRow icon={Shield}         label="Code Scanning / Security Alerts"    status={githubStatus} />
+        <CapRow icon={GitCommit}      label="Commits / Branch History"           status={githubStatus} />
       </CapPanel>
 
       <CapPanel
         icon={Cloud}
         title="Vercel"
         subtitle="Deployments, environment, domains"
-        status={deriveStatus(vercelConfigured)}
+        status={vercelStatus}
+        blockedReason={live.vercel?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Globe}      label="Deployments (trigger / status)"     status={deriveStatus(vercelConfigured)} note="VERCEL_TOKEN" />
-        <CapRow icon={Server}      label="Environment Variables (read/write)"  status={deriveStatus(vercelConfigured)} />
-        <CapRow icon={Activity}    label="Build Logs"                          status={deriveStatus(vercelConfigured)} />
-        <CapRow icon={Globe}       label="Domain Management"                   status={deriveStatus(vercelConfigured)} />
+        <CapRow icon={Globe}      label="Deployments (trigger / status)"     status={vercelStatus} note={live.vercel?.envKey || 'VERCEL_TOKEN'} />
+        <CapRow icon={Server}      label="Environment Variables (read/write)"  status={vercelStatus} />
+        <CapRow icon={Activity}    label="Build Logs"                          status={vercelStatus} />
+        <CapRow icon={Globe}       label="Domain Management"                   status={vercelStatus} />
       </CapPanel>
 
       <SectionHeading>Google Workspace</SectionHeading>
@@ -673,14 +697,15 @@ function IntegrationsSection({
         icon={Mail}
         title="Google Workspace"
         subtitle="Gmail, Drive, Calendar, Sheets"
-        status={deriveStatus(googleConfigured)}
+        status={googleStatus}
+        blockedReason={live.google?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Mail}        label="Gmail (read / send)"                status={deriveStatus(googleConfigured)} note="GCP_SA_KEY" />
+        <CapRow icon={Mail}        label="Gmail (read / send)"                status={googleStatus} note={live.google?.envKey || 'GCP_SA_KEY'} />
         <CapRow icon={HardDrive}   label="Google Drive (files / folders)"     status={STATUS.BLOCKED} note="OAuth scope required" />
-        <CapRow icon={BookOpen}    label="Google Sheets (read / write)"       status={deriveStatus(googleConfigured)} />
+        <CapRow icon={BookOpen}    label="Google Sheets (read / write)"       status={googleStatus} />
         <CapRow icon={Activity}    label="Google Calendar"                    status={STATUS.BLOCKED} note="Not wired" />
-        <CapRow icon={Users}       label="Google Admin SDK (users / groups)"  status={deriveStatus(googleConfigured)} />
+        <CapRow icon={Users}       label="Google Admin SDK (users / groups)"  status={googleStatus} />
       </CapPanel>
 
       <SectionHeading>CRM / Staging</SectionHeading>
@@ -689,24 +714,26 @@ function IntegrationsSection({
         icon={Users}
         title="HubSpot"
         subtitle="Final CRM destination (non-blocking)"
-        status={deriveStatus(hubspotConfigured)}
+        status={hubspotStatus}
+        blockedReason={live.hubspot?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Users}     label="CRM Objects (contacts, companies, deals)" status={deriveStatus(hubspotConfigured)} note="HUBSPOT_API_KEY" />
-        <CapRow icon={Package}   label="Export staging (Supabase queue)"          status={deriveStatus(sbConfigured)} />
-        <CapRow icon={Shield}    label="Write-path safety gate"                   status={deriveStatus(hubspotConfigured)} />
+        <CapRow icon={Users}     label="CRM Objects (contacts, companies, deals)" status={hubspotStatus} note={live.hubspot?.envKey || 'HUBSPOT_API_KEY'} />
+        <CapRow icon={Package}   label="Export staging (Supabase queue)"          status={supabaseStatus} />
+        <CapRow icon={Shield}    label="Write-path safety gate"                   status={hubspotStatus} />
       </CapPanel>
 
       <CapPanel
         icon={Package}
         title="Airtable"
         subtitle="Optional staging mirror (non-blocking)"
-        status={deriveStatus(airtableConfigured)}
+        status={airtableStatus}
+        blockedReason={live.airtable?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Package}   label="Staging mirror (records)"                status={deriveStatus(airtableConfigured)} note="AIRTABLE_API_KEY" />
-        <CapRow icon={BookOpen}  label="Review grid sync"                        status={deriveStatus(airtableConfigured)} />
-        <CapRow icon={Shield}    label="Optional staging gate"                   status={deriveStatus(airtableConfigured)} />
+        <CapRow icon={Package}   label="Staging mirror (records)"                status={airtableStatus} note={live.airtable?.envKey || 'AIRTABLE_API_KEY'} />
+        <CapRow icon={BookOpen}  label="Review grid sync"                        status={airtableStatus} />
+        <CapRow icon={Shield}    label="Optional staging gate"                   status={airtableStatus} />
       </CapPanel>
 
       <SectionHeading>Automation</SectionHeading>
@@ -716,9 +743,10 @@ function IntegrationsSection({
         title="Browser Worker"
         subtitle="Playwright worker for scraping and evidence capture"
         status={browserStatus}
+        blockedReason={live.browser?.reason}
         defaultOpen={false}
       >
-        <CapRow icon={Globe}    label="Browser job execution"                    status={browserStatus} note="BROWSER_WORKER_URL" />
+        <CapRow icon={Globe}    label="Browser job execution"                    status={browserStatus} note={live.browser?.envKey || 'BROWSER_WORKER_URL'} />
         <CapRow icon={Activity} label="Screenshots / evidence"                   status={browserStatus} />
         <CapRow icon={Eye}      label="DOM extraction + summaries"               status={browserStatus} />
       </CapPanel>

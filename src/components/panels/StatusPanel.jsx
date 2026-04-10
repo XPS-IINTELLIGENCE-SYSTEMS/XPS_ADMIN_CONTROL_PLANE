@@ -15,14 +15,14 @@ export default function StatusPanel() {
       api_health:     false,
       llm_provider:   false,
     };
-    try {
-      const r = await fetch(`${API_URL}/api/health`);
-      if (r.ok) {
-        const data = await r.json();
-        checks.api_health  = data.status === 'ok';
-        checks.llm_provider = !!data.llm;
-      }
-    } catch { /* offline */ }
+      try {
+        const r = await fetch(`${API_URL}/api/health`);
+        if (r.ok) {
+          const data = await r.json();
+          checks.api_health  = data.status === 'ok' && data.apiRoutes === true;
+          checks.llm_provider = data.llm?.active && data.llm.active !== 'none';
+        }
+      } catch { /* offline */ }
     setHealth(checks);
     setLoading(false);
   };

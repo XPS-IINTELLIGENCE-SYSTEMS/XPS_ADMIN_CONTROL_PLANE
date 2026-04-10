@@ -42,12 +42,13 @@ function buildFallbackState() {
     llm: {
       active,
       model: active === 'openai' ? 'gpt-4o-mini' : active === 'groq' ? 'llama3-8b-8192' : active === 'gemini' ? 'gemini-1.5-flash' : active === 'ollama' ? 'llama3' : null,
-      mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
+      mode: active === 'ollama' ? 'local' : active === 'none' ? 'blocked' : 'live',
+      reason: active === 'none' ? 'No LLM provider configured in the current runtime.' : null,
       providers: {
-        openai: { configured: hasOpenAI, model: 'gpt-4o-mini' },
-        groq: { configured: hasGroq, model: 'llama3-8b-8192' },
-        gemini: { configured: hasGemini, model: 'gemini-1.5-flash' },
-        ollama: { configured: hasOllama, model: 'llama3' },
+        openai: { configured: hasOpenAI, mode: hasOpenAI ? 'live' : 'blocked', model: 'gpt-4o-mini', reason: hasOpenAI ? null : 'OPENAI_API_KEY not set.' },
+        groq: { configured: hasGroq, mode: hasGroq ? 'live' : 'blocked', model: 'llama3-8b-8192', reason: hasGroq ? null : 'GROQ_API_KEY not set.' },
+        gemini: { configured: hasGemini, mode: hasGemini ? 'live' : 'blocked', model: 'gemini-1.5-flash', reason: hasGemini ? null : 'GEMINI_API_KEY not set.' },
+        ollama: { configured: hasOllama, mode: hasOllama ? 'local' : 'blocked', model: 'llama3', reason: hasOllama ? null : 'OLLAMA_BASE_URL not set.' },
       },
     },
   };
@@ -59,17 +60,22 @@ const PROVIDER_COLORS = {
   groq:      { color: '#4ade80', label: 'Groq',      mode: 'Live' },
   gemini:    { color: '#a855f7', label: 'Gemini',    mode: 'Live' },
   ollama:    { color: '#60a5fa', label: 'Ollama',    mode: 'Local' },
+  blocked:   { color: '#ef4444', label: 'No Provider', mode: 'Blocked' },
   none:      { color: '#fbbf24', label: 'Synthetic', mode: 'Synthetic' },
 };
 
 function ProviderIndicator({ providerState }) {
   const activeLLM = providerState?.llm?.active || 'none';
+  const llmMode   = providerState?.llm?.mode || 'blocked';
   const model     = providerState?.llm?.model   || null;
-  const meta      = PROVIDER_COLORS[activeLLM] || PROVIDER_COLORS.none;
+  const meta      = llmMode === 'blocked'
+    ? PROVIDER_COLORS.blocked
+    : PROVIDER_COLORS[activeLLM] || PROVIDER_COLORS.none;
 
   return (
     <div
       data-testid="provider-indicator"
+      title={providerState?.llm?.reason || ''}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '5px 10px',
@@ -108,47 +114,48 @@ const PROVIDER_STATUS_META = {
 function buildProviderOptions(state) {
   const providers = state?.llm?.providers || {};
   const active = state?.llm?.active || 'none';
+  const llmMode = state?.llm?.mode || 'blocked';
   const activeModel = state?.llm?.model || '';
   return [
     {
       id: 'auto',
       label: 'Auto',
       model: activeModel || 'auto',
-      status: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
+      status: llmMode,
       available: true,
-      note: active === 'none' ? 'No provider configured' : `Uses ${active}`,
+      note: active === 'none' ? (state?.llm?.reason || 'No provider configured') : `Routes to ${active}`,
     },
     {
       id: 'openai',
       label: 'OpenAI',
       model: providers.openai?.model || 'gpt-4o-mini',
-      status: providers.openai?.configured ? 'live' : 'blocked',
+      status: providers.openai?.mode || 'blocked',
       available: !!providers.openai?.configured,
-      note: providers.openai?.configured ? 'OPENAI_API_KEY' : 'Missing OPENAI_API_KEY',
+      note: providers.openai?.configured ? 'OPENAI_API_KEY' : (providers.openai?.reason || 'Missing OPENAI_API_KEY'),
     },
     {
       id: 'groq',
       label: 'Groq',
       model: providers.groq?.model || 'llama3-8b-8192',
-      status: providers.groq?.configured ? 'live' : 'blocked',
+      status: providers.groq?.mode || 'blocked',
       available: !!providers.groq?.configured,
-      note: providers.groq?.configured ? 'GROQ_API_KEY' : 'Missing GROQ_API_KEY',
+      note: providers.groq?.configured ? 'GROQ_API_KEY' : (providers.groq?.reason || 'Missing GROQ_API_KEY'),
     },
     {
       id: 'gemini',
       label: 'Gemini',
       model: providers.gemini?.model || 'gemini-1.5-flash',
-      status: providers.gemini?.configured ? 'live' : 'blocked',
+      status: providers.gemini?.mode || 'blocked',
       available: !!providers.gemini?.configured,
-      note: providers.gemini?.configured ? 'GEMINI_API_KEY' : 'Missing GEMINI_API_KEY',
+      note: providers.gemini?.configured ? 'GEMINI_API_KEY' : (providers.gemini?.reason || 'Missing GEMINI_API_KEY'),
     },
     {
       id: 'ollama',
       label: 'Ollama',
       model: providers.ollama?.model || 'llama3',
-      status: providers.ollama?.configured ? 'local' : 'blocked',
+      status: providers.ollama?.mode || 'blocked',
       available: !!providers.ollama?.configured,
-      note: providers.ollama?.configured ? 'OLLAMA_BASE_URL' : 'Missing OLLAMA_BASE_URL',
+      note: providers.ollama?.configured ? 'OLLAMA_BASE_URL' : (providers.ollama?.reason || 'Missing OLLAMA_BASE_URL'),
     },
     {
       id: 'synthetic',
@@ -156,7 +163,7 @@ function buildProviderOptions(state) {
       model: 'fallback',
       status: 'synthetic',
       available: true,
-      note: 'No live provider',
+      note: 'Operator-forced synthetic mode',
     },
   ];
 }
@@ -236,8 +243,9 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [selectedModel, setSelectedModel] = useState('');
   const [messages, setMessages] = useState([{
     role: 'assistant',
-    content: '— awaiting configuration —\n\nSelect an agent and configure your API key to begin live orchestration. Running in synthetic mode.',
+    content: '— awaiting configuration —\n\nSelect an agent and configure a provider to begin live orchestration. Live routing is currently blocked until a provider is available.',
     agent: 'orchestrator',
+    mode: 'blocked',
   }]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
@@ -581,7 +589,19 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
+        {
+          task: prompt,
+          agent: 'bytebot',
+          provider: selectedProvider,
+          model: selectedModel || selectedProviderOption?.model,
+          context: {
+            mode,
+            originAgent: agent,
+            requestedProvider: selectedProvider,
+            requestedModel: selectedModel || selectedProviderOption?.model,
+            attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
+          },
+        },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -598,7 +618,18 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
+        {
+          task: prompt,
+          agent: 'bytebot',
+          provider: selectedProvider,
+          model: selectedModel || selectedProviderOption?.model,
+          context: {
+            mode,
+            requestedProvider: selectedProvider,
+            requestedModel: selectedModel || selectedProviderOption?.model,
+            attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
+          },
+        },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -635,17 +666,39 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         const res = await fetch(`${API_URL}/api/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
+          body: JSON.stringify({
+            query: prompt,
+            context: contextLabel,
+            runId: genId(),
+            provider: selectedProvider,
+            model: selectedModel || selectedProviderOption?.model,
+          }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.summary || 'No summary returned.',
+          agent,
+          mode: data.mode || 'blocked',
+          provider: data.provider,
+          model: data.model,
+        }]);
         if (data.workspace_object) {
           commitToWorkspace(data.workspace_object, agent, prompt);
         }
-        persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+        persistSearchJob({
+          query: prompt,
+          context: contextLabel,
+          status: data.mode === 'blocked' ? 'blocked' : 'complete',
+          summary: data.summary,
+          sources: data.sources || [],
+          mode: data.mode || 'blocked',
+        }).catch(() => {});
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Research request failed: ${err.message}`, agent, synthetic: true }]);
+        const message = `Research request failed: ${err.message}`;
+        setMessages(prev => [...prev, { role: 'assistant', content: message, agent, mode: 'blocked' }]);
+        persistSearchJob({ query: prompt, context: mode, status: 'error', summary: message, sources: [], mode: 'blocked' }).catch(() => {});
       }
       return;
     }
@@ -660,13 +713,33 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           const res = await fetch(`${API_URL}/api/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
+            body: JSON.stringify({
+              query: prompt,
+              context: contextLabel,
+              runId: genId(),
+              provider: selectedProvider,
+              model: selectedModel || selectedProviderOption?.model,
+            }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: data.summary || 'No summary returned.',
+            agent,
+            mode: data.mode || 'blocked',
+            provider: data.provider,
+            model: data.model,
+          }]);
           if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
-          persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+          persistSearchJob({
+            query: prompt,
+            context: contextLabel,
+            status: data.mode === 'blocked' ? 'blocked' : 'complete',
+            summary: data.summary,
+            sources: data.sources || [],
+            mode: data.mode || 'blocked',
+          }).catch(() => {});
         } else {
           const res = await fetch(`${API_URL}/api/scrape`, {
             method: 'POST',
@@ -680,7 +753,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           persistScrapeJob({ url, prompt, status: 'complete', result: data.summary, rawContent: null, mode: data.mode || 'synthetic' }).catch(() => {});
         }
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Scrape request failed: ${err.message}`, agent, synthetic: true }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Scrape request failed: ${err.message}`, agent, mode: 'blocked' }]);
       }
       return;
     }
@@ -723,7 +796,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const evtType = data.event_type || 'run_completed';
 
       setMessages(prev => [...prev, {
-        role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic',
+        role: 'assistant',
+        content: reply,
+        agent,
+        mode: evtMode,
+        provider: data.provider,
+        model: data.model,
+        blockedReason: data.blocked_reason || null,
       }]);
       setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
 
@@ -732,17 +811,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       } else if (evtType !== 'run_failed') {
         commitToWorkspace({ type: detectObjectType(reply, agent), title: deriveTitle(reply, agent) || prompt.slice(0, 55), content: reply }, agent, prompt);
       }
-    } catch {
+    } catch (err) {
       setStatus(wsObjId, RUN_STATUS.ERROR);
-      const syntheticReplies = {
-        orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
-        research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
-        scraper:      `[Synthetic] Scraper Agent: Target queued. Use the Scraper panel to run live scrape jobs.`,
-        default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
-      };
-      const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
-      setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true }]);
-      commitToWorkspace({ type: detectObjectType(syntheticContent, agent), title: `[Synthetic] ${selectedAgent.label}`, content: syntheticContent }, agent, prompt);
+      const blockedContent = `Request failed: ${err.message}\n\nThe backend route did not complete. Check /api/status and /api/health for runtime truth.`;
+      setMessages(prev => [...prev, { role: 'assistant', content: blockedContent, agent, mode: 'blocked' }]);
+      commitToWorkspace({ type: OBJ_TYPE.RUNTIME_STATE, title: `Blocked ${selectedAgent.label}`, content: blockedContent, meta: { mode: 'blocked', error: err.message } }, agent, prompt);
     } finally {
       setLoading(false);
     }
@@ -1242,9 +1315,28 @@ function ActiveJobsSummary({ jobs }) {
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   const agentInfo = AGENTS.find(a => a.id === msg.agent);
-  const modeColor = msg.mode === 'live' ? '#4ade80' : msg.mode === 'synthetic' || msg.synthetic ? '#fbbf24' : 'rgba(255,255,255,0.25)';
-  const modeLabel = msg.mode === 'live' ? 'live' : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
+  const modeColor = msg.mode === 'live'
+    ? '#4ade80'
+    : msg.mode === 'local'
+      ? '#60a5fa'
+      : msg.mode === 'blocked'
+        ? '#ef4444'
+        : msg.mode === 'synthetic' || msg.synthetic
+          ? '#fbbf24'
+          : 'rgba(255,255,255,0.25)';
+  const modeLabel = msg.mode === 'live'
+    ? 'live'
+    : msg.mode === 'local'
+      ? 'local'
+      : msg.mode === 'blocked'
+        ? 'blocked'
+        : (msg.synthetic || msg.mode === 'synthetic')
+          ? 'synthetic'
+          : null;
   const ModeInfo = msg.mode ? MODES.find(m => m.id === msg.mode) : null;
+  const providerSummary = [modeLabel, msg.provider && msg.provider !== 'none' ? msg.provider : null, msg.model || null]
+    .filter(Boolean)
+    .join(' · ');
 
   if (isUser) {
     return (
@@ -1273,7 +1365,7 @@ function MessageBubble({ msg }) {
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.5, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
           <agentInfo.icon size={10} />
           {agentInfo.label}
-          {modeLabel && <span style={{ color: modeColor, fontWeight: 600 }}>· {modeLabel}</span>}
+          {providerSummary && <span style={{ color: modeColor, fontWeight: 600 }}>· {providerSummary}</span>}
         </span>
       )}
       <div style={{

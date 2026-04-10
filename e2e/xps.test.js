@@ -205,7 +205,7 @@ test.describe('XPS Control Plane', () => {
     await expect(page.locator('[data-testid="provider-indicator"]')).toBeVisible();
     // Should contain one of the known modes
     const text = await page.locator('[data-testid="provider-indicator"]').innerText();
-    const knownModes = ['OpenAI', 'Groq', 'Ollama', 'Synthetic', 'LIVE', 'LOCAL'];
+    const knownModes = ['OpenAI', 'Groq', 'Ollama', 'Synthetic', 'No Provider', 'LIVE', 'LOCAL', 'BLOCKED'];
     const hasKnownMode = knownModes.some(m => text.includes(m));
     expect(hasKnownMode).toBe(true);
     await screenshot(page, 'workspace-provider-indicator');

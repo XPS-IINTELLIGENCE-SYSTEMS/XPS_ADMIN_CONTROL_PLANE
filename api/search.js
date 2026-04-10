@@ -1,6 +1,6 @@
 // Vercel serverless function: POST /api/search
 // Returns structured search_result contract
-import { callLLM, llmMode, hasLLM } from './_llm.js';
+import { callLLM, resolveProviderRequest } from './_llm.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,27 +12,31 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { query, context, runId } = req.body || {};
+  const { query, context, runId, provider = 'auto', model } = req.body || {};
   if (!query) {
     return res.status(400).json({ error: 'query is required' });
   }
 
-  const mode = llmMode();
+  const routing = resolveProviderRequest({ provider, model });
+  const mode = routing.mode;
   const ts   = new Date().toISOString();
 
-  if (!hasLLM()) {
+  if (!routing.ok) {
     return res.status(200).json({
-      event_type: 'search_result',
+      event_type: 'search_blocked',
       run_id:     runId || null,
       query,
-      summary:    `[Synthetic] Search query received: "${query}"\n\nNo LLM provider configured. Set OPENAI_API_KEY to enable live web research.`,
+      provider:   routing.provider,
+      model:      routing.model,
+      summary:    `Search blocked: ${routing.reason}`,
       sources:    [],
-      mode:       'synthetic',
+      mode:       'blocked',
+      blocked_reason: routing.reason,
       workspace_object: {
-        type:    'search',
+        type:    'runtime_state',
         title:   `Search: ${query.slice(0, 50)}`,
-        content: `[Synthetic] Search for: ${query}\n\nNo live backend — set OPENAI_API_KEY.`,
-        meta:    { query, sources: [], mode: 'synthetic' },
+        content: `Search request blocked.\n\nQuery: ${query}\nReason: ${routing.reason}`,
+        meta:    { query, sources: [], mode: 'blocked', provider: routing.provider, model: routing.model, reason: routing.reason },
       },
       timestamp: ts,
     });
@@ -49,12 +53,14 @@ ${context ? `Additional context: ${context}` : ''}`;
       { role: 'user',   content: query },
     ];
 
-    const summary = await callLLM(messages);
+    const summary = await callLLM(messages, { provider: routing.provider, model: routing.model });
 
     return res.status(200).json({
       event_type: 'search_result',
       run_id:     runId || null,
       query,
+      provider:   routing.provider,
+      model:      routing.model,
       summary,
       sources:    [], // live web search requires additional browser tooling
       mode,
@@ -62,7 +68,7 @@ ${context ? `Additional context: ${context}` : ''}`;
         type:    'search',
         title:   `Search: ${query.slice(0, 50)}`,
         content: summary,
-        meta:    { query, sources: [], mode },
+        meta:    { query, sources: [], mode, provider: routing.provider, model: routing.model },
       },
       timestamp: ts,
     });
@@ -72,6 +78,8 @@ ${context ? `Additional context: ${context}` : ''}`;
       event_type: 'run_failed',
       run_id:     runId || null,
       query,
+      provider:   routing.provider,
+      model:      routing.model,
       mode,
       error:      err.message,
       timestamp:  ts,
