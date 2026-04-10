@@ -68,7 +68,7 @@ export default function Proposals() {
                 <td style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{p.expires}</td>
                 <td>
                   {p.viewed
-                    ? <span style={{ color: '#4ade80', fontSize: 12 }}>✓ Viewed</span>
+                    ? <span style={{ color: '#4ade80', fontSize: 12 }}>Viewed</span>
                     : <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Not viewed</span>}
                 </td>
                 <td style={{ paddingRight: 20 }}>

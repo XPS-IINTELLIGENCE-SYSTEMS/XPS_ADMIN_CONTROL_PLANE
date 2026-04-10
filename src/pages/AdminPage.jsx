@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.API_URL || '';
-const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // ── Runtime truth detection (build-time, client-side supplement) ──────────
 const env = import.meta.env;
@@ -239,13 +239,11 @@ export default function AdminPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 12px' }}>
           <div
-            className="xps-logo xps-electric-border"
+            className="xps-logo"
             style={{
               width: 30,
               height: 30,
               borderRadius: 8,
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
               overflow: 'hidden',
               flexShrink: 0,
             }}

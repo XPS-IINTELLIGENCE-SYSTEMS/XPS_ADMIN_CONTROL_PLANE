@@ -1,5 +1,7 @@
 import React from 'react';
 
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
+
 const NAV = [
   {
     section: 'MAIN',
@@ -49,11 +51,9 @@ export default function Shell({ page, setPage, children }) {
     <div className="xps-shell">
       {/* ── Sidebar ── */}
       <aside className="xps-sidebar">
-        <div className="xps-logo">
-          <div className="xps-logo-icon">
-            <svg width="18" height="20" viewBox="0 0 20 22" fill="none">
-              <path d="M10 1L2 5V10C2 14.97 5.4 19.45 10 21C14.6 19.45 18 14.97 18 10V5L10 1Z" fill="#0d0d0d" />
-            </svg>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="xps-logo" style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div className="xps-logo-text">
             <div className="xps-logo-name">XPS INTELLIGENCE</div>

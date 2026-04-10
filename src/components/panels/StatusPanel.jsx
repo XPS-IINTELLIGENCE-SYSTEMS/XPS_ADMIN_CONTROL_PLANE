@@ -98,15 +98,15 @@ export default function StatusPanel() {
           fontSize: 12, lineHeight: 1.8,
         }}>
           {[
-            ['SUPABASE_URL',      import.meta.env.SUPABASE_URL      ? '✓ set' : '✗ not set'],
-            ['SUPABASE_ANON_KEY', import.meta.env.SUPABASE_ANON_KEY ? '✓ set' : '✗ not set'],
-            ['API_URL',           import.meta.env.API_URL            || '(relative /api)'],
-            ['BASE_PATH',         import.meta.env.BASE_PATH          || '/'],
-            ['MODE',              import.meta.env.MODE               || 'production'],
-          ].map(([k, v]) => (
-            <div key={k}>
-              <span style={{ color: 'rgba(255,255,255,0.4)' }}>{k}: </span>
-              <span style={{ color: v.startsWith('✓') ? '#4ade80' : v.startsWith('✗') ? '#f87171' : gold }}>{v}</span>
+            { key: 'SUPABASE_URL', value: import.meta.env.SUPABASE_URL, ok: !!import.meta.env.SUPABASE_URL },
+            { key: 'SUPABASE_ANON_KEY', value: import.meta.env.SUPABASE_ANON_KEY, ok: !!import.meta.env.SUPABASE_ANON_KEY },
+            { key: 'API_URL', value: import.meta.env.API_URL || '(relative /api)', ok: true },
+            { key: 'BASE_PATH', value: import.meta.env.BASE_PATH || '/', ok: true },
+            { key: 'MODE', value: import.meta.env.MODE || 'production', ok: true },
+          ].map(({ key, value, ok }) => (
+            <div key={key}>
+              <span style={{ color: 'rgba(255,255,255,0.4)' }}>{key}: </span>
+              <span style={{ color: ok ? '#4ade80' : '#f87171' }}>{value || 'not set'}</span>
             </div>
           ))}
         </div>

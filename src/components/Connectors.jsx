@@ -69,7 +69,7 @@ export default function Connectors() {
               className={`conn-btn ${c.connected ? 'connected' : ''}`}
               onClick={() => toggle(c.id)}
             >
-              {c.connected ? '✓ Disconnect' : '+ Connect'}
+              {c.connected ? 'Disconnect' : 'Connect'}
             </button>
           </div>
         ))}

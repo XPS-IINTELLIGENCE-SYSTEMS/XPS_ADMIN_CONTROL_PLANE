@@ -65,9 +65,9 @@ export function logChange(action, detail, surface) {
 
 // Synthetic responses for demo mode
 const syntheticResponses = {
-  add_panel: (p) => `✓ Panel request acknowledged. In live mode this would add a new panel to the target surface.\n\nAction logged: \`add_panel\`\nTarget: ${p}\nStatus: **synthetic** — no live mutation performed.`,
-  reorganize: (p) => `✓ Reorganization request received.\n\nIn live mode the UI config for this page would be updated and re-rendered.\nStatus: **synthetic** — layout unchanged.`,
-  create_view: (p) => `✓ View creation queued in Auto Builder backlog.\n\nArtifact type: \`view\`\nPrompt: "${p}"\nStatus: **synthetic** — added to build backlog schema.`,
+  add_panel: (p) => `Panel request acknowledged. In live mode this would add a new panel to the target surface.\n\nAction logged: \`add_panel\`\nTarget: ${p}\nStatus: **synthetic** — no live mutation performed.`,
+  reorganize: (p) => `Reorganization request received.\n\nIn live mode the UI config for this page would be updated and re-rendered.\nStatus: **synthetic** — layout unchanged.`,
+  create_view: (p) => `View creation queued in Auto Builder backlog.\n\nArtifact type: \`view\`\nPrompt: "${p}"\nStatus: **synthetic** — added to build backlog schema.`,
   connector_query: (p) => `Here is the current Connector Reality Matrix status:\n\n- GitHub: referenced_only\n- Vercel: referenced_only\n- HubSpot: blocked (key unverified)\n- Redis: blocked (URL missing)\n- Neon DB: blocked (connection refused)\n- Google Drive, Sheets, Gmail, Calendar, Airtable, Beautiful.ai, Base44: missing\n\nNo live connectors are currently active. All surfaces run on synthetic data.`,
   system_status: () => `Current XPS System Health:\n\nAdmin Control Plane — operational (v2.4.1)\nVision Cortex — operational (v1.9.3)\nAuto Builder — degraded (last sync 12m ago)\nIntel Core — operational (v3.1.2)\nSandbox — idle\nQuarantine — 4 blocked items\n\nMode: **synthetic** — no live backend.`,
   blocker_query: () => `Current Blocker Queue:\n\n1. **BLK-001** — Ledger Write: Neon DB unavailable (2h, HIGH)\n2. **BLK-002** — HubSpot Sync: API key unverified (6h, MEDIUM)\n3. **BLK-003** — Redis Heartbeat: URL missing (1d, HIGH)\n\nRecommended action: Set REDIS_URL and NEON_DATABASE_URL in environment and re-run connector health check.`,

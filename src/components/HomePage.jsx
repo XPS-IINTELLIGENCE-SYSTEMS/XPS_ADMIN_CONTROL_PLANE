@@ -1,4 +1,5 @@
 import React from 'react';
+import { Sparkles } from 'lucide-react';
 
 const gold = '#d4a843';
 const darkBg = '#0d0d0d';
@@ -112,7 +113,7 @@ export default function HomePage({ onEnterAdmin }) {
           borderRadius: 50, padding: '6px 18px', marginBottom: 32,
           fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500,
         }}>
-          <span style={{ fontSize: 16 }}>✦</span>
+          <Sparkles size={16} className="xps-icon" />
           AI-Powered Sales Intelligence Platform
         </div>
 

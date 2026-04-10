@@ -36,6 +36,10 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(SCREENSHOTS, `${name}.png`), fullPage: false });
 }
 
+async function screenshotElement(locator, name) {
+  await locator.screenshot({ path: path.join(SCREENSHOTS, `${name}.png`) });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 test.describe('XPS Control Plane', () => {
@@ -52,6 +56,21 @@ test.describe('XPS Control Plane', () => {
     // Background should be dark — not white
     expect(bg).not.toBe('rgb(255, 255, 255)');
     await screenshot(page, 'workspace-overview');
+  });
+
+  test('Brand logos render in header, sidebar, and admin rail', async ({ page }) => {
+    const headerLogo = page.locator('[data-testid="brand-logo-header"]');
+    await expect(headerLogo).toBeVisible();
+    await screenshotElement(page.locator('header'), 'header-brand-lockup');
+
+    const sidebarLogo = page.locator('[data-testid="brand-logo-sidebar"]');
+    await expect(sidebarLogo).toBeVisible();
+    await screenshotElement(page.locator('aside'), 'sidebar-brand-area');
+
+    await page.click('[data-testid="page-tab-admin"]');
+    const adminLogo = page.locator('[data-testid="brand-logo-admin"]');
+    await expect(adminLogo).toBeVisible();
+    await screenshotElement(page.locator('[data-testid="admin-nav-integrations"]').locator('..'), 'admin-brand-area');
   });
 
   test('Workspace page loads — header shows Workspace tab', async ({ page }) => {
@@ -75,6 +94,9 @@ test.describe('XPS Control Plane', () => {
     const panels = await page.locator('[data-testid^="cap-panel-"]').count();
     expect(panels).toBeGreaterThan(0);
     await screenshot(page, 'admin-capability-panels');
+    const firstPanel = page.locator('[data-testid^="cap-panel-"]').first();
+    await firstPanel.hover();
+    await screenshotElement(firstPanel, 'admin-card-hover');
   });
 
   test('Admin page — system section loads', async ({ page }) => {
@@ -186,6 +208,9 @@ test.describe('XPS Control Plane', () => {
     // Click Dashboard
     await page.locator('aside nav button', { hasText: 'Dashboard' }).first().click();
     await screenshot(page, 'sidebar-active');
+
+    await page.locator('aside nav button', { hasText: 'Leads' }).first().hover();
+    await screenshotElement(page.locator('aside'), 'left-toolbar-hover');
   });
 
   test('Center workspace — empty state is interactive', async ({ page }) => {
@@ -203,6 +228,8 @@ test.describe('XPS Control Plane', () => {
       await page.locator('[data-testid^="quick-create-"]').first().click();
       await page.waitForTimeout(300);
       await screenshot(page, 'center-workspace-active');
+      await page.locator('button[title="Close tab"]').first().hover();
+      await screenshot(page, 'workspace-object-hover');
     } else {
       await screenshot(page, 'center-workspace-active');
     }
@@ -220,6 +247,9 @@ test.describe('XPS Control Plane', () => {
     await input.fill('Test message from Playwright');
     expect(await input.inputValue()).toBe('Test message from Playwright');
     await screenshot(page, 'chat-rail-active');
+
+    await page.locator('[data-testid="attach-btn"]').hover();
+    await screenshotElement(page.locator('[data-testid="chat-rail"]'), 'chat-controls-hover');
   });
 
   test('Mode dropdown — opens and shows all modes', async ({ page }) => {
@@ -377,6 +407,12 @@ test.describe('XPS Control Plane', () => {
     await screenshot(page, 'workspace-full-overview');
     // Just need no crash
     expect(true).toBe(true);
+  });
+
+  test('Workspace connectors panel icon surface', async ({ page }) => {
+    await page.locator('aside nav button', { hasText: 'Connectors' }).click();
+    await page.waitForTimeout(200);
+    await screenshot(page, 'connectors-icon-surface');
   });
 
   test('Admin full overview screenshot', async ({ page }) => {

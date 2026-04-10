@@ -35,7 +35,7 @@ export default function AdminControlPlane() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-muted)' }}>Locked</span>
-              <span style={{ color: canonStatus.locked ? 'var(--green)' : 'var(--red)' }}>{canonStatus.locked ? '✓ Yes' : '✗ No'}</span>
+              <span style={{ color: canonStatus.locked ? 'var(--green)' : 'var(--red)' }}>{canonStatus.locked ? 'Yes' : 'No'}</span>
             </div>
           </div>
         </Panel>

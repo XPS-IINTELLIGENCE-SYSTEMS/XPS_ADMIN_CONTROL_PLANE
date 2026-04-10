@@ -7,7 +7,7 @@ import {
   ScrollText, Package,
 } from 'lucide-react';
 
-const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // A simple inline gradient text for active sidebar items
 function GradAccent() {
@@ -104,7 +104,7 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
         flexShrink: 0,
       }}>
         <div
-          className="xps-logo xps-electric-border"
+          className="xps-logo"
           style={{
             width: 28,
             height: 28,
@@ -115,8 +115,6 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
             flexShrink: 0,
             overflow: 'hidden',
             position: 'relative',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
           }}
         >
           <img

@@ -31,12 +31,12 @@ const panelLabels = {
   status:           'System Status',
 };
 
-const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 function BrandLogo() {
   return (
     <div
-      className="xps-logo xps-electric-border"
+      className="xps-logo"
       style={{
         position: 'relative',
         width: 26,
@@ -44,8 +44,6 @@ function BrandLogo() {
         borderRadius: 6,
         overflow: 'hidden',
         flexShrink: 0,
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
       }}
     >
       <img

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 const gold = '#d4a843';
-const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 // Panel types that can appear in the workspace canvas
 const PANEL_TYPES = [
@@ -97,7 +97,7 @@ function BlankCanvas() {
       gap: 14,
     }}>
       <div
-        className="xps-logo xps-electric-border"
+        className="xps-logo"
         style={{
           width: 64,
           height: 64,
