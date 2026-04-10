@@ -28,11 +28,12 @@ export function getGovernance() {
 }
 
 export function setGovernance(next) {
-  cached = { ...cached, ...next };
-  storage.set(STORAGE_KEY, cached);
-  persistGovernanceSettings(cached).catch(() => {});
+  const updated = { ...cached, ...next };
+  cached = updated;
+  storage.set(STORAGE_KEY, updated);
+  persistGovernanceSettings(updated).catch(() => {});
   notify();
-  return cached;
+  return updated;
 }
 
 export function subscribeGovernance(cb) {

@@ -1657,8 +1657,8 @@ function AccessSection({
           { label: 'Supabase Auth',        ok: sbConfigured, note: 'JWT-based auth via @supabase/supabase-js' },
           { label: 'Row-Level Security',   ok: sbConfigured, note: 'Enabled on Supabase tables when configured' },
           { label: 'Dev Auth Bypass',      ok: true,         note: 'Active in current build' },
-          { label: 'Google OAuth',         ok: oauthReady, note: oauthReady ? 'Verified via active Supabase session' : 'Enable provider in Supabase dashboard' },
-          { label: 'GitHub OAuth',         ok: oauthReady, note: oauthReady ? 'Verified via active Supabase session' : 'Enable provider in Supabase dashboard' },
+          { label: 'Google OAuth',         ok: oauthReady, note: oauthReady ? 'User authenticated (provider config still required)' : 'Enable provider in Supabase dashboard' },
+          { label: 'GitHub OAuth',         ok: oauthReady, note: oauthReady ? 'User authenticated (provider config still required)' : 'Enable provider in Supabase dashboard' },
         ].map(item => (
           <div key={item.label} style={{
             display: 'flex', alignItems: 'center', gap: 10,

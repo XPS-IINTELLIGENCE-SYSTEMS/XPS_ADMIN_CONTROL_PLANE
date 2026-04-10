@@ -204,6 +204,30 @@ const ATTACH_SOURCES = [
   { id: 'drive',   label: 'Google Drive',   icon: HardDrive, available: GOOGLE_DRIVE_CONFIGURED, blocked: !GOOGLE_DRIVE_CONFIGURED, note: 'Requires GCP OAuth' },
 ];
 
+const UI_COLOR_MAP = {
+  gold: '#d4a843',
+  silver: '#e2e8f0',
+  blue: '#60a5fa',
+  purple: '#a855f7',
+  green: '#4ade80',
+  red: '#ef4444',
+  black: '#0f0f0f',
+  white: '#ffffff',
+};
+
+const UI_ADD_COMMANDS = [
+  { pattern: /add button/i, patch: { addComponent: 'button' }, summary: 'Add button' },
+  { pattern: /add card|add panel/i, patch: { addComponent: 'card' }, summary: 'Add card' },
+  { pattern: /add section/i, patch: { addComponent: 'section' }, summary: 'Add section' },
+  { pattern: /add tab|add tabs/i, patch: { addComponent: 'tabs' }, summary: 'Add tabs' },
+  { pattern: /add page/i, patch: { addComponent: 'section' }, summary: 'Add page section' },
+];
+
+const UI_MISC_COMMANDS = [
+  { pattern: /add gradient/i, patch: { theme: { gradient: 'linear-gradient(135deg, rgba(212,168,67,0.2), rgba(59,130,246,0.2))' } }, summary: 'Add gradient' },
+  { pattern: /add animation/i, patch: { theme: { animation: 'pulse 3s ease-in-out infinite' } }, summary: 'Add animation' },
+];
+
 export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [agent, setAgent] = useState('orchestrator');
   const [mode, setMode]   = useState('agent');
@@ -393,21 +417,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (/apply|confirm/.test(lower) && /preview|changes|mutation/.test(lower)) return { intent: 'apply' };
     if (/cancel.*preview|discard.*preview|reject/.test(lower)) return { intent: 'cancel' };
 
-    const colorMap = {
-      gold: '#d4a843',
-      silver: '#e2e8f0',
-      blue: '#60a5fa',
-      purple: '#a855f7',
-      green: '#4ade80',
-      red: '#ef4444',
-      black: '#0f0f0f',
-      white: '#ffffff',
-    };
     const colorMatch = prompt.match(/(primary|accent|background|text) color to ([#\w]+)/i);
     if (colorMatch) {
       const key = colorMatch[1].toLowerCase();
       const raw = colorMatch[2].toLowerCase();
-      const color = raw.startsWith('#') ? raw : (colorMap[raw] || raw);
+      const color = raw.startsWith('#') ? raw : (UI_COLOR_MAP[raw] || raw);
       return { intent: 'preview', patch: { theme: { [`${key}Color`]: color } }, summary: `Update ${key} color` };
     }
 
@@ -421,17 +435,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       return { intent: 'preview', patch: { theme: { borderRadius: Number(radiusMatch[1]) } }, summary: 'Update border radius' };
     }
 
-    if (/add button/.test(lower)) return { intent: 'preview', patch: { addComponent: 'button' }, summary: 'Add button' };
-    if (/add card|add panel/.test(lower)) return { intent: 'preview', patch: { addComponent: 'card' }, summary: 'Add card' };
-    if (/add section/.test(lower)) return { intent: 'preview', patch: { addComponent: 'section' }, summary: 'Add section' };
-    if (/add tab|add tabs/.test(lower)) return { intent: 'preview', patch: { addComponent: 'tabs' }, summary: 'Add tabs' };
-    if (/add page/.test(lower)) return { intent: 'preview', patch: { addComponent: 'section' }, summary: 'Add page section' };
-
-    if (/add gradient/.test(lower)) {
-      return { intent: 'preview', patch: { theme: { gradient: 'linear-gradient(135deg, rgba(212,168,67,0.2), rgba(59,130,246,0.2))' } }, summary: 'Add gradient' };
+    for (const cmd of UI_ADD_COMMANDS) {
+      if (cmd.pattern.test(lower)) return { intent: 'preview', patch: cmd.patch, summary: cmd.summary };
     }
-    if (/add animation/.test(lower)) {
-      return { intent: 'preview', patch: { theme: { animation: 'pulse 3s ease-in-out infinite' } }, summary: 'Add animation' };
+    for (const cmd of UI_MISC_COMMANDS) {
+      if (cmd.pattern.test(lower)) return { intent: 'preview', patch: cmd.patch, summary: cmd.summary };
     }
 
     return null;

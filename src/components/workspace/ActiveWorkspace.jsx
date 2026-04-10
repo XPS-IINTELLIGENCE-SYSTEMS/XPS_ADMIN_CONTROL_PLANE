@@ -656,15 +656,16 @@ function EmptyState({ createObject, setActive }) {
     { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
     { label: 'New Data Object',  type: OBJ_TYPE.DATA,    title: 'Untitled Data',   content: '' },
     { label: 'New Log',          type: OBJ_TYPE.LOG,     title: 'Run Log',         content: '' },
-    { label: 'New UI Canvas',    type: OBJ_TYPE.UI,      title: 'UI Editor Canvas', content: 'Editable UI canvas', meta: (() => {
+    { label: 'New UI Canvas',    type: OBJ_TYPE.UI,      title: 'UI Editor Canvas', content: 'Editable UI canvas', buildMeta: () => {
       const initial = createDefaultUiState();
       return { uiEditor: true, uiState: initial, history: [createHistoryEntry(initial, 'Initial UI state', 'seed')] };
-    })() },
+    } },
   ];
 
   const handleCreate = (action) => {
     const id = genId();
-    createObject({ id, type: action.type, title: action.title, content: action.content, status: RUN_STATUS.IDLE, meta: action.meta });
+    const meta = action.buildMeta ? action.buildMeta() : action.meta;
+    createObject({ id, type: action.type, title: action.title, content: action.content, status: RUN_STATUS.IDLE, meta });
     setActive(id);
   };
 
@@ -781,7 +782,15 @@ function UIBody({ obj }) {
   const appliedState = normalizeUiState(obj.meta?.uiState || DEFAULT_UI_STATE);
   const previewState = obj.meta?.preview?.state ? normalizeUiState(obj.meta.preview.state) : null;
   const activeState = previewState || appliedState;
-  const activeStateKey = JSON.stringify(activeState);
+  const activeStateKey = [
+    activeState.theme.primaryColor,
+    activeState.theme.accentColor,
+    activeState.theme.background,
+    activeState.theme.fontFamily,
+    activeState.theme.borderRadius,
+    activeState.components.map(c => c.id).join('|'),
+    previewState ? 'preview' : 'applied',
+  ].join('|');
   const history = Array.isArray(obj.meta?.history) ? obj.meta.history : [];
 
   useEffect(() => {
