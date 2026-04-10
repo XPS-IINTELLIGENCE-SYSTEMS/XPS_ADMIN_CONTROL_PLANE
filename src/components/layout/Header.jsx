@@ -80,7 +80,7 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <BrandLogo />
-        <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1.2, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+        <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1.2, whiteSpace: 'nowrap' }}>
           XPS
         </span>
       </div>
