@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Plug, Ban, Package, Link, Camera, Image, Archive, Zap, FileImage, FileText } from 'lucide-react';
 import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../lib/workspaceEngine.jsx';
 
 const GOLD   = '#d4a843';
@@ -958,8 +959,8 @@ function ConnectorActionBody({ obj }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, letterSpacing: 1, textTransform: 'uppercase' }}>
-            🔌 CONNECTOR ACTION {running && '· running…'}
+          <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, letterSpacing: 1, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Plug size={11} style={{ flexShrink: 0 }} /> CONNECTOR ACTION {running && '· running…'}
           </span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: modeColor(mode), fontWeight: 600 }}>
             {mode.toUpperCase()}
@@ -971,7 +972,7 @@ function ConnectorActionBody({ obj }) {
             {Object.entries(connectors).map(([name, info]) => (
               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 10, color: info.mode === 'live' ? GREEN : info.mode === 'blocked' ? RED : '#fbbf24' }}>
-                  {info.mode === 'live' ? '✓' : info.mode === 'blocked' ? '⛔' : '~'}
+                  {info.mode === 'live' ? '✓' : info.mode === 'blocked' ? 'X' : '~'}
                 </span>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{name}</span>
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{info.status}</span>
@@ -1089,8 +1090,8 @@ function AgentRunBody({ obj }) {
             </div>
             {artifacts.map((art, i) => (
               <div key={i} style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: '#c084fc', fontWeight: 600, marginBottom: 4 }}>
-                  📦 {art.title || `Artifact ${i + 1}`} <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({art.type})</span>
+                <div style={{ fontSize: 11, color: '#c084fc', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Package size={11} style={{ flexShrink: 0 }} /> {art.title || `Artifact ${i + 1}`} <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}>({art.type})</span>
                 </div>
                 {art.content && (
                   <div style={{
@@ -1174,8 +1175,8 @@ function RuntimeStateBody({ obj }) {
         {/* Blocked capabilities */}
         {blocked.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 10, color: RED, letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase' }}>
-              ⛔ Blocked Capabilities ({blocked.length})
+            <div style={{ fontSize: 10, color: RED, letterSpacing: 0.8, marginBottom: 8, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Ban size={10} style={{ flexShrink: 0 }} /> Blocked Capabilities ({blocked.length})
             </div>
             {blocked.map((b, i) => (
               <div key={i} style={{
@@ -1235,8 +1236,8 @@ function BrowserSessionBody({ obj }) {
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase', letterSpacing: 0.8 }}>{mode}</span>
         </div>
         {meta.url && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, wordBreak: 'break-all' }}>
-            🔗 {meta.url}
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, wordBreak: 'break-all', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
+            <Link size={10} style={{ marginTop: 1, flexShrink: 0 }} /> {meta.url}
           </div>
         )}
         {meta.action && (
@@ -1252,7 +1253,7 @@ function BrowserSessionBody({ obj }) {
             padding: '12px 14px',
             marginBottom: 14,
           }}>
-            <div style={{ fontSize: 12, color: '#fca5a5', fontWeight: 700, marginBottom: 6 }}>⛔ Browser Automation Blocked</div>
+            <div style={{ fontSize: 12, color: '#fca5a5', fontWeight: 700, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><Ban size={12} style={{ flexShrink: 0 }} /> Browser Automation Blocked</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
               Playwright cannot run inside Vercel serverless functions.<br />
               To enable: set <code style={{ color: GOLD }}>BROWSER_WORKER_URL</code> to a local Playwright worker.
@@ -1290,12 +1291,12 @@ function BrowserResultBody({ obj }) {
       <div style={{ maxWidth: 800 }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>📸</span>
+          <Camera size={18} style={{ color: GOLD, flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Browser Result</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase' }}>{mode}</span>
         </div>
         {meta.url && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all' }}>🔗 {meta.url}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all', display: 'flex', alignItems: 'flex-start', gap: 5 }}><Link size={10} style={{ marginTop: 1, flexShrink: 0 }} /> {meta.url}</div>
         )}
 
         {/* Screenshot slot */}
@@ -1309,13 +1310,13 @@ function BrowserResultBody({ obj }) {
           alignItems: 'center',
           gap: 12,
         }}>
-          <span style={{ fontSize: 24 }}>🖼️</span>
+          <Image size={24} style={{ color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Screenshot</div>
             {meta.screenshot_url
               ? <img src={meta.screenshot_url} alt="screenshot" style={{ maxWidth: '100%', marginTop: 8, borderRadius: 6 }} />
               : <div style={{ fontSize: 10, color: mode === 'blocked' ? '#fca5a5' : 'rgba(255,255,255,0.3)', marginTop: 4 }}>
-                  {mode === 'blocked' ? '⛔ Screenshot blocked — no browser worker' : 'No screenshot captured'}
+                  {mode === 'blocked' ? 'Screenshot blocked — no browser worker' : 'No screenshot captured'}
                 </div>
             }
           </div>
@@ -1367,11 +1368,11 @@ function PageSnapshotBody({ obj }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
       <div style={{ maxWidth: 800 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>🖼️</span>
+          <Image size={18} style={{ color: GOLD, flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Page Snapshot</span>
         </div>
         {meta.url && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all' }}>🔗 {meta.url}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all', display: 'flex', alignItems: 'flex-start', gap: 5 }}><Link size={10} style={{ marginTop: 1, flexShrink: 0 }} /> {meta.url}</div>
         )}
         {meta.raw_html_length && (
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 10 }}>
@@ -1405,7 +1406,7 @@ function EvidenceBundleBody({ obj }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
       <div style={{ maxWidth: 750 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>🗂️</span>
+          <Archive size={18} style={{ color: GOLD, flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Evidence Bundle</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
         </div>
@@ -1425,7 +1426,7 @@ function EvidenceBundleBody({ obj }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <span style={{ fontSize: 14, marginTop: 2 }}>
-                {item.source_type === 'image' ? '🖼️' : item.source_type === 'pdf' ? '📄' : '🔗'}
+                {item.source_type === 'image' ? <FileImage size={14} style={{ color: 'rgba(255,255,255,0.4)' }} /> : item.source_type === 'pdf' ? <FileText size={14} style={{ color: 'rgba(255,255,255,0.4)' }} /> : <Link size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {item.title && (
@@ -1468,7 +1469,7 @@ function ParallelRunGroupBody({ obj }) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
       <div style={{ maxWidth: 750 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>⚡</span>
+          <Zap size={18} style={{ color: GOLD, flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Parallel Run Group</span>
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{done}/{total} done</span>
         </div>
