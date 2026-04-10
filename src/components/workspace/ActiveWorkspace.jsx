@@ -9,8 +9,14 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Plug, Ban, Package, Link, Camera, Image, Archive, Zap, FileImage, FileText } from 'lucide-react';
+import {
+  Plug, Ban, Package, Link, Camera, Image, Archive, Zap, FileImage, FileText,
+  Palette, MoveUp, MoveDown, Trash2, CheckCircle, XCircle, Plus, LayoutGrid,
+} from 'lucide-react';
 import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../lib/workspaceEngine.jsx';
+import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, createHistoryEntry, createDefaultUiState } from '../../lib/uiMutations.js';
+import { persistUiPreview, persistUiVersion, persistUiRollback } from '../../lib/supabasePersistence.js';
+import { getGovernance, subscribeGovernance } from '../../lib/governance.js';
 
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
@@ -650,11 +656,16 @@ function EmptyState({ createObject, setActive }) {
     { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
     { label: 'New Data Object',  type: OBJ_TYPE.DATA,    title: 'Untitled Data',   content: '' },
     { label: 'New Log',          type: OBJ_TYPE.LOG,     title: 'Run Log',         content: '' },
+    { label: 'New UI Canvas',    type: OBJ_TYPE.UI,      title: 'UI Editor Canvas', content: 'Editable UI canvas', buildMeta: () => {
+      const initial = createDefaultUiState();
+      return { uiEditor: true, uiState: initial, history: [createHistoryEntry(initial, 'Initial UI state', 'seed')] };
+    } },
   ];
 
   const handleCreate = (action) => {
     const id = genId();
-    createObject({ id, type: action.type, title: action.title, content: action.content, status: RUN_STATUS.IDLE });
+    const meta = action.buildMeta ? action.buildMeta() : action.meta;
+    createObject({ id, type: action.type, title: action.title, content: action.content, status: RUN_STATUS.IDLE, meta });
     setActive(id);
   };
 
@@ -745,83 +756,600 @@ function EmptyState({ createObject, setActive }) {
 // ── UI/Component body ─────────────────────────────────────────────────────────
 
 function UIBody({ obj }) {
-  const { updateObject } = useWorkspace();
+  const { updateObject, patchObject, createObject } = useWorkspace();
   const running = obj.status === RUN_STATUS.RUNNING;
   const [tab, setTab] = useState('code');
+  const [editorView, setEditorView] = useState('canvas');
+  const [selectedComponentId, setSelectedComponentId] = useState(null);
+  const [draftState, setDraftState] = useState(normalizeUiState(obj.meta?.uiState || DEFAULT_UI_STATE));
+  const [notice, setNotice] = useState(null);
+  const [governance, setGovernanceState] = useState(getGovernance());
+  const isEditor = obj.meta?.uiEditor || obj.meta?.uiState;
 
-  // Detect HTML content for live preview
+  useEffect(() => {
+    const unsub = subscribeGovernance(setGovernanceState);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (isEditor && !obj.meta?.uiState) {
+      const initial = createDefaultUiState();
+      const history = [createHistoryEntry(initial, 'Initial UI state', 'seed')];
+      patchObject(obj.id, { meta: { ...obj.meta, uiEditor: true, uiState: initial, history } });
+    }
+  }, [isEditor, obj.id, obj.meta?.uiState]);
+
+  const appliedState = normalizeUiState(obj.meta?.uiState || DEFAULT_UI_STATE);
+  const previewState = obj.meta?.preview?.state ? normalizeUiState(obj.meta.preview.state) : null;
+  const activeState = previewState || appliedState;
+  const activeStateKey = [
+    activeState.theme.primaryColor,
+    activeState.theme.accentColor,
+    activeState.theme.background,
+    activeState.theme.fontFamily,
+    activeState.theme.borderRadius,
+    activeState.components.map(c => c.id).join('|'),
+    previewState ? 'preview' : 'applied',
+  ].join('|');
+  const history = Array.isArray(obj.meta?.history) ? obj.meta.history : [];
+
+  useEffect(() => {
+    if (isEditor) {
+      setDraftState(activeState);
+    }
+  }, [isEditor, obj.updatedAt, obj.meta?.preview?.id, activeStateKey]);
+
+  useEffect(() => {
+    if (!isEditor) return;
+    if (!selectedComponentId || !draftState.components.find(c => c.id === selectedComponentId)) {
+      setSelectedComponentId(draftState.components[0]?.id || null);
+    }
+  }, [isEditor, draftState.components, selectedComponentId]);
+
+  const selectedComponent = draftState.components.find(c => c.id === selectedComponentId);
+  const hasPreview = !!previewState;
+  const previewMeta = obj.meta?.preview;
+
+  const updateTheme = (patch) => {
+    setDraftState(prev => applyUiPatch(prev, { theme: patch }));
+    setNotice(null);
+  };
+
+  const updateComponent = (patch) => {
+    if (!selectedComponentId) return;
+    setDraftState(prev => applyUiPatch(prev, { updateComponent: { id: selectedComponentId, patch } }));
+    setNotice(null);
+  };
+
+  const addComponent = (type) => {
+    setDraftState(prev => applyUiPatch(prev, { addComponent: type }));
+    setNotice(null);
+  };
+
+  const moveComponent = (direction) => {
+    if (!selectedComponentId) return;
+    setDraftState(prev => applyUiPatch(prev, { moveComponent: { id: selectedComponentId, direction } }));
+    setNotice(null);
+  };
+
+  const removeComponent = () => {
+    if (!selectedComponentId) return;
+    setDraftState(prev => applyUiPatch(prev, { removeComponentId: selectedComponentId }));
+    setSelectedComponentId(null);
+    setNotice(null);
+  };
+
+  const createPreview = (state, summary, source = 'manual') => {
+    const previewId = genId();
+    const nextPreview = {
+      id: previewId,
+      summary,
+      source,
+      createdAt: new Date().toISOString(),
+      state,
+    };
+    patchObject(obj.id, {
+      meta: {
+        ...obj.meta,
+        uiEditor: true,
+        uiState: appliedState,
+        history: history.length ? history : [createHistoryEntry(appliedState, 'Initial UI state', 'seed')],
+        preview: nextPreview,
+      },
+    });
+    createObject({
+      type: OBJ_TYPE.PREVIEW,
+      title: `UI Preview — ${summary}`,
+      content: summary,
+      status: RUN_STATUS.IDLE,
+      meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source },
+    });
+    persistUiPreview({ previewId, targetId: obj.id, state, summary, source }).catch(() => {});
+    setEditorView('preview');
+  };
+
+  const handlePreview = () => {
+    if (!governance.allowUiEdits) {
+      setNotice('UI edits are blocked by governance.');
+      return;
+    }
+    createPreview(draftState, 'Manual UI preview', 'manual');
+  };
+
+  const handleApply = () => {
+    if (governance.previewOnly || governance.requireApproval) {
+      setNotice('Apply blocked by governance (preview-only or approval required).');
+      return;
+    }
+    if (!previewMeta?.state) {
+      setNotice('No preview ready to apply.');
+      return;
+    }
+    const nextState = normalizeUiState(previewMeta.state);
+    const updatedHistory = [...history, createHistoryEntry(nextState, previewMeta.summary || 'Apply preview', previewMeta.source || 'manual')];
+    patchObject(obj.id, {
+      meta: { ...obj.meta, uiState: nextState, history: updatedHistory, preview: null },
+    });
+    const latest = updatedHistory[updatedHistory.length - 1];
+    persistUiVersion({
+      versionId: latest.id,
+      targetId: obj.id,
+      state: nextState,
+      summary: latest.summary,
+      source: latest.source,
+    }).catch(() => {});
+    if (previewMeta.source === 'rollback' && updatedHistory.length > 1) {
+      persistUiRollback({
+        rollbackId: genId(),
+        targetId: obj.id,
+        fromVersion: updatedHistory[updatedHistory.length - 2]?.id,
+        toVersion: latest.id,
+        summary: latest.summary,
+      }).catch(() => {});
+    }
+    setNotice('Preview applied. Rollback available.');
+  };
+
+  const handleCancelPreview = () => {
+    patchObject(obj.id, { meta: { ...obj.meta, preview: null } });
+    setNotice('Preview cancelled.');
+  };
+
+  const handleRollbackPreview = (entry) => {
+    if (!entry?.state) return;
+    createPreview(normalizeUiState(entry.state), `Rollback to ${entry.summary || entry.id}`, 'rollback');
+  };
+
+  // Detect HTML content for live preview (non-editor UI objects)
   const hasHtml = obj.content.includes('<') && (obj.content.includes('</') || obj.content.includes('/>'));
   const codeContent = obj.content.replace(/^```\w*\n?/, '').replace(/```$/, '');
 
+  if (!isEditor) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* Tab strip */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          padding: '6px 14px',
+          background: '#1a1a1a',
+          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: 5, marginRight: 12 }}>
+            {['#f87171', '#fbbf24', '#4ade80'].map(c => (
+              <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c, opacity: 0.7 }} />
+            ))}
+          </div>
+          {['code', 'preview'].map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              background: tab === t ? 'rgba(255,255,255,0.08)' : 'none',
+              border: 'none',
+              color: tab === t ? '#fff' : 'rgba(255,255,255,0.4)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: 0.8,
+              padding: '4px 10px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}>
+              {t}
+            </button>
+          ))}
+          {running && <RunningPulse />}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
+            {obj.agent ? `${obj.agent} · ` : ''}ui output
+          </span>
+        </div>
+
+        {running && !obj.content ? (
+          <RunningPlaceholder label="Building UI…" />
+        ) : tab === 'preview' && hasHtml ? (
+          <div style={{ flex: 1, overflow: 'hidden', padding: '16px 20px', background: '#fff' }}>
+            <iframe
+              srcDoc={codeContent}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              sandbox="allow-scripts"
+              title="UI Preview"
+            />
+          </div>
+        ) : (
+          <textarea
+            value={obj.content}
+            onChange={e => updateObject(obj.id, e.target.value)}
+            spellCheck={false}
+            style={{
+              flex: 1,
+              background: '#0e0e16',
+              border: 'none',
+              color: '#c9b1ff',
+              fontSize: 13,
+              fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace",
+              padding: '14px 18px',
+              resize: 'none',
+              lineHeight: 1.7,
+              outline: 'none',
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Tab strip */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 1,
-        padding: '6px 14px',
-        background: '#1a1a1a',
+        gap: 8,
+        padding: '8px 14px',
+        background: '#111',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', gap: 5, marginRight: 12 }}>
-          {['#f87171', '#fbbf24', '#4ade80'].map(c => (
-            <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c, opacity: 0.7 }} />
-          ))}
-        </div>
-        {['code', 'preview'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            background: tab === t ? 'rgba(255,255,255,0.08)' : 'none',
-            border: 'none',
-            color: tab === t ? '#fff' : 'rgba(255,255,255,0.4)',
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 0.8,
-            padding: '4px 10px',
-            borderRadius: 4,
-            cursor: 'pointer',
-            textTransform: 'uppercase',
-          }}>
-            {t}
-          </button>
-        ))}
-        {running && <RunningPulse />}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
-          {obj.agent ? `${obj.agent} · ` : ''}ui output
+        <LayoutGrid size={14} style={{ color: GOLD }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+          UI Editor {hasPreview && '· Preview Pending'}
         </span>
+        {hasPreview && <span style={{ fontSize: 10, color: '#fbbf24', marginLeft: 6 }}>Confirm to apply</span>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button onClick={() => setEditorView('canvas')} style={editorTabStyle(editorView === 'canvas')}>Canvas</button>
+          <button onClick={() => setEditorView('preview')} style={editorTabStyle(editorView === 'preview')}>Preview</button>
+          <button onClick={() => setEditorView('history')} style={editorTabStyle(editorView === 'history')}>History</button>
+        </div>
       </div>
 
-      {running && !obj.content ? (
-        <RunningPlaceholder label="Building UI…" />
-      ) : tab === 'preview' && hasHtml ? (
-        <div style={{ flex: 1, overflow: 'hidden', padding: '16px 20px', background: '#fff' }}>
-          <iframe
-            srcDoc={codeContent}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            sandbox="allow-scripts"
-            title="UI Preview"
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', overflow: 'hidden' }}>
+        <div style={{ background: (editorView === 'preview' ? (previewState || draftState) : draftState).theme.background, padding: 18, overflow: 'auto' }}>
+          <UiCanvas
+            state={editorView === 'preview' ? (previewState || draftState) : draftState}
+            selectedId={selectedComponentId}
+            onSelect={setSelectedComponentId}
+            previewMode={hasPreview}
           />
         </div>
-      ) : (
-        <textarea
-          value={obj.content}
-          onChange={e => updateObject(obj.id, e.target.value)}
-          spellCheck={false}
-          style={{
-            flex: 1,
-            background: '#0e0e16',
-            border: 'none',
-            color: '#c9b1ff',
-            fontSize: 13,
-            fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace",
-            padding: '14px 18px',
-            resize: 'none',
-            lineHeight: 1.7,
-            outline: 'none',
-          }}
-        />
+
+        <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', background: '#0f0f0f', overflowY: 'auto' }}>
+          {editorView === 'history' ? (
+            <div style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 0.8, marginBottom: 10, textTransform: 'uppercase' }}>
+                Version History
+              </div>
+              {history.length === 0 && (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>No versions yet.</div>
+              )}
+              {history.slice().reverse().map(entry => (
+                <div key={entry.id} style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  marginBottom: 8,
+                }}>
+                  <div style={{ fontSize: 11, color: '#e2e8f0', fontWeight: 600 }}>{entry.summary}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>{new Date(entry.ts).toLocaleString()}</div>
+                  <button
+                    onClick={() => handleRollbackPreview(entry)}
+                    className="xps-electric-hover"
+                    style={{
+                      marginTop: 6,
+                      padding: '4px 8px',
+                      fontSize: 10,
+                      borderRadius: 6,
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      color: '#ef4444',
+                      background: 'rgba(239,68,68,0.08)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Rollback Preview
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Theme</div>
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Primary</label>
+                <input type="color" value={draftState.theme.primaryColor} onChange={e => updateTheme({ primaryColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Accent</label>
+                <input type="color" value={draftState.theme.accentColor} onChange={e => updateTheme({ accentColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Background</label>
+                <input type="color" value={draftState.theme.background} onChange={e => updateTheme({ background: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Font</label>
+                <input
+                  value={draftState.theme.fontFamily}
+                  onChange={e => updateTheme({ fontFamily: e.target.value })}
+                  style={editorInputStyle}
+                />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 8, display: 'block' }}>Border Radius</label>
+                <input
+                  type="number"
+                  value={draftState.theme.borderRadius}
+                  onChange={e => updateTheme({ borderRadius: Number(e.target.value) })}
+                  style={editorInputStyle}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Components</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {['section', 'card', 'button', 'tabs'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => addComponent(type)}
+                      className="xps-electric-hover"
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: 10,
+                        borderRadius: 6,
+                        border: '1px solid rgba(212,168,67,0.3)',
+                        background: 'rgba(212,168,67,0.12)',
+                        color: GOLD,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Plus size={10} style={{ marginRight: 4 }} /> {type}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedComponent ? (
+                  <div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
+                      Editing: {selectedComponent.type}
+                    </div>
+                    {(selectedComponent.type === 'card' || selectedComponent.type === 'section') && (
+                      <>
+                        <input
+                          value={selectedComponent.title || ''}
+                          onChange={e => updateComponent({ title: e.target.value })}
+                          placeholder="Title"
+                          style={editorInputStyle}
+                        />
+                        <textarea
+                          value={selectedComponent.body || ''}
+                          onChange={e => updateComponent({ body: e.target.value })}
+                          placeholder="Body"
+                          style={{ ...editorInputStyle, minHeight: 60 }}
+                        />
+                      </>
+                    )}
+                    {selectedComponent.type === 'button' && (
+                      <input
+                        value={selectedComponent.label || ''}
+                        onChange={e => updateComponent({ label: e.target.value })}
+                        placeholder="Button label"
+                        style={editorInputStyle}
+                      />
+                    )}
+                    {selectedComponent.type === 'tabs' && (
+                      <input
+                        value={(selectedComponent.tabs || []).join(', ')}
+                        onChange={e => updateComponent({ tabs: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
+                        placeholder="Tabs (comma separated)"
+                        style={editorInputStyle}
+                      />
+                    )}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <button onClick={() => moveComponent(-1)} style={miniActionStyle}><MoveUp size={12} /></button>
+                      <button onClick={() => moveComponent(1)} style={miniActionStyle}><MoveDown size={12} /></button>
+                      <button onClick={removeComponent} style={{ ...miniActionStyle, color: '#ef4444' }}><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Select a component to edit.</div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {!hasPreview && (
+                  <button onClick={handlePreview} className="xps-electric-hover" style={primaryActionStyle}>
+                    <CheckCircle size={12} /> Preview Changes
+                  </button>
+                )}
+                {hasPreview && (
+                  <>
+                    <button onClick={handleApply} className="xps-electric-hover" style={primaryActionStyle}>
+                      <CheckCircle size={12} /> Apply Preview
+                    </button>
+                    <button onClick={handleCancelPreview} className="xps-electric-hover" style={secondaryActionStyle}>
+                      <XCircle size={12} /> Cancel Preview
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {notice && (
+                <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                  {notice}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const editorInputStyle = {
+  width: '100%',
+  padding: '7px 9px',
+  borderRadius: 7,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#e2e8f0',
+  fontSize: 11,
+  marginBottom: 8,
+};
+
+const editorTabStyle = (active) => ({
+  background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 6,
+  color: active ? '#fff' : 'rgba(255,255,255,0.45)',
+  fontSize: 10,
+  fontWeight: 600,
+  padding: '4px 8px',
+  cursor: 'pointer',
+});
+
+const miniActionStyle = {
+  width: 26,
+  height: 26,
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.05)',
+  color: 'rgba(255,255,255,0.7)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+};
+
+const primaryActionStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid rgba(74,222,128,0.4)',
+  background: 'rgba(74,222,128,0.12)',
+  color: '#4ade80',
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+const secondaryActionStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid rgba(239,68,68,0.3)',
+  background: 'rgba(239,68,68,0.08)',
+  color: '#ef4444',
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+function UiCanvas({ state, selectedId, onSelect, previewMode }) {
+  const theme = state.theme;
+  return (
+    <div style={{
+      background: theme.surface,
+      borderRadius: theme.borderRadius,
+      border: `${theme.borderWidth}px ${theme.borderStyle} ${theme.borderColor}`,
+      padding: 18,
+      boxShadow: theme.shadow,
+      fontFamily: theme.fontFamily,
+      color: theme.textColor,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 14,
+      transition: 'all 0.2s ease',
+    }}>
+      {previewMode && (
+        <div style={{ fontSize: 10, color: '#fbbf24', letterSpacing: 0.6, textTransform: 'uppercase' }}>
+          Preview Mode
+        </div>
       )}
+      {state.components.map(component => {
+        const isSelected = component.id === selectedId;
+        const baseStyle = {
+          borderRadius: theme.borderRadius - 2,
+          border: isSelected ? `1px solid ${theme.primaryColor}` : `1px solid ${theme.borderColor}`,
+          padding: 12,
+          background: component.type === 'card' ? theme.gradient : 'rgba(255,255,255,0.03)',
+          cursor: 'pointer',
+        };
+        if (component.type === 'section') {
+          return (
+            <div key={component.id} style={baseStyle} onClick={() => onSelect?.(component.id)}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.primaryColor, marginBottom: 4 }}>{component.title}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{component.body}</div>
+            </div>
+          );
+        }
+        if (component.type === 'card') {
+          return (
+            <div key={component.id} style={baseStyle} onClick={() => onSelect?.(component.id)}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{component.title}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{component.body}</div>
+            </div>
+          );
+        }
+        if (component.type === 'button') {
+          return (
+            <button
+              key={component.id}
+              onClick={() => onSelect?.(component.id)}
+              style={{
+                alignSelf: 'flex-start',
+                padding: '8px 16px',
+                borderRadius: theme.borderRadius,
+                border: `1px solid ${theme.primaryColor}`,
+                background: theme.primaryColor,
+                color: '#0a0a0a',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {component.label}
+            </button>
+          );
+        }
+        if (component.type === 'tabs') {
+          return (
+            <div key={component.id} style={{ display: 'flex', gap: 6 }} onClick={() => onSelect?.(component.id)}>
+              {(component.tabs || []).map((tab, idx) => (
+                <div
+                  key={tab}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    border: `1px solid ${idx === component.active ? theme.primaryColor : theme.borderColor}`,
+                    color: idx === component.active ? theme.primaryColor : 'rgba(255,255,255,0.6)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  {tab}
+                </div>
+              ))}
+            </div>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 }
@@ -829,8 +1357,88 @@ function UIBody({ obj }) {
 // ── Preview body ──────────────────────────────────────────────────────────────
 
 function PreviewBody({ obj }) {
+  const { objects, patchObject } = useWorkspace();
+  const [governance, setGovernanceState] = useState(getGovernance());
+  useEffect(() => {
+    const unsub = subscribeGovernance(setGovernanceState);
+    return unsub;
+  }, []);
+
   const running = obj.status === RUN_STATUS.RUNNING;
   const url = obj.meta?.url || (obj.content.startsWith('http') ? obj.content.trim() : null);
+  const meta = obj.meta || {};
+
+  if (meta.previewType === 'ui') {
+    const target = objects.find(o => o.id === meta.targetId);
+    const previewState = normalizeUiState(meta.state || target?.meta?.preview?.state || DEFAULT_UI_STATE);
+    const history = Array.isArray(target?.meta?.history) ? target.meta.history : [];
+    const summary = meta.summary || target?.meta?.preview?.summary || 'UI preview';
+    const canApply = !!target && !governance.previewOnly && !governance.requireApproval;
+
+    const handleApply = () => {
+      if (!target) return;
+      if (!canApply) return;
+      const updatedHistory = [...history, createHistoryEntry(previewState, summary, meta.source || 'preview')];
+      patchObject(target.id, {
+        meta: {
+          ...target.meta,
+          uiState: previewState,
+          history: updatedHistory,
+          preview: null,
+        },
+      });
+      const latest = updatedHistory[updatedHistory.length - 1];
+      persistUiVersion({
+        versionId: latest.id,
+        targetId: target.id,
+        state: previewState,
+        summary: latest.summary,
+        source: latest.source,
+      }).catch(() => {});
+      if (meta.source === 'rollback' && updatedHistory.length > 1) {
+        persistUiRollback({
+          rollbackId: genId(),
+          targetId: target.id,
+          fromVersion: updatedHistory[updatedHistory.length - 2]?.id,
+          toVersion: latest.id,
+          summary: latest.summary,
+        }).catch(() => {});
+      }
+      patchObject(obj.id, { status: RUN_STATUS.DONE, meta: { ...meta, applied: true } });
+    };
+
+    const handleCancel = () => {
+      if (target) patchObject(target.id, { meta: { ...target.meta, preview: null } });
+      patchObject(obj.id, { status: RUN_STATUS.CANCELLED, meta: { ...meta, cancelled: true } });
+    };
+
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+          background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
+        }}>
+          <Palette size={13} style={{ color: '#a78bfa' }} />
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>UI Preview</span>
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>{summary}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: canApply ? '#4ade80' : '#fbbf24' }}>
+            {canApply ? 'READY' : 'PREVIEW ONLY'}
+          </span>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 18, background: previewState.theme.background }}>
+          <UiCanvas state={previewState} previewMode />
+        </div>
+        <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', gap: 8 }}>
+          <button onClick={handleApply} disabled={!canApply} style={{ ...primaryActionStyle, opacity: canApply ? 1 : 0.5 }}>
+            <CheckCircle size={12} /> Confirm Apply
+          </button>
+          <button onClick={handleCancel} style={secondaryActionStyle}>
+            <XCircle size={12} /> Cancel Preview
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1384,8 +1992,25 @@ function BrowserSessionBody({ obj }) {
 }
 
 function BrowserResultBody({ obj }) {
+  const { createObject } = useWorkspace();
   const meta = obj.meta || {};
   const mode = meta.mode || 'blocked';
+  const handleAddToUi = () => {
+    const uiState = createDefaultUiState();
+    const summary = meta.extracted_text || obj.content || 'Browser resource';
+    uiState.components = [
+      { id: genId(), type: 'section', title: 'Resource Intake', body: meta.url || 'Resource link' },
+      { id: genId(), type: 'card', title: meta.url ? 'Connected Resource' : 'Browser Result', body: summary.slice(0, 180) },
+      { id: genId(), type: 'button', label: 'Open Resource', variant: 'primary' },
+    ];
+    createObject({
+      type: OBJ_TYPE.UI,
+      title: `Resource UI — ${meta.url ? meta.url.slice(0, 30) : 'Browser Result'}`,
+      content: 'Resource UI canvas',
+      status: RUN_STATUS.IDLE,
+      meta: { uiEditor: true, uiState, history: [createHistoryEntry(uiState, 'Resource import', 'browser')] },
+    });
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -1395,6 +2020,24 @@ function BrowserResultBody({ obj }) {
           <Camera size={18} style={{ color: GOLD, flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Browser Result</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase' }}>{mode}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            onClick={handleAddToUi}
+            className="xps-electric-hover"
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(212,168,67,0.3)',
+              background: 'rgba(212,168,67,0.12)',
+              color: GOLD,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            + Create UI from Resource
+          </button>
         </div>
         {meta.url && (
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, wordBreak: 'break-all', display: 'flex', alignItems: 'flex-start', gap: 5 }}><Link size={10} style={{ marginTop: 1, flexShrink: 0 }} /> {meta.url}</div>

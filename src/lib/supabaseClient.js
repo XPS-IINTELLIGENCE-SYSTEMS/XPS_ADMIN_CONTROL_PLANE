@@ -28,6 +28,24 @@ export async function signIn(email, password) {
   return data
 }
 
+export async function signInWithProvider(provider, redirectTo) {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: redirectTo ? { redirectTo } : undefined,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function signInWithEmail(email, redirectTo) {
+  const { data, error } = await supabase.auth.signInWithOtp({
+    email,
+    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut()
   if (error) throw error
