@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Panel from '../components/ui/Panel.jsx';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
 import { leads } from '../data/synthetic.js';
-import { Search, Plus, Filter, Star, MapPin } from 'lucide-react';
+import { Search, Plus, Filter, Star, MapPin, Building } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
@@ -100,8 +100,10 @@ export default function Leads() {
               <div style={{
                 width: 32, height: 32, borderRadius: 6, background: 'var(--bg-card-alt)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, border: '1px solid var(--border)', flexShrink: 0,
-              }}>🏢</div>
+                border: '1px solid var(--border)', flexShrink: 0,
+              }}>
+                <Building size={14} className="xps-icon" />
+              </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{lead.company}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>

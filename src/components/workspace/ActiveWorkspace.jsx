@@ -15,6 +15,7 @@ import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
 const GREEN  = '#4ade80';
+const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
 
 // ── Status dot colours ────────────────────────────────────────────────────────
 
@@ -566,15 +567,18 @@ function EmptyState({ createObject, setActive }) {
       alignItems: 'center', justifyContent: 'center',
       gap: 18, padding: 40,
     }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: 18,
-        background: 'rgba(212,168,67,0.07)', border: '1px solid rgba(212,168,67,0.18)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28, color: 'rgba(196,158,60,0.5)', fontWeight: 800, letterSpacing: -2,
-        overflow: 'hidden', position: 'relative',
-      }}>
-        <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 18, opacity: 0.12 }} />
-        <span style={{ position: 'relative', zIndex: 1 }}>XPS</span>
+      <div
+        className="xps-logo xps-electric-border"
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 18,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
 
       <div style={{ textAlign: 'center', maxWidth: 440 }}>

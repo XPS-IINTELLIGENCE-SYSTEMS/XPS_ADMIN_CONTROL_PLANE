@@ -3,6 +3,7 @@ import StatCard from '../components/ui/StatCard.jsx';
 import Panel from '../components/ui/Panel.jsx';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
 import { crmStats, pipelineStages } from '../data/synthetic.js';
+import { Users } from 'lucide-react';
 
 export default function CRM() {
   return (
@@ -36,7 +37,9 @@ export default function CRM() {
       {/* Recent contacts placeholder */}
       <Panel title="Recent Contacts" subtitle="Latest activity across all contacts">
         <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '32px 0' }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>👥</div>
+          <div style={{ marginBottom: 10 }}>
+            <Users size={28} className="xps-icon" />
+          </div>
           Connect HubSpot or Google Sheets to load live contact data.
           <br /><span style={{ fontSize: 11, marginTop: 4, display: 'block' }}>Status: <strong>missing</strong> — no connector active</span>
         </div>

@@ -5,7 +5,7 @@ export const connectors = [
   {
     id: 'github',
     name: 'GitHub',
-    icon: '⌨',
+    icon: 'git-branch',
     category: 'Source Control',
     status: 'referenced_only',
     role: 'Source storage, versioned docs, code repos',
@@ -15,7 +15,7 @@ export const connectors = [
   {
     id: 'vercel',
     name: 'Vercel',
-    icon: '▲',
+    icon: 'cloud',
     category: 'Deployment',
     status: 'referenced_only',
     role: 'Deployment and runtime frontend',
@@ -25,7 +25,7 @@ export const connectors = [
   {
     id: 'google_drive',
     name: 'Google Drive',
-    icon: '🗂',
+    icon: 'folder',
     category: 'Storage',
     status: 'missing',
     role: 'Docs, archives, fallback drops, package storage',
@@ -35,7 +35,7 @@ export const connectors = [
   {
     id: 'google_sheets',
     name: 'Google Sheets',
-    icon: '📊',
+    icon: 'table',
     category: 'Control Plane',
     status: 'missing',
     role: 'Workbook control plane, logs, backlog, import-ready control',
@@ -45,7 +45,7 @@ export const connectors = [
   {
     id: 'hubspot',
     name: 'HubSpot',
-    icon: '🔶',
+    icon: 'hexagon',
     category: 'CRM',
     status: 'blocked',
     role: 'Final CRM execution only',
@@ -55,7 +55,7 @@ export const connectors = [
   {
     id: 'airtable',
     name: 'Airtable',
-    icon: '🟦',
+    icon: 'grid',
     category: 'Staging',
     status: 'missing',
     role: 'Staging mirror',
@@ -65,7 +65,7 @@ export const connectors = [
   {
     id: 'gmail',
     name: 'Gmail',
-    icon: '✉',
+    icon: 'mail',
     category: 'Communication',
     status: 'missing',
     role: 'Summaries, alerts, blocker notices',
@@ -75,7 +75,7 @@ export const connectors = [
   {
     id: 'google_calendar',
     name: 'Google Calendar',
-    icon: '📅',
+    icon: 'calendar',
     category: 'Scheduling',
     status: 'missing',
     role: 'Cadence and schedule surface',
@@ -85,7 +85,7 @@ export const connectors = [
   {
     id: 'base44',
     name: 'Base44',
-    icon: '🔷',
+    icon: 'layers',
     category: 'Internal Tooling',
     status: 'referenced_only',
     role: 'Rapid internal tooling / prototypes',
@@ -95,7 +95,7 @@ export const connectors = [
   {
     id: 'beautiful_ai',
     name: 'Beautiful.ai',
-    icon: '🎨',
+    icon: 'palette',
     category: 'Reporting',
     status: 'missing',
     role: 'Reporting deck surface',
@@ -105,7 +105,7 @@ export const connectors = [
   {
     id: 'redis',
     name: 'Redis',
-    icon: '⚡',
+    icon: 'database',
     category: 'Queue / State',
     status: 'blocked',
     role: 'Queue, locks, heartbeats, short-term state',
@@ -115,7 +115,7 @@ export const connectors = [
   {
     id: 'neon',
     name: 'Neon / Supabase / Postgres',
-    icon: '🗄',
+    icon: 'server',
     category: 'Database',
     status: 'blocked',
     role: 'Durable relational state, ledgers, taxonomy, history',

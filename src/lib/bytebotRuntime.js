@@ -174,7 +174,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       content: result,
       meta: { agent, mode, summary, artifacts },
     });
-    _emitLog(runId, workspaceCtx, `✓ Run complete — ${summary}`);
+    _emitLog(runId, workspaceCtx, `Run complete — ${summary}`);
 
     // Persist completion
     persistRun({ runId, agent, task, status: 'complete', mode, steps, result }).catch(() => {});
@@ -258,7 +258,7 @@ function inferWsType(result, agentId) {
 }
 
 const SYNTHETIC_TEMPLATES = {
-  bytebot: (task) => `# ByteBot Run — Synthetic\n\nTask: ${task}\n\n## Steps Executed\n\n1. ✓ Task received and parsed\n2. ✓ Context analyzed\n3. ✗ Backend LLM unavailable — synthetic mode active\n\n## Result\n\nNo live backend configured. Set OPENAI_API_KEY to enable real ByteBot execution.\n\n**Mode:** synthetic`,
+  bytebot: (task) => `# ByteBot Run — Synthetic\n\nTask: ${task}\n\n## Steps Executed\n\n1. Task received and parsed\n2. Context analyzed\n3. Backend LLM unavailable — synthetic mode active\n\n## Result\n\nNo live backend configured. Set OPENAI_API_KEY to enable real ByteBot execution.\n\n**Mode:** synthetic`,
   research: (task) => `# Research Report — Synthetic\n\nQuery: ${task}\n\n## Summary\n\nSynthetic research result. No live LLM — set OPENAI_API_KEY.\n\n**Mode:** synthetic`,
   builder: (task) => `# Build Result — Synthetic\n\nTask: ${task}\n\n\`\`\`jsx\n// Synthetic build — no live LLM\n// Set OPENAI_API_KEY for real code generation\nfunction GeneratedComponent() {\n  return <div>Placeholder</div>;\n}\n\`\`\`\n\n**Mode:** synthetic`,
   default: (task) => `# Agent Result — Synthetic\n\nTask: ${task}\n\nNo live backend. Set OPENAI_API_KEY.\n\n**Mode:** synthetic`,

@@ -9,7 +9,7 @@ import StatusBadge from '../components/ui/StatusBadge.jsx';
 import {
   dashboardStats, revenueData, donutData, recentActivity, leads, userContext,
 } from '../data/synthetic.js';
-import { Star, MapPin } from 'lucide-react';
+import { Star, MapPin, Building } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
@@ -103,8 +103,10 @@ export default function Dashboard() {
                 <div style={{
                   width: 32, height: 32, borderRadius: 6, background: 'var(--bg-card-alt)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, flexShrink: 0, border: '1px solid var(--border)',
-                }}>🏢</div>
+                  flexShrink: 0, border: '1px solid var(--border)',
+                }}>
+                  <Building size={14} className="xps-icon" />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }} className="truncate">{lead.company}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 6, marginTop: 2 }}>

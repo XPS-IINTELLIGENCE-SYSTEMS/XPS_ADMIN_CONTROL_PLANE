@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Search, Building2, DollarSign, Users, Shield } from 'lucide-react';
 
 const GOLD = '#d4a843';
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -95,7 +96,9 @@ export default function ResearchLab() {
 
           {!result && !loading && !error && (
             <div className="chart-card" style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.3)' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>🔭</div>
+              <div style={{ marginBottom: 12 }}>
+                <Search size={36} className="xps-icon" />
+              </div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Enter a URL to research</div>
               <div style={{ fontSize: 12 }}>AI will extract company intelligence, signals, and potential value</div>
             </div>
@@ -122,20 +125,24 @@ export default function ResearchLab() {
           <div className="chart-card" style={{ marginTop: 16 }}>
             <div className="chart-title" style={{ marginBottom: 12 }}>Quick Research</div>
             {[
-              { label: '🏢 Company Profile', prompt: 'Give me a full company profile including size, industry, key people, and recent news.' },
-              { label: '💰 Buying Signals', prompt: 'What buying signals suggest this company needs floor coating or polishing services?' },
-              { label: '👥 Decision Makers', prompt: 'Who are the likely decision makers for facility maintenance purchasing?' },
-              { label: '🏆 Competitor Presence', prompt: 'What competitors might already be serving this company?' },
-            ].map((q) => (
+              { label: 'Company Profile', prompt: 'Give me a full company profile including size, industry, key people, and recent news.', icon: Building2 },
+              { label: 'Buying Signals', prompt: 'What buying signals suggest this company needs floor coating or polishing services?', icon: DollarSign },
+              { label: 'Decision Makers', prompt: 'Who are the likely decision makers for facility maintenance purchasing?', icon: Users },
+              { label: 'Competitor Presence', prompt: 'What competitors might already be serving this company?', icon: Shield },
+            ].map((q) => {
+              const Icon = q.icon;
+              return (
               <button
                 key={q.label}
                 className="btn-outline"
                 style={{ width: '100%', marginBottom: 8, justifyContent: 'flex-start', fontSize: 12 }}
                 onClick={() => setPrompt(q.prompt)}
               >
+                <Icon size={14} className="xps-icon" style={{ marginRight: 8 }} />
                 {q.label}
               </button>
-            ))}
+            );
+            })}
           </div>
         </div>
       </div>

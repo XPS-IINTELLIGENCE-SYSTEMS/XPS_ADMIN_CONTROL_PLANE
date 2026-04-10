@@ -21,7 +21,7 @@ export default function Settings() {
             ].map(({ key, val }) => (
               <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg-card-alt)', borderRadius: 4 }}>
                 <span style={{ color: 'var(--text-secondary)' }}>{key}</span>
-                <span style={{ color: val ? 'var(--green)' : 'var(--text-muted)' }}>{val ? '✓ set' : 'missing'}</span>
+                <span style={{ color: val ? 'var(--green)' : 'var(--text-muted)' }}>{val ? 'set' : 'missing'}</span>
               </div>
             ))}
           </div>

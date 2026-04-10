@@ -31,7 +31,7 @@ export default function DeploymentStatus() {
     run()
   }, [])
 
-  if (loading) return <p style={{ fontSize: 12 }}>🔄 Validating deployment…</p>
+  if (loading) return <p style={{ fontSize: 12 }}>Validating deployment…</p>
 
   const allOk = Object.values(status).every(Boolean)
   return (
@@ -44,11 +44,11 @@ export default function DeploymentStatus() {
         padding: '6px 10px',
       }}
     >
-      <strong>{allOk ? '✅ All systems operational' : '⚠️ Deployment checks'}</strong>
+      <strong>{allOk ? 'All systems operational' : 'Deployment checks'}</strong>
       <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
         {Object.entries(status).map(([k, v]) => (
           <li key={k}>
-            {v ? '✓' : '✗'} {k.replace(/_/g, ' ')}
+            {v ? 'OK' : 'Fail'} {k.replace(/_/g, ' ')}
           </li>
         ))}
       </ul>

@@ -1,11 +1,12 @@
 import React from 'react';
+import { Palette, Folder, Cpu, Database, Lock } from 'lucide-react';
 
 const gold = '#d4a843';
 
 const SETTINGS = [
   {
     title: 'Appearance',
-    icon: '🎨',
+    icon: Palette,
     items: [
       { label: 'Theme',           value: 'Dark (XPS Luxury)',    locked: true },
       { label: 'Accent Color',    value: '#d4a843 (Gold)',        locked: true },
@@ -14,7 +15,7 @@ const SETTINGS = [
   },
   {
     title: 'Workspace',
-    icon: '🗂️',
+    icon: Folder,
     items: [
       { label: 'Default Panel',   value: 'Dashboard',            locked: false },
       { label: 'Auto-render AI',  value: 'Enabled',              locked: false },
@@ -23,7 +24,7 @@ const SETTINGS = [
   },
   {
     title: 'Agents',
-    icon: 'AI',
+    icon: Cpu,
     items: [
       { label: 'Default Agent',      value: 'XPS Orchestrator',  locked: false },
       { label: 'Synthetic Fallback', value: 'Enabled',           locked: false },
@@ -32,7 +33,7 @@ const SETTINGS = [
   },
   {
     title: 'Data',
-    icon: 'DB',
+    icon: Database,
     items: [
       { label: 'Auth Mode',    value: 'Dev (bypassed)',       locked: true },
       { label: 'DB Backend',   value: 'Supabase (not connected)', locked: false },
@@ -63,7 +64,7 @@ export default function SettingsPanel() {
               borderBottom: '1px solid rgba(255,255,255,0.07)',
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <span>{section.icon}</span>
+              <section.icon size={14} className="xps-icon" />
               <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{section.title}</span>
             </div>
             <div style={{ padding: '4px 0' }}>
@@ -78,7 +79,7 @@ export default function SettingsPanel() {
                     {item.value}
                   </span>
                   {item.locked && (
-                    <span style={{ marginLeft: 8, fontSize: 10, opacity: 0.3 }}>🔒</span>
+                    <Lock size={10} className="xps-icon" style={{ marginLeft: 8, opacity: 0.3 }} />
                   )}
                 </div>
               ))}
@@ -93,7 +94,7 @@ export default function SettingsPanel() {
         border: '1px solid rgba(255,255,255,0.06)',
         borderRadius: 8, fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.6,
       }}>
-        🔒 Locked settings reflect hardcoded XPS design system values and cannot be changed without code modification.
+        Locked settings reflect hardcoded XPS design system values and cannot be changed without code modification.
       </div>
     </div>
   );

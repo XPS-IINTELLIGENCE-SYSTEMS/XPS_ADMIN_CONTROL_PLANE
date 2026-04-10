@@ -1,25 +1,26 @@
 import React from 'react';
+import { Mail, Clock, FileText, Zap } from 'lucide-react';
 
 const gold = '#d4a843';
 
 const OUTREACH_SECTIONS = [
   {
     title: 'Email Campaigns',
-    icon: '📧',
+    icon: Mail,
     count: 0,
     status: 'awaiting_config',
     desc: 'No active campaigns — connect email provider to begin',
   },
   {
     title: 'Follow-up Queue',
-    icon: '⏰',
+    icon: Clock,
     count: 0,
     status: 'awaiting_config',
     desc: 'No follow-ups queued — sync CRM to populate',
   },
   {
     title: 'Outbound Templates',
-    icon: '📝',
+    icon: FileText,
     count: 0,
     status: 'not_loaded',
     desc: 'Load prompt library to see outreach templates',
@@ -49,9 +50,9 @@ export default function OutreachPanel() {
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.07)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22, flexShrink: 0,
+              flexShrink: 0,
             }}>
-              {s.icon}
+              <s.icon size={22} className="xps-icon" />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -86,7 +87,7 @@ export default function OutreachPanel() {
         border: '1px solid rgba(212,168,67,0.15)',
         borderRadius: 10, fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6,
       }}>
-        <span style={{ color: gold }}>✦ </span>
+        <Zap size={14} className="xps-icon" style={{ marginRight: 6 }} />
         Use the ByteBot orchestrator or agent rail to generate and queue outreach sequences automatically
       </div>
     </div>

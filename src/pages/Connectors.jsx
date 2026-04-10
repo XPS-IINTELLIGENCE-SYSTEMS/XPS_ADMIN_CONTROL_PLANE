@@ -2,6 +2,36 @@ import React from 'react';
 import Panel from '../components/ui/Panel.jsx';
 import ConnectorBadge from '../components/ui/ConnectorBadge.jsx';
 import { connectors } from '../data/connectors.js';
+import {
+  GitBranch,
+  Cloud,
+  Folder,
+  Table,
+  Hexagon,
+  Grid,
+  Mail,
+  Calendar,
+  Layers,
+  Palette,
+  Database,
+  Server,
+  Plug,
+} from 'lucide-react';
+
+const ICON_MAP = {
+  'git-branch': GitBranch,
+  cloud: Cloud,
+  folder: Folder,
+  table: Table,
+  hexagon: Hexagon,
+  grid: Grid,
+  mail: Mail,
+  calendar: Calendar,
+  layers: Layers,
+  palette: Palette,
+  database: Database,
+  server: Server,
+};
 
 export default function Connectors() {
   const grouped = connectors.reduce((acc, c) => {
@@ -36,7 +66,9 @@ export default function Connectors() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {connectors.map(c => (
+        {connectors.map(c => {
+          const Icon = ICON_MAP[c.icon] || Plug;
+          return (
           <div key={c.id} style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius)', padding: '16px 20px',
@@ -45,7 +77,7 @@ export default function Connectors() {
           }}>
             {/* Icon */}
             <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--bg-card-alt)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-              {c.icon}
+              <Icon size={18} className="xps-icon" />
             </div>
 
             {/* Info */}
@@ -64,7 +96,8 @@ export default function Connectors() {
             {/* Status badge */}
             <ConnectorBadge status={c.status} />
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div style={{ marginTop: 20, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 18px', fontSize: 12, color: 'var(--text-muted)' }}>

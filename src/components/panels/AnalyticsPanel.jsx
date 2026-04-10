@@ -1,15 +1,16 @@
 import React from 'react';
+import { BarChart3, Target, Users, Zap } from 'lucide-react';
 
 const gold = '#d4a843';
 
-function MetricCard({ icon, label }) {
+function MetricCard({ icon: Icon, label }) {
   return (
     <div style={{
       background: '#161616', border: '1px solid rgba(255,255,255,0.07)',
       borderRadius: 12, padding: '20px 22px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 20, opacity: 0.5 }}>{icon}</span>
+        <Icon size={20} className="xps-icon" style={{ opacity: 0.6 }} />
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', letterSpacing: 0.6 }}>NO LIVE DATA</span>
       </div>
       <div style={{ fontSize: 28, fontWeight: 700, color: 'rgba(255,255,255,0.15)', marginBottom: 4 }}>—</div>
@@ -63,10 +64,10 @@ export default function AnalyticsPanel() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
-        <MetricCard icon="📈" label="Total Revenue" />
-        <MetricCard icon="🎯" label="Conversion Rate" />
-        <MetricCard icon="👥" label="Leads Processed" />
-        <MetricCard icon="⚡" label="Avg Response Time" />
+        <MetricCard icon={BarChart3} label="Total Revenue" />
+        <MetricCard icon={Target} label="Conversion Rate" />
+        <MetricCard icon={Users} label="Leads Processed" />
+        <MetricCard icon={Zap} label="Avg Response Time" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>

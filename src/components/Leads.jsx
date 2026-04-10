@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StageBadge } from './Dashboard.jsx';
+import { Building, Star, MapPin } from 'lucide-react';
 
 const GOLD = '#d4a843';
 
@@ -75,11 +76,13 @@ export default function Leads() {
               <tr key={l.company} style={{ cursor: 'pointer' }}>
                 <td style={{ paddingLeft: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 30, height: 30, background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13 }}>🏢</div>
+                    <div style={{ width: 30, height: 30, background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Building size={13} className="xps-icon" />
+                    </div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{l.company}</div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>
-                        ⭐ {l.rating} ({l.reviews})
+                        <Star size={11} className="xps-icon" /> {l.rating} ({l.reviews})
                       </div>
                     </div>
                   </div>
@@ -90,10 +93,10 @@ export default function Leads() {
                 </td>
                 <td style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{l.vertical}</td>
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    {l.location}
-                  </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                      <MapPin size={11} className="xps-icon" />
+                      {l.location}
+                    </div>
                 </td>
                 <td>
                   <span style={{ color: GOLD, fontWeight: 700, fontSize: 14 }}>{l.score}</span>

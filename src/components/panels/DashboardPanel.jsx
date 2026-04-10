@@ -1,9 +1,10 @@
 import React from 'react';
+import { Users, DollarSign, FileText, Target, ClipboardList, Zap } from 'lucide-react';
 
 const gold = '#d4a843';
 
 // Zero-state metric card
-function MetricCard({ icon, label, note }) {
+function MetricCard({ icon: Icon, label, note }) {
   return (
     <div style={{
       background: '#161616',
@@ -16,7 +17,7 @@ function MetricCard({ icon, label, note }) {
       minWidth: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 22, opacity: 0.7 }}>{icon}</span>
+        <Icon size={22} className="xps-icon" style={{ opacity: 0.7 }} />
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 0.6 }}>NO LIVE DATA</span>
       </div>
       <div style={{ fontSize: 28, fontWeight: 700, color: 'rgba(255,255,255,0.2)', letterSpacing: -0.5 }}>—</div>
@@ -80,10 +81,10 @@ export default function DashboardPanel() {
         gap: 14,
         marginBottom: 20,
       }}>
-        <MetricCard icon="👥" label="Active Leads" note="awaiting sync" />
-        <MetricCard icon="💰" label="Pipeline Value" note="awaiting sync" />
-        <MetricCard icon="📄" label="Proposals Sent" note="awaiting sync" />
-        <MetricCard icon="🎯" label="Close Rate" note="awaiting sync" />
+        <MetricCard icon={Users} label="Active Leads" note="awaiting sync" />
+        <MetricCard icon={DollarSign} label="Pipeline Value" note="awaiting sync" />
+        <MetricCard icon={FileText} label="Proposals Sent" note="awaiting sync" />
+        <MetricCard icon={Target} label="Close Rate" note="awaiting sync" />
       </div>
 
       {/* Charts row */}
@@ -127,7 +128,7 @@ function EmptyTable({ title, columns }) {
         padding: '24px 0',
         gap: 6,
       }}>
-        <span style={{ fontSize: 20, opacity: 0.2 }}>📋</span>
+        <ClipboardList size={20} className="xps-icon" style={{ opacity: 0.4 }} />
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: 0.6 }}>NO LIVE DATA</span>
       </div>
     </div>
@@ -150,7 +151,7 @@ function EmptyFeed({ title }) {
         border: '1px dashed rgba(255,255,255,0.08)',
         borderRadius: 8,
       }}>
-        <span style={{ fontSize: 24, opacity: 0.15 }}>⚡</span>
+        <Zap size={24} className="xps-icon" style={{ opacity: 0.3 }} />
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: 0.6 }}>AWAITING SYNC</span>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)' }}>Connect data sources to see activity</span>
       </div>

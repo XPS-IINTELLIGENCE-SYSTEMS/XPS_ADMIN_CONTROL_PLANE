@@ -7,18 +7,22 @@ import {
   ScrollText, Package,
 } from 'lucide-react';
 
-const GOLD = '#c49e3c';
+const BRAND_LOGO = '/brand/xps-shield-wings.jpg';
 
 // A simple inline gradient text for active sidebar items
 function GradAccent() {
   return (
-    <span style={{
-      display: 'inline-block',
-      width: 3, height: 3, borderRadius: '50%', marginLeft: 'auto', flexShrink: 0,
-      background: 'linear-gradient(90deg, #c49e3c, #e8d5a3, #b8cce0)',
-      backgroundSize: '200% 100%',
-      animation: 'xpsGoldShimmer 4s ease infinite',
-    }} />
+    <span
+      className="xps-electric-accent"
+      style={{
+        display: 'inline-block',
+        width: 3,
+        height: 3,
+        borderRadius: '50%',
+        marginLeft: 'auto',
+        flexShrink: 0,
+      }}
+    />
   );
 }
 
@@ -99,15 +103,28 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
       }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 6,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, overflow: 'hidden', position: 'relative',
-        }}>
-          <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 6 }} />
-          <svg width="14" height="16" viewBox="0 0 14 16" fill="none" style={{ position: 'relative', zIndex: 1 }}>
-            <path d="M7 1L1 4.5V8.5C1 11.8 3.7 14.8 7 16C10.3 14.8 13 11.8 13 8.5V4.5L7 1Z" fill="#0a0b0c"/>
-          </svg>
+        <div
+          className="xps-logo xps-electric-border"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            overflow: 'hidden',
+            position: 'relative',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <img
+            src={BRAND_LOGO}
+            alt="XPS"
+            data-testid="brand-logo-sidebar"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
         </div>
         {!collapsed && (
           <div>
@@ -138,14 +155,17 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
                   title={collapsed ? item.label : undefined}
+                  className="xps-electric-hover"
+                  data-active={isActive ? 'true' : undefined}
                   style={{
+                    position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
                     padding: collapsed ? '9px 14px' : '8px 16px',
                     margin: '1px 6px',
                     borderRadius: 'var(--radius-sm)',
-                    color: isActive ? GOLD : 'var(--text-secondary)',
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                     background: isActive ? 'var(--bg-active)' : 'transparent',
                     fontWeight: isActive ? 600 : 400,
                     fontSize: 13,
@@ -160,10 +180,10 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0, color: isActive ? GOLD : undefined }} />
+                  <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className="xps-icon" style={{ flexShrink: 0 }} />
                   {!collapsed && (
                     <>
-                      <span className={isActive ? 'xps-gold-text' : ''}>{item.label}</span>
+                      <span className={isActive ? 'xps-electric-text' : ''}>{item.label}</span>
                       {isActive && <GradAccent />}
                     </>
                   )}
@@ -197,4 +217,3 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
     </aside>
   );
 }
-
