@@ -70,7 +70,7 @@ export default function ResearchPanel() {
             cursor: (!loading && query.trim()) ? 'pointer' : 'not-allowed',
           }}
         >
-          {loading ? '⏳ Searching…' : '🔍 Research'}
+          {loading ? '[...] Searching…' : 'Research'}
         </button>
       </form>
 

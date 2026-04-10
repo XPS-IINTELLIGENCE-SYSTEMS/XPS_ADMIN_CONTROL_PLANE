@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useWorkspace, OBJ_TYPE_META, RUN_STATUS } from '../../lib/workspaceEngine.jsx';
+import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../lib/workspaceEngine.jsx';
 
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
@@ -34,11 +34,11 @@ const STATUS_LABEL = {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ActiveWorkspace() {
-  const { objects, activeId, setActive, closeObject } = useWorkspace();
+  const { objects, activeId, setActive, closeObject, createObject } = useWorkspace();
   const activeObj = objects.find(o => o.id === activeId) ?? null;
 
   if (objects.length === 0) {
-    return <EmptyState />;
+    return <EmptyState createObject={createObject} setActive={setActive} />;
   }
 
   return (
@@ -545,70 +545,96 @@ function Divider() {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ createObject, setActive }) {
+  const QUICK_ACTIONS = [
+    { label: 'New Code Object',  type: OBJ_TYPE.CODE,   title: 'Untitled Code',   content: '// Start coding here\n' },
+    { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
+    { label: 'New Data Object',  type: OBJ_TYPE.DATA,    title: 'Untitled Data',   content: '' },
+    { label: 'New Log',          type: OBJ_TYPE.LOG,     title: 'Run Log',         content: '' },
+  ];
+
+  const handleCreate = (action) => {
+    const id = genId();
+    createObject({ id, type: action.type, title: action.title, content: action.content, status: RUN_STATUS.IDLE });
+    setActive(id);
+  };
+
   return (
-    <div style={{
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 18,
-      padding: 40,
+    <div data-testid="workspace-empty-state" style={{
+      height: '100%', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 18, padding: 40,
     }}>
       <div style={{
-        width: 72,
-        height: 72,
-        borderRadius: 18,
-        background: 'rgba(212,168,67,0.07)',
-        border: '1px solid rgba(212,168,67,0.18)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 32,
+        width: 72, height: 72, borderRadius: 18,
+        background: 'rgba(212,168,67,0.07)', border: '1px solid rgba(212,168,67,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 28, color: 'rgba(196,158,60,0.5)', fontWeight: 800, letterSpacing: -2,
+        overflow: 'hidden', position: 'relative',
       }}>
-        🛡️
+        <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 18, opacity: 0.12 }} />
+        <span style={{ position: 'relative', zIndex: 1 }}>XPS</span>
       </div>
 
       <div style={{ textAlign: 'center', maxWidth: 440 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#e2e8f0', marginBottom: 8 }}>
           XPS Workspace
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7 }}>
-          The workspace is live and ready. Use the agent rail on the right to send a command —
-          results, code, reports, logs, and artifacts will appear here as real objects you can
-          inspect and edit.
+          The workspace is live and ready. Use the agent rail on the right to send a command,
+          or create an object directly to start building.
         </div>
+      </div>
+
+      {/* Quick create buttons */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {QUICK_ACTIONS.map(action => (
+          <button
+            key={action.label}
+            data-testid={`quick-create-${action.type}`}
+            onClick={() => handleCreate(action)}
+            style={{
+              padding: '7px 16px',
+              background: 'rgba(212,168,67,0.08)',
+              border: '1px solid rgba(212,168,67,0.2)',
+              borderRadius: 8, fontSize: 12, fontWeight: 600,
+              color: '#d4a843', cursor: 'pointer',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(212,168,67,0.14)';
+              e.currentTarget.style.borderColor = 'rgba(212,168,67,0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(212,168,67,0.08)';
+              e.currentTarget.style.borderColor = 'rgba(212,168,67,0.2)';
+            }}
+          >
+            + {action.label}
+          </button>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
         {[
-          { label: 'Generate code',    hint: '"Write a Python scraper for…"' },
-          { label: 'Search the web',   hint: '"Research competitors in…"' },
-          { label: 'Scrape a URL',     hint: '"Scrape products from…"' },
-          { label: 'Analyze data',     hint: '"Summarize this dataset…"' },
-          { label: 'Draft a report',   hint: '"Write a proposal for…"' },
+          { label: 'Generate code',  hint: '"Write a Python scraper for…"' },
+          { label: 'Search the web', hint: '"Research competitors in…"' },
+          { label: 'Scrape a URL',   hint: '"Scrape products from…"' },
+          { label: 'Draft a report', hint: '"Write a proposal for…"' },
         ].map(({ label, hint }) => (
-          <div
-            key={label}
-            title={hint}
-            style={{
-              padding: '6px 14px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 99,
-              fontSize: 12,
-              color: 'rgba(255,255,255,0.45)',
-              cursor: 'default',
-            }}
-          >
+          <div key={label} title={hint} style={{
+            padding: '5px 12px',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 99, fontSize: 12, color: 'rgba(255,255,255,0.35)',
+          }}>
             {label}
           </div>
         ))}
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: 0.5 }}>
-        OBJECTS: CODE · SEARCH · SCRAPE · REPORT · DATA · LOG · UI · IMAGE · VIDEO · AGENT RUN · WORKFLOW · RUNTIME STATE
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', letterSpacing: 0.5 }}>
+        CODE · SEARCH · SCRAPE · REPORT · DATA · LOG · UI · IMAGE · AGENT RUN · WORKFLOW
       </div>
     </div>
   );
@@ -710,7 +736,7 @@ function PreviewBody({ obj }) {
         display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px',
         background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
       }}>
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>👁️ {obj.agent ? `${obj.agent} · ` : ''}preview</span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{obj.agent ? `${obj.agent} · ` : ''}preview</span>
         {running && <RunningPulse />}
       </div>
       {running && !obj.content ? (
@@ -986,7 +1012,7 @@ function AgentRunBody({ obj }) {
         gap: 12,
       }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: 1, textTransform: 'uppercase' }}>
-          🤖 {obj.agent ? `${obj.agent} · ` : ''}agent run
+          {obj.agent ? `${obj.agent} · ` : ''}agent run
         </span>
         <span style={{ fontSize: 10, color: modeColor(mode), fontWeight: 600 }}>{mode.toUpperCase()}</span>
         {running && <RunningPulse />}
@@ -1112,7 +1138,7 @@ function RuntimeStateBody({ obj }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD, boxShadow: `0 0 6px ${GOLD}` }} />
           <span style={{ fontSize: 11, fontWeight: 700, color: GOLD, letterSpacing: 1, textTransform: 'uppercase' }}>
-            ⚙️ Runtime State
+            Runtime State
           </span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: modeColor(mode), fontWeight: 600 }}>
             {mode.toUpperCase()}
@@ -1204,7 +1230,7 @@ function BrowserSessionBody({ obj }) {
         maxWidth: 700,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>🌐</span>
+          <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.4)', fontWeight: 700, letterSpacing: -1 }}>[N]</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: GOLD }}>Browser Session</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: modeColor(mode), textTransform: 'uppercase', letterSpacing: 0.8 }}>{mode}</span>
         </div>

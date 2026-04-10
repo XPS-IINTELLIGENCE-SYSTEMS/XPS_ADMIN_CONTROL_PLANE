@@ -104,9 +104,9 @@ export default function ScraperPanel() {
             }}
           >
             {loading ? (
-              <>⏳ Scraping…</>
+              <>[...] Scraping…</>
             ) : (
-              <><span>🕷️</span> Scrape &amp; Summarise</>
+              <><span>[W]</span> Scrape &amp; Summarise</>
             )}
           </button>
         </form>
@@ -160,7 +160,7 @@ export default function ScraperPanel() {
                 borderRadius: 8, padding: '10px 14px',
                 display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                <span style={{ fontSize: 12 }}>🕷️</span>
+                <span style={{ fontSize: 12 }}>[W]</span>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.url}

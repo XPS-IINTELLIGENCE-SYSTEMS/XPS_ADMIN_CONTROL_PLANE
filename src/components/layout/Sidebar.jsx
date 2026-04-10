@@ -9,6 +9,19 @@ import {
 
 const GOLD = '#c49e3c';
 
+// A simple inline gradient text for active sidebar items
+function GradAccent() {
+  return (
+    <span style={{
+      display: 'inline-block',
+      width: 3, height: 3, borderRadius: '50%', marginLeft: 'auto', flexShrink: 0,
+      background: 'linear-gradient(90deg, #c49e3c, #e8d5a3, #b8cce0)',
+      backgroundSize: '200% 100%',
+      animation: 'xpsGoldShimmer 4s ease infinite',
+    }} />
+  );
+}
+
 const sections = [
   {
     label: 'MAIN',
@@ -87,11 +100,12 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
         flexShrink: 0,
       }}>
         <div style={{
-          width: 28, height: 28, background: GOLD, borderRadius: 6,
+          width: 28, height: 28, borderRadius: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
+          flexShrink: 0, overflow: 'hidden', position: 'relative',
         }}>
-          <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
+          <div className="xps-gold-accent" style={{ position: 'absolute', inset: 0, borderRadius: 6 }} />
+          <svg width="14" height="16" viewBox="0 0 14 16" fill="none" style={{ position: 'relative', zIndex: 1 }}>
             <path d="M7 1L1 4.5V8.5C1 11.8 3.7 14.8 7 16C10.3 14.8 13 11.8 13 8.5V4.5L7 1Z" fill="#0a0b0c"/>
           </svg>
         </div>
@@ -146,8 +160,13 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
-                  {!collapsed && <span>{item.label}</span>}
+                  <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0, color: isActive ? GOLD : undefined }} />
+                  {!collapsed && (
+                    <>
+                      <span className={isActive ? 'xps-gold-text' : ''}>{item.label}</span>
+                      {isActive && <GradAccent />}
+                    </>
+                  )}
                 </button>
               );
             })}

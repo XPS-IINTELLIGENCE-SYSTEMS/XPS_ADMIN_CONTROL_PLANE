@@ -124,7 +124,7 @@ export default function ByteBotPanel() {
             border: '1px solid rgba(212,168,67,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18,
-          }}>🤖</div>
+          }}>BOT</div>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>ByteBot Orchestrator</h2>
             <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Autonomous multi-step task execution</p>
@@ -214,7 +214,7 @@ export default function ByteBotPanel() {
                 flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 8, border: '1px dashed rgba(255,255,255,0.07)', borderRadius: 10, padding: 32,
               }}>
-                <span style={{ fontSize: 28, opacity: 0.2 }}>🤖</span>
+                <span style={{ fontSize: 18, color: "rgba(196,158,60,0.3)", fontWeight: 700}}>BOT</span>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>Queue is empty — add a task above</span>
               </div>
             ) : (

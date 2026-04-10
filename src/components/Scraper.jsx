@@ -14,7 +14,7 @@ function StatusBadge({ status }) {
   const map = {
     completed: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80', border: 'rgba(34,197,94,0.25)', label: '✓ Completed' },
     failed: { bg: 'rgba(239,68,68,0.12)', color: '#f87171', border: 'rgba(239,68,68,0.25)', label: '✗ Failed' },
-    queued: { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.25)', label: '⏳ Queued' },
+    queued: { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.25)', label: '[...] Queued' },
     running: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: 'rgba(59,130,246,0.25)', label: '⚡ Running' },
   };
   const s = map[status] || map.queued;
@@ -86,7 +86,7 @@ export default function Scraper() {
               <input className="xps-input" placeholder="What data to extract..." value={prompt} onChange={e => setPrompt(e.target.value)} />
             </div>
             <button className="btn-gold" style={{ width: '100%', justifyContent: 'center' }} onClick={addJob} disabled={loading}>
-              {loading ? '⏳ Running...' : '▶ Start Job'}
+              {loading ? '[...] Running...' : 'Start Job'}
             </button>
           </div>
 

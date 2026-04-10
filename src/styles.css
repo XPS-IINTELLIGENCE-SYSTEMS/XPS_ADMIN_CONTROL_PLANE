@@ -70,6 +70,62 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-only { position: absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 
+/* ─── Electric Gold/Silver Animated Gradient ────────────────────────────── */
+@keyframes xpsGoldShimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+:root {
+  /* Shared gradient stops — used by all gold accent classes */
+  --grad-gold-stops: #c49e3c, #e8d5a3, #9a7c2e, #d4af60, #b8cce0, #d4af60, #c49e3c;
+}
+
+/* Animated gradient text */
+.xps-gold-text {
+  background: linear-gradient(90deg, var(--grad-gold-stops));
+  background-size: 300% 100%;
+  animation: xpsGoldShimmer 4s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Animated gradient border (via mask) */
+.xps-gold-border {
+  position: relative;
+}
+.xps-gold-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, var(--grad-gold-stops));
+  background-size: 300% 100%;
+  animation: xpsGoldShimmer 4s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Animated gradient background accent */
+.xps-gold-accent {
+  background: linear-gradient(90deg, var(--grad-gold-stops));
+  background-size: 300% 100%;
+  animation: xpsGoldShimmer 4s ease infinite;
+}
+
+/* Status badge running pulse */
+@keyframes xpsPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
 /* Recharts overrides */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line { stroke: rgba(255,255,255,0.06); }

@@ -156,7 +156,7 @@ export default function Settings() {
 
           {!['Profile', 'Notifications', 'Appearance', 'AI Preferences', 'Security'].includes(activeSection) && (
             <div className="chart-card" style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', padding: 40 }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>⚙️</div>
+              <div style={{ fontSize: 32, marginBottom: 12 }}></div>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: 'rgba(255,255,255,0.8)' }}>{activeSection}</div>
               <div style={{ fontSize: 13 }}>Configuration for this section is managed by your administrator.</div>
             </div>

@@ -11,7 +11,7 @@ const articles = [
   { icon: '🔬', title: 'Technical Spec Sheets Library', desc: 'Full product specification documents for all XPS systems', tags: ['Technical', 'Product'], updated: 'Today' },
   { icon: '📞', title: 'Cold Outreach Scripts', desc: 'Phone and email scripts for each vertical and stage', tags: ['Outreach', 'Sales'], updated: '4 days ago' },
   { icon: '🏆', title: 'Case Studies & Win Reports', desc: 'Documented wins with ROI data for customer proof', tags: ['Case Studies'], updated: '1 week ago' },
-  { icon: '⚙️', title: 'CRM Workflow SOPs', desc: 'Standard operating procedures for pipeline management', tags: ['Process', 'CRM'], updated: '2 weeks ago' },
+  { icon: '[A]', title: 'CRM Workflow SOPs', desc: 'Standard operating procedures for pipeline management', tags: ['Process', 'CRM'], updated: '2 weeks ago' },
 ];
 
 export default function KnowledgeBase() {
