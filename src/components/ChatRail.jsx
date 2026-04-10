@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
+import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
+import { persistSearchJob, persistScrapeJob, persistWorkspaceObject } from '../lib/supabasePersistence.js';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -26,12 +28,6 @@ const SYSTEM_PROMPTS = {
   gpt:          'You are a helpful AI assistant for the XPS Intelligence Command Center. Help the operator with any task.',
 };
 
-const PANEL_NAVIGATION_PHRASES = {
-  'bytebot panel': 'bytebot', 'scraper panel': 'scraper',
-  'research panel': 'research', 'analytics panel': 'analytics',
-  'connectors panel': 'connectors', 'workspace panel': 'workspace',
-};
-
 export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [agent, setAgent] = useState('orchestrator');
   const [messages, setMessages] = useState([{
@@ -39,14 +35,22 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     content: '— awaiting configuration —\n\nSelect an agent and configure your API key to begin live orchestration. Running in synthetic mode.',
     agent: 'orchestrator',
   }]);
-  const [input, setInput] = useState('');
+  const [input, setInput]     = useState('');
   const [loading, setLoading] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [activeRuns, setActiveRuns] = useState([]);
   const bottomRef = useRef(null);
-  const inputRef = useRef(null);
+  const inputRef  = useRef(null);
 
-  // Workspace engine actions
-  const { createObject, setStatus } = useWorkspace();
+  const { createObject, setStatus, appendLog, patchObject } = useWorkspace();
+
+  // Subscribe to ByteBot runtime run state
+  useEffect(() => {
+    const isActive = r => r.status === 'running' || r.status === 'queued';
+    const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(isActive)));
+    setActiveRuns(getRunList().filter(isActive));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,28 +59,27 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
 
   // Commit a completed reply to the workspace engine as a live object
-  const commitToWorkspace = useCallback((reply, agentId, prompt) => {
-    const type  = detectObjectType(reply, agentId);
-    const title = deriveTitle(reply, agentId) || prompt.slice(0, 55);
-
-    // Create the workspace object with the reply content
-    createObject({ type, title, content: reply, agent: agentId, status: RUN_STATUS.DONE });
-
-    // Navigate to workspace panel so the object is visible
+  const commitToWorkspace = useCallback((wsObj, agentId, prompt) => {
+    const { type, title, content, steps = [], meta = {} } = wsObj;
+    createObject({
+      type:    type   || detectObjectType(content, agentId),
+      title:   title  || deriveTitle(content, agentId) || prompt.slice(0, 55),
+      content: content || '',
+      agent:   agentId,
+      status:  RUN_STATUS.DONE,
+      steps,
+      meta,
+    });
     onNavigate?.('workspace');
 
-    // Also fire legacy prop for any remaining navigation handlers
-    if (onWorkspaceAction) {
-      const lower = reply.toLowerCase();
-      for (const [phrase, panel] of Object.entries(PANEL_NAVIGATION_PHRASES)) {
-        if (lower.includes(phrase)) { onWorkspaceAction({ type: 'navigate', panel }); break; }
-      }
-    }
-  }, [createObject, onNavigate, onWorkspaceAction]);
+    // Persist workspace object
+    persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
+  }, [createObject, onNavigate]);
 
   const send = async (e) => {
     e?.preventDefault();
     if (!input.trim() || loading) return;
+
     const userMsg = { role: 'user', content: input.trim(), agent };
     const prompt  = userMsg.content;
     const history = [...messages, userMsg];
@@ -84,20 +87,38 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     setInput('');
     setLoading(true);
 
-    // Pre-generate ID so we can update/close this log object when the run completes
+    // ── ByteBot: use full multi-step runtime ──────────────────────────────────
+    if (agent === 'bytebot') {
+      setLoading(false);
+      startRun(
+        { task: prompt, agent: 'bytebot', context: {} },
+        { createObject, setStatus, appendLog, patchObject },
+        onNavigate,
+      ).then(runId => {
+        setMessages(prev => [...prev, {
+          role:   'assistant',
+          content: `ByteBot run started. Watching workspace for progress…`,
+          agent:  'bytebot',
+          runId,
+        }]);
+      });
+      return;
+    }
+
+    // ── Other agents: call /api/chat with structured response ─────────────────
     const runId = genId();
+    const wsObjId = genId();
+
     createObject({
-      id:     runId,
-      type:   OBJ_TYPE.LOG,
-      title:  `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
+      id:      wsObjId,
+      type:    OBJ_TYPE.LOG,
+      title:   `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
       content: '',
       agent,
-      status: RUN_STATUS.RUNNING,
+      status:  RUN_STATUS.RUNNING,
     });
-    // Navigate immediately so the operator sees the live running indicator
     onNavigate?.('workspace');
 
-    // Build messages for API (strip agent metadata)
     const apiMessages = [
       { role: 'system', content: SYSTEM_PROMPTS[agent] || SYSTEM_PROMPTS.gpt },
       ...history.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })),
@@ -105,44 +126,63 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     try {
       const res = await fetch(`${API_URL}/api/chat`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, agent }),
+        body:    JSON.stringify({ messages: apiMessages, agent, runId }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data  = await res.json();
-      const reply = data.reply || data.error || 'No response.';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, agent }]);
+      const data = await res.json();
 
-      // Mark run log object done and commit a typed result object
-      setStatus(runId, RUN_STATUS.DONE);
-      commitToWorkspace(reply, agent, prompt);
+      // Handle structured contract
+      const reply   = data.reply || data.error || 'No response.';
+      const wsObj   = data.workspace_object || null;
+      const mode    = data.mode || 'synthetic';
+      const evtType = data.event_type || 'run_completed';
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: reply,
+        agent,
+        mode,
+        synthetic: mode === 'synthetic',
+      }]);
+
+      setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
+
+      if (evtType !== 'run_failed' && wsObj) {
+        commitToWorkspace(wsObj, agent, prompt);
+      } else if (evtType !== 'run_failed') {
+        // Fallback: infer type from reply
+        commitToWorkspace({
+          type:    detectObjectType(reply, agent),
+          title:   deriveTitle(reply, agent) || prompt.slice(0, 55),
+          content: reply,
+        }, agent, prompt);
+      }
+
     } catch (err) {
-      // Mark run log object as error
-      setStatus(runId, RUN_STATUS.ERROR);
+      setStatus(wsObjId, RUN_STATUS.ERROR);
 
-      // Synthetic fallback
       const syntheticReplies = {
         orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
         research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
         scraper:      `[Synthetic] Scraper Agent: Target queued. Use the Scraper panel to run live scrape jobs.`,
-        bytebot:      `[Synthetic] ByteBot: Task acknowledged. Multi-step execution requires live backend. Switch to ByteBot panel for the orchestration surface.`,
         default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
       };
       const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
+
       setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: syntheticContent,
+        role:      'assistant',
+        content:   syntheticContent,
         agent,
         synthetic: true,
       }]);
 
-      // Create a workspace object for the synthetic reply
-      commitToWorkspace(syntheticContent, agent, prompt);
-
-      if (onWorkspaceAction && agent === 'bytebot') {
-        onWorkspaceAction({ type: 'navigate', panel: 'bytebot' });
-      }
+      commitToWorkspace({
+        type:    detectObjectType(syntheticContent, agent),
+        title:   `[Synthetic] ${selectedAgent.label}`,
+        content: syntheticContent,
+      }, agent, prompt);
     } finally {
       setLoading(false);
     }
@@ -249,6 +289,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         flexDirection: 'column',
         gap: 8,
       }}>
+        {/* Active runs summary */}
+        {activeRuns.length > 0 && (
+          <ActiveRunsSummary runs={activeRuns} />
+        )}
+
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} />
         ))}
@@ -325,9 +370,59 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   );
 }
 
+function ActiveRunsSummary({ runs }) {
+  return (
+    <div style={{
+      background: 'rgba(212,168,67,0.06)',
+      border: '1px solid rgba(212,168,67,0.2)',
+      borderRadius: 10,
+      padding: '8px 10px',
+      marginBottom: 4,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: gold, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
+        ▶ Active Runs ({runs.length})
+      </div>
+      {runs.map(run => (
+        <div key={run.runId} style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              width: 5, height: 5, borderRadius: '50%',
+              background: gold,
+              animation: 'pulse 1s ease-in-out infinite',
+            }} />
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {run.agent}: {run.task.slice(0, 35)}
+            </span>
+            <button
+              onClick={() => cancelRun(run.runId)}
+              title="Cancel run"
+              style={{
+                background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
+                cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
+          {run.progress > 0 && (
+            <div style={{ marginTop: 4, marginLeft: 11 }}>
+              <div style={{ width: '100%', height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
+                <div style={{ width: `${run.progress}%`, height: '100%', background: gold, borderRadius: 1, transition: 'width 0.3s' }} />
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+    </div>
+  );
+}
+
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   const agentInfo = AGENTS.find(a => a.id === msg.agent);
+  const modeColor = msg.mode === 'live' ? '#4ade80' : msg.mode === 'synthetic' || msg.synthetic ? '#fbbf24' : 'rgba(255,255,255,0.25)';
+  const modeLabel = msg.mode === 'live' ? 'live' : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
 
   if (isUser) {
     return (
@@ -353,9 +448,9 @@ function MessageBubble({ msg }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {agentInfo && (
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.5, paddingLeft: 2 }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.5, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
           {agentInfo.icon} {agentInfo.label}
-          {msg.synthetic && <span style={{ marginLeft: 6, color: '#fbbf24' }}>· synthetic</span>}
+          {modeLabel && <span style={{ color: modeColor, fontWeight: 600 }}>· {modeLabel}</span>}
         </span>
       )}
       <div style={{

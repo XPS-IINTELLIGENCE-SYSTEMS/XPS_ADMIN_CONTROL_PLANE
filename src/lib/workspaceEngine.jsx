@@ -12,38 +12,65 @@ import React, { createContext, useContext, useReducer, useCallback } from 'react
 // ── Object types ──────────────────────────────────────────────────────────────
 
 export const OBJ_TYPE = {
-  CODE:     'code',
-  SEARCH:   'search',
-  SCRAPE:   'scrape',
-  REPORT:   'report',
-  DATA:     'data',
-  LOG:      'log',
-  ARTIFACT: 'artifact',
+  CODE:             'code',
+  SEARCH:           'search',
+  SCRAPE:           'scrape',
+  REPORT:           'report',
+  DATA:             'data',
+  LOG:              'log',
+  ARTIFACT:         'artifact',
+  // Phase 3 — richer types
+  UI:               'ui',
+  COMPONENT:        'component',
+  PREVIEW:          'preview',
+  IMAGE:            'image',
+  PHOTO:            'photo',
+  VIDEO:            'video',
+  ARTIFACT_BUNDLE:  'artifact_bundle',
+  WORKFLOW:         'workflow',
+  CONNECTOR_ACTION: 'connector_action',
+  AGENT_RUN:        'agent_run',
+  RUNTIME_STATE:    'runtime_state',
 };
 
 export const OBJ_TYPE_META = {
-  code:     { label: 'Code',         icon: '</>' },
-  search:   { label: 'Search',       icon: '🔍' },
-  scrape:   { label: 'Scrape',       icon: '🕷️' },
-  report:   { label: 'Report',       icon: '📄' },
-  data:     { label: 'Data',         icon: '📊' },
-  log:      { label: 'Run Log',      icon: '📋' },
-  artifact: { label: 'Artifact',     icon: '📦' },
+  code:             { label: 'Code',             icon: '</>' },
+  search:           { label: 'Search',           icon: '🔍' },
+  scrape:           { label: 'Scrape',           icon: '🕷️' },
+  report:           { label: 'Report',           icon: '📄' },
+  data:             { label: 'Data',             icon: '📊' },
+  log:              { label: 'Run Log',          icon: '📋' },
+  artifact:         { label: 'Artifact',         icon: '📦' },
+  ui:               { label: 'UI',               icon: '🖼️' },
+  component:        { label: 'Component',        icon: '🧩' },
+  preview:          { label: 'Preview',          icon: '👁️' },
+  image:            { label: 'Image',            icon: '🖼️' },
+  photo:            { label: 'Photo',            icon: '📷' },
+  video:            { label: 'Video',            icon: '🎬' },
+  artifact_bundle:  { label: 'Bundle',           icon: '🗃️' },
+  workflow:         { label: 'Workflow',         icon: '⚡' },
+  connector_action: { label: 'Connector',        icon: '🔌' },
+  agent_run:        { label: 'Agent Run',        icon: '🤖' },
+  runtime_state:    { label: 'Runtime State',    icon: '⚙️' },
 };
 
 // ── Object statuses ───────────────────────────────────────────────────────────
 
 export const RUN_STATUS = {
-  IDLE:    'idle',
-  RUNNING: 'running',
-  DONE:    'done',
-  ERROR:   'error',
+  IDLE:      'idle',
+  QUEUED:    'queued',
+  RUNNING:   'running',
+  DONE:      'done',
+  ERROR:     'error',
+  CANCELLED: 'cancelled',
+  RETRY:     'retry',
 };
 
 // ── Action types ──────────────────────────────────────────────────────────────
 
 export const WS_CREATE     = 'WS_CREATE';
 export const WS_UPDATE     = 'WS_UPDATE';
+export const WS_PATCH      = 'WS_PATCH';
 export const WS_APPEND_LOG = 'WS_APPEND_LOG';
 export const WS_SET_STATUS = 'WS_SET_STATUS';
 export const WS_SET_ACTIVE = 'WS_SET_ACTIVE';
@@ -55,7 +82,7 @@ export function genId() {
   return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function makeObject({ id, type = OBJ_TYPE.REPORT, title, content = '', agent = null, status = RUN_STATUS.IDLE } = {}) {
+function makeObject({ id, type = OBJ_TYPE.REPORT, title, content = '', agent = null, status = RUN_STATUS.IDLE, meta = {}, steps = [], progress = 0 } = {}) {
   const now = Date.now();
   return {
     id: id || genId(),
@@ -65,6 +92,9 @@ function makeObject({ id, type = OBJ_TYPE.REPORT, title, content = '', agent = n
     logs: [],
     status,
     agent,
+    meta,        // type-specific extra data (steps, urls, connector info, etc.)
+    steps,       // run step array [ { step, label, status } ]
+    progress,    // 0–100
     createdAt: now,
     updatedAt: now,
   };
@@ -89,6 +119,17 @@ function reducer(state, action) {
         objects: state.objects.map(o =>
           o.id === action.payload.id
             ? { ...o, content: action.payload.content, updatedAt: Date.now() }
+            : o
+        ),
+      };
+    }
+
+    case WS_PATCH: {
+      return {
+        ...state,
+        objects: state.objects.map(o =>
+          o.id === action.payload.id
+            ? { ...o, ...action.payload.patch, updatedAt: Date.now() }
             : o
         ),
       };
@@ -153,6 +194,10 @@ export function WorkspaceProvider({ children }) {
     dispatch({ type: WS_UPDATE, payload: { id, content } });
   }, []);
 
+  const patchObject = useCallback((id, patch) => {
+    dispatch({ type: WS_PATCH, payload: { id, patch } });
+  }, []);
+
   const appendLog = useCallback((id, line) => {
     dispatch({ type: WS_APPEND_LOG, payload: { id, line } });
   }, []);
@@ -174,6 +219,7 @@ export function WorkspaceProvider({ children }) {
     activeId: state.activeId,
     createObject,
     updateObject,
+    patchObject,
     appendLog,
     setStatus,
     setActive,
@@ -207,6 +253,12 @@ export function detectObjectType(content, agentId) {
   }
   if (agentId === 'research' || lower.includes('search result') || lower.includes('found ') || lower.includes('web search')) {
     return OBJ_TYPE.SEARCH;
+  }
+  if (agentId === 'builder' || lower.includes('<html') || lower.includes('component') || lower.includes('render(')) {
+    return OBJ_TYPE.UI;
+  }
+  if (agentId === 'bytebot' || lower.includes('step ') || lower.includes('task completed') || lower.includes('run complete')) {
+    return OBJ_TYPE.AGENT_RUN;
   }
   if (lower.includes('"items"') || lower.includes('[{') || lower.includes('json') || lower.includes('structured data')) {
     return OBJ_TYPE.DATA;

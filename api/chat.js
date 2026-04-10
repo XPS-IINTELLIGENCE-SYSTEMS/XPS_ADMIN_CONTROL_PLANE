@@ -1,5 +1,7 @@
 // Vercel serverless function: POST /api/chat
-// Forwards messages to OpenAI / Groq / Ollama based on available env vars
+// Returns a structured workspace render contract instead of freeform text.
+import { callLLM, llmMode, hasLLM } from './_llm.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -10,79 +12,87 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { messages, model } = req.body || {}
+  const { messages, model, agent = 'orchestrator', runId } = req.body || {}
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array is required' })
   }
 
+  const mode = llmMode();
+
+  if (!hasLLM()) {
+    // Structured synthetic response
+    return res.status(200).json({
+      event_type: 'run_completed',
+      run_id:     runId || null,
+      agent,
+      mode:       'synthetic',
+      reply: `[Synthetic] ${agent} received your message. No LLM configured — set OPENAI_API_KEY to enable live responses.`,
+      workspace_object: {
+        type:    'report',
+        title:   'Synthetic Response',
+        content: `[Synthetic] ${agent} — no live backend configured.\n\nSet OPENAI_API_KEY in environment to enable live AI responses.`,
+      },
+      steps: [
+        { step: 1, label: 'Message received',   status: 'complete' },
+        { step: 2, label: 'LLM unavailable',    status: 'skipped'  },
+        { step: 3, label: 'Synthetic fallback', status: 'complete' },
+      ],
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
-    const reply = await callLLM(messages, model)
-    return res.status(200).json({ reply })
+    const reply = await callLLM(messages, { model })
+    const wsType = inferWsType(reply, agent);
+
+    return res.status(200).json({
+      event_type: 'run_completed',
+      run_id:     runId || null,
+      agent,
+      mode,
+      reply,
+      workspace_object: {
+        type:    wsType,
+        title:   deriveTitle(reply, agent),
+        content: reply,
+      },
+      steps: [
+        { step: 1, label: 'Message received', status: 'complete' },
+        { step: 2, label: 'LLM executed',     status: 'complete' },
+        { step: 3, label: 'Result ready',     status: 'complete' },
+      ],
+      timestamp: new Date().toISOString(),
+    });
   } catch (err) {
     console.error('[chat] LLM error:', err.message)
-    return res.status(500).json({ error: err.message || 'LLM request failed' })
+    return res.status(500).json({
+      event_type: 'run_failed',
+      run_id:     runId || null,
+      agent,
+      mode,
+      error:      err.message || 'LLM request failed',
+      timestamp:  new Date().toISOString(),
+    });
   }
 }
 
-async function callLLM(messages, model) {
-  // Priority: OpenAI → Groq → Ollama
-  if (process.env.OPENAI_API_KEY) {
-    return callOpenAI(messages, model || 'gpt-4o-mini')
-  }
-  if (process.env.GROQ_API_KEY) {
-    return callGroq(messages, model || 'llama3-8b-8192')
-  }
-  if (process.env.OLLAMA_BASE_URL) {
-    return callOllama(messages, model || 'llama3')
-  }
-  throw new Error('No LLM provider configured. Set OPENAI_API_KEY, GROQ_API_KEY, or OLLAMA_BASE_URL.')
+function inferWsType(reply, agentId) {
+  if (!reply) return 'report';
+  if (reply.includes('```')) return 'code';
+  const lower = reply.toLowerCase();
+  if (agentId === 'builder' || lower.includes('<html') || lower.includes('component')) return 'ui';
+  if (agentId === 'bytebot' || lower.includes('step ') || lower.includes('task completed')) return 'agent_run';
+  if (agentId === 'scraper' || lower.includes('scrape') || lower.includes('extracted')) return 'scrape';
+  if (agentId === 'research' || lower.includes('search result') || lower.includes('web search')) return 'search';
+  if (lower.includes('"items"') || lower.includes('[{')) return 'data';
+  return 'report';
 }
 
-async function callOpenAI(messages, model) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({ model, messages }),
-  })
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`OpenAI error ${response.status}: ${err}`)
-  }
-  const data = await response.json()
-  return data.choices[0].message.content
+function deriveTitle(content, agentId) {
+  const fallback = `${agentId ?? 'agent'} output`;
+  if (!content) return fallback;
+  const firstLine = content.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').replace(/^```\w*/, '').trim() ?? '';
+  if (!firstLine) return fallback;
+  return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
 }
 
-async function callGroq(messages, model) {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({ model, messages }),
-  })
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Groq error ${response.status}: ${err}`)
-  }
-  const data = await response.json()
-  return data.choices[0].message.content
-}
-
-async function callOllama(messages, model) {
-  const base = process.env.OLLAMA_BASE_URL.replace(/\/$/, '')
-  const response = await fetch(`${base}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages, stream: false }),
-  })
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Ollama error ${response.status}: ${err}`)
-  }
-  const data = await response.json()
-  return data.message?.content || data.response
-}
