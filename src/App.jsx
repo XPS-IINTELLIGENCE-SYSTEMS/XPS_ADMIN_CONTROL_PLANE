@@ -1,71 +1,61 @@
-import React, { useState } from 'react';
-import './styles.css';
-import HomePage from './components/HomePage.jsx';
-import Shell from './components/Shell.jsx';
-import Dashboard from './components/Dashboard.jsx';
-import CRM from './components/CRM.jsx';
-import Leads from './components/Leads.jsx';
-import AIAssistant from './components/AIAssistant.jsx';
-import ResearchLab from './components/ResearchLab.jsx';
-import Outreach from './components/Outreach.jsx';
-import Proposals from './components/Proposals.jsx';
-import Analytics from './components/Analytics.jsx';
-import KnowledgeBase from './components/KnowledgeBase.jsx';
-import Competition from './components/Competition.jsx';
-import Connectors from './components/Connectors.jsx';
-import Editor from './components/Editor.jsx';
-import Scraper from './components/Scraper.jsx';
-import WorkflowBuilder from './components/WorkflowBuilder.jsx';
-import JobLogs from './components/JobLogs.jsx';
-import Artifacts from './components/Artifacts.jsx';
-import Admin from './components/Admin.jsx';
-import Settings from './components/Settings.jsx';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+import Shell from './components/layout/Shell.jsx';
+
+// Pages
+import Dashboard         from './pages/Dashboard.jsx';
+import CRM               from './pages/CRM.jsx';
+import Leads             from './pages/Leads.jsx';
+import AIAssistant       from './pages/AIAssistant.jsx';
+import ResearchLab       from './pages/ResearchLab.jsx';
+import Outreach          from './pages/Outreach.jsx';
+import Proposals         from './pages/Proposals.jsx';
+import Analytics         from './pages/Analytics.jsx';
+import KnowledgeBase     from './pages/KnowledgeBase.jsx';
+import Competition       from './pages/Competition.jsx';
+import Connectors        from './pages/Connectors.jsx';
+import Admin             from './pages/Admin.jsx';
+import Settings          from './pages/Settings.jsx';
+
+// XPS System pages
+import AdminControlPlane from './pages/xps/AdminControlPlane.jsx';
+import VisionCortex      from './pages/xps/VisionCortex.jsx';
+import AutoBuilder       from './pages/xps/AutoBuilder.jsx';
+import IntelCore         from './pages/xps/IntelCore.jsx';
+import Sandbox           from './pages/xps/Sandbox.jsx';
+import Quarantine        from './pages/xps/Quarantine.jsx';
 
 export default function App() {
-  const [page, setPage] = useState('home');
-
-  if (page === 'home') {
-    return <HomePage onEnterAdmin={() => setPage('dashboard')} />;
-  }
-
-  const pageMap = {
-    dashboard: <Dashboard />,
-    crm: <CRM />,
-    leads: <Leads />,
-    'ai-assistant': <AIAssistant />,
-    research: <ResearchLab />,
-    outreach: <Outreach />,
-    proposals: <Proposals />,
-    analytics: <Analytics />,
-    knowledge: <KnowledgeBase />,
-    competition: <Competition />,
-    connectors: <Connectors />,
-    editor: <Editor />,
-    scraper: <Scraper />,
-    workflows: <WorkflowBuilder />,
-    logs: <JobLogs />,
-    artifacts: <Artifacts />,
-    admin: <Admin />,
-    settings: <Settings />,
-  };
-
-  // Pages that need full height (no scroll padding) for their own internal layout
-  const fullHeightPages = new Set(['ai-assistant', 'editor']);
-
   return (
-    <Shell page={page} setPage={setPage}>
-      {pageMap[page] || <NotFound page={page} setPage={setPage} />}
-    </Shell>
-  );
-}
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Shell />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard"    element={<Dashboard />} />
+          <Route path="crm"          element={<CRM />} />
+          <Route path="leads"        element={<Leads />} />
+          <Route path="ai-assistant" element={<AIAssistant />} />
+          <Route path="research"     element={<ResearchLab />} />
+          <Route path="outreach"     element={<Outreach />} />
+          <Route path="proposals"    element={<Proposals />} />
+          <Route path="analytics"    element={<Analytics />} />
+          <Route path="knowledge"    element={<KnowledgeBase />} />
+          <Route path="competition"  element={<Competition />} />
+          <Route path="connectors"   element={<Connectors />} />
+          <Route path="admin"        element={<Admin />} />
+          <Route path="settings"     element={<Settings />} />
 
-function NotFound({ page, setPage }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '80px 40px' }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Page not found: {page}</div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', marginBottom: 24 }}>This section is not yet available.</div>
-      <button className="btn-gold" onClick={() => setPage('dashboard')}>← Back to Dashboard</button>
-    </div>
+          <Route path="xps/admin"      element={<AdminControlPlane />} />
+          <Route path="xps/vision"     element={<VisionCortex />} />
+          <Route path="xps/builder"    element={<AutoBuilder />} />
+          <Route path="xps/intel"      element={<IntelCore />} />
+          <Route path="xps/sandbox"    element={<Sandbox />} />
+          <Route path="xps/quarantine" element={<Quarantine />} />
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
