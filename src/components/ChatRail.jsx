@@ -255,10 +255,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'research') {
       setLoading(false);
       try {
+        const contextLabel = mode;
         const res = await fetch(`${API_URL}/api/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: prompt, context: mode, runId: genId() }),
+          body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -266,7 +267,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         if (data.workspace_object) {
           commitToWorkspace(data.workspace_object, agent, prompt);
         }
-        persistSearchJob({ query: prompt, context: mode, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+        persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
       } catch (err) {
         setMessages(prev => [...prev, { role: 'assistant', content: `Research request failed: ${err.message}`, agent, synthetic: true }]);
       }
@@ -279,16 +280,17 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const url = urlMatch ? urlMatch[0] : null;
       try {
         if (!url) {
+          const contextLabel = 'scrape-discovery';
           const res = await fetch(`${API_URL}/api/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: prompt, context: 'scrape-discovery', runId: genId() }),
+            body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
           if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
-          persistSearchJob({ query: prompt, context: 'scrape-discovery', status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+          persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
         } else {
           const res = await fetch(`${API_URL}/api/scrape`, {
             method: 'POST',
