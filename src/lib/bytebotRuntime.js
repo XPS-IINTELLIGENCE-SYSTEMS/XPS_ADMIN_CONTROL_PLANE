@@ -30,6 +30,7 @@ import {
 } from './supabasePersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
+const RETRY_DELAY_BASE_MS = 600;
 
 // ── Run state ─────────────────────────────────────────────────────────────────
 
@@ -143,7 +144,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
   if (!run || run.cancelled) return;
 
   const wsObjId = run.wsObjId;
-  const maxRetries = Math.max(0, Number(context?.maxRetries ?? context?.retries ?? 1));
+  const retryAttempts = Math.max(0, Number(context?.retryAttempts ?? context?.maxRetries ?? context?.retries ?? 1));
 
   try {
     _emitLog(runId, workspaceCtx, `[${agent}] Analyzing task…`);
@@ -157,7 +158,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       });
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       return res.json();
-    }, maxRetries, runId, workspaceCtx);
+    }, retryAttempts, runId, workspaceCtx);
 
     if (run.cancelled) return;
 
@@ -682,15 +683,15 @@ function recordStaging(runId, staging, workspaceCtx, agent) {
   }
 }
 
-async function runWithRetry(fn, maxRetries, runId, workspaceCtx) {
+async function runWithRetry(fn, retryAttempts, runId, workspaceCtx) {
   let attempt = 0;
-  while (attempt <= maxRetries) {
+  while (attempt <= retryAttempts) {
     try {
-      if (attempt > 0) _emitLog(runId, workspaceCtx, `Retrying run (${attempt}/${maxRetries})…`);
+      if (attempt > 0) _emitLog(runId, workspaceCtx, `Retrying run (${attempt}/${retryAttempts})…`);
       return await fn();
     } catch (err) {
-      if (attempt >= maxRetries) throw err;
-      await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+      if (attempt >= retryAttempts) throw err;
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_BASE_MS * (attempt + 1)));
       attempt += 1;
     }
   }

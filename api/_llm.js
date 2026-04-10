@@ -89,7 +89,17 @@ async function callOllama(messages, model) {
 
 async function callGemini(messages, model, json = false) {
   const key = process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
-  const contents = messages.map((m) => ({
+  const systemPreamble = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+  const filtered = messages.filter(m => m.role !== 'system');
+  if (systemPreamble) {
+    if (filtered.length > 0) {
+      filtered[0] = { ...filtered[0], content: `${systemPreamble}\n\n${filtered[0].content}` };
+    } else {
+      filtered.push({ role: 'user', content: systemPreamble });
+    }
+  }
+
+  const contents = filtered.map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }],
   }));

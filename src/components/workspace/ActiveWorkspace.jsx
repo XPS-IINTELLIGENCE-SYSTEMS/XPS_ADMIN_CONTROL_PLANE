@@ -642,6 +642,9 @@ function Divider() {
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ createObject, setActive }) {
+  const typeList = Object.values(OBJ_TYPE_META)
+    .map(meta => meta.label.toUpperCase())
+    .join(' · ');
   const QUICK_ACTIONS = [
     { label: 'New Code Object',  type: OBJ_TYPE.CODE,   title: 'Untitled Code',   content: '// Start coding here\n' },
     { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
@@ -733,7 +736,7 @@ function EmptyState({ createObject, setActive }) {
       </div>
 
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', letterSpacing: 0.5 }}>
-        CODE · SEARCH · SCRAPE · REPORT · DATA · LOG · UI · IMAGE · AGENT RUN · WORKFLOW · STAGING · LEDGER
+        {typeList}
       </div>
     </div>
   );
