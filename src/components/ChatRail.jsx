@@ -33,6 +33,7 @@ function useProviderState() {
 const PROVIDER_COLORS = {
   openai:    { color: '#4ade80', label: 'OpenAI',    mode: 'Live' },
   groq:      { color: '#4ade80', label: 'Groq',      mode: 'Live' },
+  gemini:    { color: '#a855f7', label: 'Gemini',    mode: 'Live' },
   ollama:    { color: '#60a5fa', label: 'Ollama',    mode: 'Local' },
   none:      { color: '#fbbf24', label: 'Synthetic', mode: 'Synthetic' },
 };
@@ -96,10 +97,10 @@ const MODES = [
 ];
 
 const SYSTEM_PROMPTS = {
-  orchestrator: 'You are the XPS Orchestrator. You coordinate all XPS intelligence operations, routing tasks to the appropriate agents, managing workflows, and synthesizing results for the operator.',
-  research:     'You are the XPS Research Agent. You specialize in gathering, analyzing, and synthesizing intelligence from web searches, public data, and research queries.',
-  scraper:      'You are the XPS Scraper Agent. You specialize in web scraping, data extraction, and structured output from target URLs.',
-  bytebot:      'You are ByteBot, an autonomous task orchestrator. You break down complex operator requests into queued multi-step actions and report progress clearly.',
+  orchestrator: 'You are the XPS Orchestrator. You coordinate intelligence operations, route tasks to agents, manage workflows, and synthesize results with connector truth.',
+  research:     'You are the XPS Research Agent. You gather, analyze, and synthesize intelligence from research queries.',
+  scraper:      'You are the XPS Scraper Agent. You extract structured data from target URLs and summarize results.',
+  bytebot:      'You are ByteBot, an autonomous task orchestrator. You break down operator requests into multi-step actions, coordinate parallel tasks, and report progress clearly.',
   vision:       'You are Vision Cortex, the XPS visual intelligence agent. You analyze images, describe visual data, and support AI image/video workflow tasks.',
   intel:        'You are Intel Core, the XPS competitive and market intelligence agent. You analyze competitors, market trends, and strategic signals.',
   builder:      'You are Auto Builder, the XPS code and UI generation agent. You create, scaffold, and iterate on code, UI components, and system structures.',
@@ -189,17 +190,39 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (!input.trim() || loading) return;
 
     const userMsg = { role: 'user', content: input.trim(), agent, mode };
-    const prompt  = userMsg.content;
+    const attachmentSummary = attachments
+      .map(att => `${att.name} (${att.type || 'file'}, ${Math.round(att.size / 1024)}kb)`)
+      .join('\n');
+    const prompt  = attachmentSummary
+      ? `${userMsg.content}\n\nAttachments:\n${attachmentSummary}`
+      : userMsg.content;
     const history = [...messages, userMsg];
     setMessages(history);
     setInput('');
     setAttachments([]);
     setLoading(true);
 
+    if (mode === 'autonomous' && agent !== 'bytebot') {
+      setLoading(false);
+      startRun(
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
+        { createObject, setStatus, appendLog, patchObject },
+        onNavigate,
+      ).then(runId => {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `Autonomous run started. ByteBot is orchestrating parallel steps and workspace updates.`,
+          agent: 'bytebot',
+          runId,
+        }]);
+      });
+      return;
+    }
+
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -229,6 +252,61 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       return;
     }
 
+    if (agent === 'research') {
+      setLoading(false);
+      try {
+        const res = await fetch(`${API_URL}/api/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: prompt, context: mode, runId: genId() }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
+        if (data.workspace_object) {
+          commitToWorkspace(data.workspace_object, agent, prompt);
+        }
+        persistSearchJob({ query: prompt, context: mode, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+      } catch (err) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Research request failed: ${err.message}`, agent, synthetic: true }]);
+      }
+      return;
+    }
+
+    if (agent === 'scraper') {
+      setLoading(false);
+      const urlMatch = prompt.match(/https?:\/\/[^\s)]+/i);
+      const url = urlMatch ? urlMatch[0] : null;
+      try {
+        if (!url) {
+          const res = await fetch(`${API_URL}/api/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: prompt, context: 'scrape-discovery', runId: genId() }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
+          if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
+          persistSearchJob({ query: prompt, context: 'scrape-discovery', status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
+        } else {
+          const res = await fetch(`${API_URL}/api/scrape`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, prompt, runId: genId() }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setMessages(prev => [...prev, { role: 'assistant', content: data.summary || data.workspace_object?.content || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
+          if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
+          persistScrapeJob({ url, prompt, status: 'complete', result: data.summary, rawContent: null, mode: data.mode || 'synthetic' }).catch(() => {});
+        }
+      } catch (err) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Scrape request failed: ${err.message}`, agent, synthetic: true }]);
+      }
+      return;
+    }
+
     const runId   = genId();
     const wsObjId = genId();
 
@@ -241,14 +319,14 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     const apiMessages = [
       { role: 'system', content: SYSTEM_PROMPTS[agent] || SYSTEM_PROMPTS.gpt },
-      ...history.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })),
+      ...history.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m === userMsg ? prompt : m.content })),
     ];
 
     try {
       const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, agent, runId, mode }),
+        body: JSON.stringify({ messages: apiMessages, agent, runId, mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -451,6 +529,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         display: 'flex', flexDirection: 'column', gap: 8,
       }}>
         {activeRuns.length > 0 && <ActiveRunsSummary runs={activeRuns} />}
+        {activeJobs.length > 0 && <ActiveJobsSummary jobs={activeJobs} />}
         {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px' }}>
@@ -665,6 +744,43 @@ function ActiveRunsSummary({ runs }) {
             <div style={{ marginTop: 4, marginLeft: 11 }}>
               <div style={{ width: '100%', height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
                 <div style={{ width: `${run.progress}%`, height: '100%', background: gold, borderRadius: 1, transition: 'width 0.3s' }} />
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActiveJobsSummary({ jobs }) {
+  return (
+    <div style={{
+      background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)',
+      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#60a5fa', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
+        Browser Jobs ({jobs.length})
+      </div>
+      {jobs.map(job => (
+        <div key={job.jobId} style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#60a5fa', animation: 'xpsPulse 1s ease-in-out infinite' }} />
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {job.action}: {job.url?.slice(0, 40) || 'browser job'}
+            </span>
+            <button
+              onClick={() => cancelBrowserJob(job.jobId)}
+              title="Cancel job"
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          {job.progress > 0 && (
+            <div style={{ marginTop: 4, marginLeft: 11 }}>
+              <div style={{ width: '100%', height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
+                <div style={{ width: `${job.progress}%`, height: '100%', background: '#60a5fa', borderRadius: 1, transition: 'width 0.3s' }} />
               </div>
             </div>
           )}

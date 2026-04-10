@@ -15,7 +15,7 @@ const enabled = !!(
 
 // ── Agent runs ────────────────────────────────────────────────────────────────
 
-export async function persistRun({ runId, agent, task, status, mode, steps = [], result = null, error = null }) {
+export async function persistRun({ runId, agent, task, status, mode, steps = [], result = null, error = null, summary = null, artifacts = [] }) {
   if (!enabled) return null;
   try {
     const { data, error: err } = await supabase
@@ -29,6 +29,8 @@ export async function persistRun({ runId, agent, task, status, mode, steps = [],
         steps:        steps,
         result:       result ?? null,
         error_msg:    error ?? null,
+        summary:      summary ?? null,
+        artifacts:    artifacts ?? [],
         progress:     status === 'complete' ? 100 : status === 'running' ? 50 : 0,
         started_at:   status === 'running'  ? new Date().toISOString() : undefined,
         completed_at: status === 'complete' || status === 'error' ? new Date().toISOString() : undefined,
@@ -78,12 +80,23 @@ export async function persistArtifact({ type, title, content, agent, runId = nul
 
 // ── Workspace objects ─────────────────────────────────────────────────────────
 
-export async function persistWorkspaceObject({ id, type, title, content, agent, meta = {} }) {
+export async function persistWorkspaceObject({ id, type, title, content, agent, runId = null, status = 'done', steps = [], progress = 0, meta = {} }) {
   if (!enabled) return null;
   try {
     const { error: err } = await supabase
       .from('workspace_objects')
-      .insert({ ws_obj_id: id, type, title, content, agent, meta });
+      .insert({
+        ws_obj_id: id,
+        type,
+        title,
+        content,
+        agent,
+        run_id: runId,
+        status,
+        steps,
+        progress,
+        meta,
+      });
     if (err) console.warn('[persist] workspace_object insert:', err.message);
   } catch (e) {
     console.warn('[persist] workspace_object error:', e.message);
@@ -233,6 +246,124 @@ export async function persistSnapshot({ jobId, url, snapshotText, extractedData 
     return data;
   } catch (e) {
     console.warn('[persist] snapshot error:', e.message);
+    return null;
+  }
+}
+
+// ── Connector snapshots ────────────────────────────────────────────────────────
+
+export async function persistConnectorSnapshot({ connectors, mode = 'synthetic', triggeredBy = 'auto' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('connector_snapshots')
+      .insert({ connectors, mode, triggered_by: triggeredBy })
+      .select()
+      .single();
+    if (err) console.warn('[persist] connector_snapshot insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] connector_snapshot error:', e.message);
+    return null;
+  }
+}
+
+// ── Staging / exports ─────────────────────────────────────────────────────────
+
+export async function persistPreStageItem({ runId = null, source = 'runtime', payload = {}, status = 'queued' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('pre_stage_items')
+      .insert({ run_id: runId, source, payload, status })
+      .select()
+      .single();
+    if (err) console.warn('[persist] pre_stage insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] pre_stage error:', e.message);
+    return null;
+  }
+}
+
+export async function persistStageItem({ runId = null, source = 'runtime', payload = {}, status = 'queued' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('stage_items')
+      .insert({ run_id: runId, source, payload, status })
+      .select()
+      .single();
+    if (err) console.warn('[persist] stage insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] stage error:', e.message);
+    return null;
+  }
+}
+
+export async function persistHubSpotExport({ runId = null, payload = {}, status = 'queued', blockedReason = null }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('hubspot_exports')
+      .insert({ run_id: runId, payload, status, blocked_reason: blockedReason })
+      .select()
+      .single();
+    if (err) console.warn('[persist] hubspot export insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] hubspot export error:', e.message);
+    return null;
+  }
+}
+
+export async function persistAirtableExport({ runId = null, payload = {}, status = 'queued', blockedReason = null }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('airtable_exports')
+      .insert({ run_id: runId, payload, status, blocked_reason: blockedReason })
+      .select()
+      .single();
+    if (err) console.warn('[persist] airtable export insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] airtable export error:', e.message);
+    return null;
+  }
+}
+
+// ── Runtime ledger / recovery ─────────────────────────────────────────────────
+
+export async function persistRuntimeLedger({ runId = null, entryType, payload = {}, status = 'recorded' }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('runtime_ledgers')
+      .insert({ run_id: runId, entry_type: entryType, payload, status })
+      .select()
+      .single();
+    if (err) console.warn('[persist] ledger insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] ledger error:', e.message);
+    return null;
+  }
+}
+
+export async function persistRecoveryQueue({ runId = null, action, payload = {}, status = 'queued', retryCount = 0, lastError = null }) {
+  if (!enabled) return null;
+  try {
+    const { data, error: err } = await supabase
+      .from('recovery_queue')
+      .insert({ run_id: runId, action, payload, status, retry_count: retryCount, last_error: lastError })
+      .select()
+      .single();
+    if (err) console.warn('[persist] recovery insert:', err.message);
+    return data;
+  } catch (e) {
+    console.warn('[persist] recovery error:', e.message);
     return null;
   }
 }

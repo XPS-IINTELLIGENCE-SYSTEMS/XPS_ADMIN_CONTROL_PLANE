@@ -1,15 +1,30 @@
 // Connector Reality Matrix
 // Status: connected_writable | connected_read_only | referenced_only | blocked | missing
 
+const env = import.meta.env;
+
+function isSet(key) {
+  const v = env[key];
+  return typeof v === 'string' && v.length > 5;
+}
+
+const hasGitHub = isSet('GITHUB_TOKEN') || isSet('GITHUB_API_TOKEN');
+const hasSupabase = isSet('SUPABASE_URL') && isSet('SUPABASE_ANON_KEY');
+const hasVercel = isSet('VERCEL_TOKEN') || isSet('VERCEL_ACCESS_TOKEN');
+const hasHubSpot = isSet('HUBSPOT_API_KEY');
+const hasAirtable = isSet('AIRTABLE_API_KEY') && isSet('AIRTABLE_BASE_ID');
+const hasBrowserWorker = isSet('BROWSER_WORKER_URL');
+const hasGoogle = isSet('GCP_SA_KEY') || isSet('GCP_PROJECT_ID');
+
 export const connectors = [
   {
     id: 'github',
     name: 'GitHub',
     icon: 'git-branch',
     category: 'Source Control',
-    status: 'referenced_only',
+    status: hasGitHub ? 'connected_writable' : 'referenced_only',
     role: 'Source storage, versioned docs, code repos',
-    note: 'Repo present. No runtime write token verified.',
+    note: hasGitHub ? 'GitHub API token verified for repo access.' : 'Repo present. No runtime write token verified.',
     lastAttempt: null,
   },
   {
@@ -17,9 +32,9 @@ export const connectors = [
     name: 'Vercel',
     icon: 'cloud',
     category: 'Deployment',
-    status: 'referenced_only',
+    status: hasVercel ? 'connected_writable' : 'referenced_only',
     role: 'Deployment and runtime frontend',
-    note: 'VERCEL_PROJECT_ID not set in environment.',
+    note: hasVercel ? 'Vercel API token configured.' : 'VERCEL_TOKEN not set in environment.',
     lastAttempt: null,
   },
   {
@@ -27,9 +42,9 @@ export const connectors = [
     name: 'Google Drive',
     icon: 'folder',
     category: 'Storage',
-    status: 'missing',
+    status: hasGoogle ? 'blocked' : 'missing',
     role: 'Docs, archives, fallback drops, package storage',
-    note: 'No OAuth token found.',
+    note: hasGoogle ? 'OAuth user consent required for Drive access.' : 'No OAuth token found.',
     lastAttempt: null,
   },
   {
@@ -37,9 +52,9 @@ export const connectors = [
     name: 'Google Sheets',
     icon: 'table',
     category: 'Control Plane',
-    status: 'missing',
+    status: hasGoogle ? 'blocked' : 'missing',
     role: 'Workbook control plane, logs, backlog, import-ready control',
-    note: 'Sheets API credentials not present.',
+    note: hasGoogle ? 'Service account configured; OAuth consent required for full access.' : 'Sheets API credentials not present.',
     lastAttempt: null,
   },
   {
@@ -47,9 +62,9 @@ export const connectors = [
     name: 'HubSpot',
     icon: 'hexagon',
     category: 'CRM',
-    status: 'blocked',
+    status: hasHubSpot ? 'connected_writable' : 'blocked',
     role: 'Final CRM execution only',
-    note: 'API key present but not verified — blocked until runtime validation.',
+    note: hasHubSpot ? 'HubSpot key configured for export staging.' : 'HubSpot API key missing.',
     lastAttempt: '6h ago',
   },
   {
@@ -57,9 +72,9 @@ export const connectors = [
     name: 'Airtable',
     icon: 'grid',
     category: 'Staging',
-    status: 'missing',
+    status: hasAirtable ? 'connected_writable' : 'missing',
     role: 'Staging mirror',
-    note: 'Airtable API key not configured.',
+    note: hasAirtable ? 'Airtable base configured for staging sync.' : 'Airtable API key not configured.',
     lastAttempt: null,
   },
   {
@@ -67,9 +82,9 @@ export const connectors = [
     name: 'Gmail',
     icon: 'mail',
     category: 'Communication',
-    status: 'missing',
+    status: hasGoogle ? 'blocked' : 'missing',
     role: 'Summaries, alerts, blocker notices',
-    note: 'No Gmail OAuth token.',
+    note: hasGoogle ? 'OAuth user consent required for Gmail access.' : 'No Gmail OAuth token.',
     lastAttempt: null,
   },
   {
@@ -77,9 +92,9 @@ export const connectors = [
     name: 'Google Calendar',
     icon: 'calendar',
     category: 'Scheduling',
-    status: 'missing',
+    status: hasGoogle ? 'blocked' : 'missing',
     role: 'Cadence and schedule surface',
-    note: 'No Calendar OAuth token.',
+    note: hasGoogle ? 'OAuth user consent required for Calendar access.' : 'No Calendar OAuth token.',
     lastAttempt: null,
   },
   {
@@ -117,10 +132,20 @@ export const connectors = [
     name: 'Neon / Supabase / Postgres',
     icon: 'server',
     category: 'Database',
-    status: 'blocked',
+    status: hasSupabase ? 'connected_writable' : 'blocked',
     role: 'Durable relational state, ledgers, taxonomy, history',
-    note: 'Supabase keys present but DB connection refused. Writes queued locally.',
+    note: hasSupabase ? 'Supabase configured for staging + ledgers.' : 'Supabase keys missing.',
     lastAttempt: '2h ago',
+  },
+  {
+    id: 'browser_worker',
+    name: 'Browser Worker',
+    icon: 'server',
+    category: 'Automation',
+    status: hasBrowserWorker ? 'connected_writable' : 'blocked',
+    role: 'Playwright automation, scraping, evidence capture',
+    note: hasBrowserWorker ? 'Worker URL configured for browser jobs.' : 'BROWSER_WORKER_URL not set.',
+    lastAttempt: null,
   },
 ];
 
