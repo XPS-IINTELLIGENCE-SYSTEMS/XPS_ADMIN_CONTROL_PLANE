@@ -18,9 +18,9 @@ export default async function handler(req, res) {
 
   let activeLLM = 'none';
   let llmModel  = null;
-  if (hasOpenAI)  { activeLLM = 'openai';  llmModel = 'gpt-4o-mini'; }
-  else if (hasGroq)    { activeLLM = 'groq';   llmModel = 'llama3-8b-8192'; }
-  else if (hasOllama)  { activeLLM = 'ollama'; llmModel = env.OLLAMA_MODEL || 'llama3'; }
+  if (hasOpenAI)       { activeLLM = 'openai';  llmModel = 'gpt-4o-mini'; }
+  else if (hasGroq)    { activeLLM = 'groq';    llmModel = 'llama3-8b-8192'; }
+  else if (hasOllama)  { activeLLM = 'ollama';  llmModel = env.OLLAMA_MODEL || 'llama3'; }
 
   // ── GitHub ─────────────────────────────────────────────────────────────
   const hasGitHub = !!(env.GITHUB_TOKEN || env.GITHUB_API_TOKEN);
