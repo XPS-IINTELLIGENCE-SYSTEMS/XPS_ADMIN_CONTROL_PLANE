@@ -6,6 +6,8 @@ export async function callLLM(messages, { model, json = false } = {}) {
     return callOpenAI(messages, model || 'gpt-4o-mini', json);
   }
   if (process.env.GROQ_API_KEY) {
+    // Note: json=true (response_format: json_object) is an OpenAI-only feature;
+    // Groq and Ollama ignore this parameter and return plain text.
     return callGroq(messages, model || 'llama3-8b-8192');
   }
   if (process.env.OLLAMA_BASE_URL) {

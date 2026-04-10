@@ -46,8 +46,9 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   // Subscribe to ByteBot runtime run state
   useEffect(() => {
-    const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(r => r.status === 'running' || r.status === 'queued')));
-    setActiveRuns(getRunList().filter(r => r.status === 'running' || r.status === 'queued'));
+    const isActive = r => r.status === 'running' || r.status === 'queued';
+    const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(isActive)));
+    setActiveRuns(getRunList().filter(isActive));
     return unsub;
   }, []);
 

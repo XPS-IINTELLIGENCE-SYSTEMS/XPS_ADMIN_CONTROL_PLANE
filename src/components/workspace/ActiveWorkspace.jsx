@@ -710,7 +710,7 @@ function PreviewBody({ obj }) {
       {running && !obj.content ? (
         <RunningPlaceholder label="Loading preview…" />
       ) : url ? (
-        <iframe src={url} style={{ flex: 1, border: 'none' }} title="Preview" sandbox="allow-scripts allow-same-origin" />
+        <iframe src={url} style={{ flex: 1, border: 'none' }} title="Preview" sandbox="allow-scripts" />
       ) : (
         <RichBody obj={obj} accentColor='#a78bfa' />
       )}

@@ -82,8 +82,8 @@ export async function persistWorkspaceObject({ id, type, title, content, agent, 
   if (!enabled) return null;
   try {
     const { error: err } = await supabase
-      .from('generated_outputs')
-      .insert({ type, prompt: title, content, agent, meta });
+      .from('workspace_objects')
+      .insert({ ws_obj_id: id, type, title, content, agent, meta });
     if (err) console.warn('[persist] workspace_object insert:', err.message);
   } catch (e) {
     console.warn('[persist] workspace_object error:', e.message);
