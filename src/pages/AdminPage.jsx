@@ -37,6 +37,9 @@ const GROQ_CONFIGURED    = isSet('GROQ_API_KEY');
 const VERCEL_CONFIGURED  = isSet('VERCEL_TOKEN') || isSet('VERCEL_ACCESS_TOKEN');
 const GOOGLE_CONFIGURED  = isSet('GCP_SA_KEY') || isSet('GCP_PROJECT_ID');
 const GEMINI_CONFIGURED  = isSet('GEMINI_API_KEY') || isSet('GCP_GEMINI_KEY');
+const HUBSPOT_CONFIGURED = isSet('HUBSPOT_API_KEY');
+const AIRTABLE_CONFIGURED = isSet('AIRTABLE_API_KEY') && isSet('AIRTABLE_BASE_ID');
+const BROWSER_WORKER_CONFIGURED = isSet('BROWSER_WORKER_URL');
 
 // Status types
 const STATUS = {
@@ -226,6 +229,9 @@ export default function AdminPage() {
   const vercelConfigured  = live.vercel?.configured   ?? VERCEL_CONFIGURED;
   const googleConfigured  = live.google?.configured   ?? GOOGLE_CONFIGURED;
   const geminiConfigured  = live.google?.gemini?.configured ?? GEMINI_CONFIGURED;
+  const hubspotConfigured = live.hubspot?.configured  ?? HUBSPOT_CONFIGURED;
+  const airtableConfigured = live.airtable?.configured ?? AIRTABLE_CONFIGURED;
+  const browserWorkerConfigured = live.browser?.configured ?? BROWSER_WORKER_CONFIGURED;
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -358,13 +364,23 @@ export default function AdminPage() {
             vercelConfigured={vercelConfigured}
             googleConfigured={googleConfigured}
             geminiConfigured={geminiConfigured}
+            hubspotConfigured={hubspotConfigured}
+            airtableConfigured={airtableConfigured}
+            browserWorkerConfigured={browserWorkerConfigured}
           />
         )}
         {activeSection === 'github'    && <GitHubSection configured={ghConfigured} liveStatus={live} />}
         {activeSection === 'supabase'  && <SupabaseSection configured={sbConfigured} liveStatus={live} />}
         {activeSection === 'vercel'    && <VercelSection configured={vercelConfigured} liveStatus={live} />}
         {activeSection === 'google'    && <GoogleSection configured={googleConfigured} geminiConfigured={geminiConfigured} liveStatus={live} />}
-        {activeSection === 'system'    && <SystemSection openaiConfigured={openaiConfigured} groqConfigured={groqConfigured} sbConfigured={sbConfigured} />}
+        {activeSection === 'system'    && (
+          <SystemSection
+            openaiConfigured={openaiConfigured}
+            groqConfigured={groqConfigured}
+            sbConfigured={sbConfigured}
+            browserWorkerConfigured={browserWorkerConfigured}
+          />
+        )}
         {activeSection === 'users'     && <AccessSection sbConfigured={sbConfigured} />}
       </div>
     </div>
@@ -372,11 +388,24 @@ export default function AdminPage() {
 }
 
 // ── Integrations section ───────────────────────────────────────────────────
-function IntegrationsSection({ liveStatus, ghConfigured, sbConfigured, openaiConfigured, groqConfigured, vercelConfigured, googleConfigured, geminiConfigured }) {
+function IntegrationsSection({
+  liveStatus,
+  ghConfigured,
+  sbConfigured,
+  openaiConfigured,
+  groqConfigured,
+  vercelConfigured,
+  googleConfigured,
+  geminiConfigured,
+  hubspotConfigured,
+  airtableConfigured,
+  browserWorkerConfigured,
+}) {
   const live = liveStatus || {};
   const activeLLM  = live.llm?.active || (openaiConfigured ? 'openai' : groqConfigured ? 'groq' : 'none');
   const llmModel   = live.llm?.model  || null;
   const llmMode    = live.llm?.mode   || (activeLLM === 'none' ? 'synthetic' : 'live');
+  const browserStatus = live.browser?.mode === 'local' || browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED;
 
   return (
     <div>
@@ -524,6 +553,46 @@ function IntegrationsSection({ liveStatus, ghConfigured, sbConfigured, openaiCon
         <CapRow icon={BookOpen}    label="Google Sheets (read / write)"       status={deriveStatus(googleConfigured)} />
         <CapRow icon={Activity}    label="Google Calendar"                    status={STATUS.BLOCKED} note="Not wired" />
         <CapRow icon={Users}       label="Google Admin SDK (users / groups)"  status={deriveStatus(googleConfigured)} />
+      </CapPanel>
+
+      <SectionHeading>CRM / Staging</SectionHeading>
+
+      <CapPanel
+        icon={Users}
+        title="HubSpot"
+        subtitle="Final CRM destination (non-blocking)"
+        status={deriveStatus(hubspotConfigured)}
+        defaultOpen={false}
+      >
+        <CapRow icon={Users}     label="CRM Objects (contacts, companies, deals)" status={deriveStatus(hubspotConfigured)} note="HUBSPOT_API_KEY" />
+        <CapRow icon={Package}   label="Export staging (Supabase queue)"          status={deriveStatus(sbConfigured)} />
+        <CapRow icon={Shield}    label="Write-path safety gate"                   status={deriveStatus(hubspotConfigured)} />
+      </CapPanel>
+
+      <CapPanel
+        icon={Package}
+        title="Airtable"
+        subtitle="Optional staging mirror (non-blocking)"
+        status={deriveStatus(airtableConfigured)}
+        defaultOpen={false}
+      >
+        <CapRow icon={Package}   label="Staging mirror (records)"                status={deriveStatus(airtableConfigured)} note="AIRTABLE_API_KEY" />
+        <CapRow icon={BookOpen}  label="Review grid sync"                        status={deriveStatus(airtableConfigured)} />
+        <CapRow icon={Shield}    label="Optional staging gate"                   status={deriveStatus(airtableConfigured)} />
+      </CapPanel>
+
+      <SectionHeading>Automation</SectionHeading>
+
+      <CapPanel
+        icon={Globe}
+        title="Browser Worker"
+        subtitle="Playwright worker for scraping and evidence capture"
+        status={browserStatus}
+        defaultOpen={false}
+      >
+        <CapRow icon={Globe}    label="Browser job execution"                    status={browserStatus} note="BROWSER_WORKER_URL" />
+        <CapRow icon={Activity} label="Screenshots / evidence"                   status={browserStatus} />
+        <CapRow icon={Eye}      label="DOM extraction + summaries"               status={browserStatus} />
       </CapPanel>
     </div>
   );
@@ -795,6 +864,12 @@ function SupabaseSection({ configured, liveStatus }) {
           <InfoRow label="Persistence mode" value="Live — all runs persisted to workspace_objects" />
           <InfoRow label="Search jobs" value="Persisted to search_jobs table" />
           <InfoRow label="Scrape jobs" value="Persisted to scrape_jobs table" />
+          <InfoRow label="Pre-stage queue" value="Persisted to pre_stage_items" />
+          <InfoRow label="Stage queue" value="Persisted to stage_items" />
+          <InfoRow label="HubSpot export staging" value="Persisted to hubspot_exports" />
+          <InfoRow label="Airtable export staging" value="Persisted to airtable_exports" />
+          <InfoRow label="Runtime ledger" value="Persisted to runtime_ledgers" />
+          <InfoRow label="Recovery queue" value="Persisted to recovery_queue" />
           <InfoRow label="Auth bypass" value="Active (DEV mode)" />
         </div>
       ) : (
@@ -936,15 +1011,19 @@ function ErrorRow({ label }) {
   );
 }
 // ── System section ─────────────────────────────────────────────────────────
-function SystemSection({ openaiConfigured, groqConfigured, sbConfigured }) {
+function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured }) {
   const services = [
     { label: 'API Routes (/api/*)',      ok: true,                         note: 'Vercel serverless' },
     { label: 'LLM Adapter',             ok: openaiConfigured || groqConfigured, note: 'api/_llm.js' },
     { label: 'Status Endpoint',         ok: true,                         note: 'api/status.js' },
     { label: 'GitHub Proxy',            ok: true,                         note: 'api/github.js' },
     { label: 'Supabase Persistence',    ok: sbConfigured,                 note: 'src/lib/supabasePersistence.js' },
+    { label: 'Staging Pipeline',        ok: sbConfigured,                 note: 'pre_stage_items / stage_items' },
+    { label: 'Runtime Ledger',          ok: sbConfigured,                 note: 'runtime_ledgers' },
+    { label: 'Recovery Queue',          ok: sbConfigured,                 note: 'recovery_queue' },
     { label: 'ByteBot Runtime',         ok: true,                         note: 'src/lib/bytebotRuntime.js' },
     { label: 'Browser Job Runtime',     ok: true,                         note: 'src/lib/browserJobRuntime.js' },
+    { label: 'Browser Worker',          ok: browserWorkerConfigured,      note: 'BROWSER_WORKER_URL' },
     { label: 'Workspace Engine',        ok: true,                         note: 'src/lib/workspaceEngine.jsx' },
     { label: 'Orchestrator',            ok: openaiConfigured,             note: 'src/lib/orchestrator.js' },
   ];
@@ -1000,6 +1079,10 @@ function SystemSection({ openaiConfigured, groqConfigured, sbConfigured }) {
           { key: 'GITHUB_TOKEN',     set: GITHUB_CONFIGURED,  hint: 'GitHub API' },
           { key: 'VERCEL_TOKEN',     set: VERCEL_CONFIGURED,  hint: 'Vercel deployments' },
           { key: 'GCP_SA_KEY',       set: GOOGLE_CONFIGURED,  hint: 'Google Workspace / Gemini' },
+          { key: 'HUBSPOT_API_KEY',  set: HUBSPOT_CONFIGURED, hint: 'HubSpot CRM' },
+          { key: 'AIRTABLE_API_KEY', set: AIRTABLE_CONFIGURED, hint: 'Airtable staging' },
+          { key: 'AIRTABLE_BASE_ID', set: AIRTABLE_CONFIGURED, hint: 'Airtable base' },
+          { key: 'BROWSER_WORKER_URL', set: BROWSER_WORKER_CONFIGURED, hint: 'Browser automation worker' },
         ].map(item => (
           <div key={item.key} style={{
             display: 'flex', alignItems: 'center', gap: 10,

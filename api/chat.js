@@ -12,12 +12,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { messages, model, agent = 'orchestrator', runId } = req.body || {}
+  const { messages, model, agent = 'orchestrator', runId, attachments = [] } = req.body || {}
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array is required' })
   }
 
   const mode = llmMode();
+  const attachmentNote = attachments.length
+    ? `Attachment context:\n${attachments.map(a => `- ${a.name} (${a.type || 'file'}, ${Math.round((a.size || 0) / 1024)}kb)`).join('\n')}`
+    : '';
+  const promptMessages = attachmentNote ? [...messages, { role: 'system', content: attachmentNote }] : messages;
 
   if (!hasLLM()) {
     // Structured synthetic response
@@ -42,7 +46,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const reply = await callLLM(messages, { model })
+    const reply = await callLLM(promptMessages, { model })
     const wsType = inferWsType(reply, agent);
 
     return res.status(200).json({
@@ -95,4 +99,3 @@ function deriveTitle(content, agentId) {
   if (!firstLine) return fallback;
   return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
 }
-

@@ -160,6 +160,12 @@ function ObjectBody({ obj }) {
     case 'scrape':           return <ScrapeBody obj={obj} />;
     case 'data':             return <DataBody obj={obj} />;
     case 'artifact':         return <RichBody obj={obj} accentColor='#c084fc' />;
+    case 'pre_stage':
+    case 'stage':
+    case 'hubspot_export':
+    case 'airtable_export':
+    case 'recovery_queue':   return <DataBody obj={obj} />;
+    case 'runtime_ledger':   return <RichBody obj={obj} accentColor='#fbbf24' />;
     case 'ui':
     case 'component':        return <UIBody obj={obj} />;
     case 'preview':          return <PreviewBody obj={obj} />;
@@ -240,6 +246,13 @@ function CodeBody({ obj }) {
 
 function RichBody({ obj, accentColor }) {
   const running = obj.status === RUN_STATUS.RUNNING;
+  const { updateObject } = useWorkspace();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(obj.content || '');
+
+  useEffect(() => {
+    setDraft(obj.content || '');
+  }, [obj.content]);
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -260,9 +273,85 @@ function RichBody({ obj, accentColor }) {
               {obj.agent ? `${obj.agent} · ` : ''}{OBJ_TYPE_META[obj.type]?.label ?? obj.type}
             </span>
             {running && <RunningPulse />}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              {!editing ? (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="xps-electric-hover"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { updateObject(obj.id, draft); setEditing(false); }}
+                    className="xps-electric-hover"
+                    style={{
+                      background: 'rgba(74,222,128,0.12)',
+                      border: '1px solid rgba(74,222,128,0.3)',
+                      color: '#4ade80',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '4px 8px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setDraft(obj.content || ''); setEditing(false); }}
+                    className="xps-electric-hover"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.5)',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '4px 8px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
-          <RenderContent content={obj.content} />
+          {editing ? (
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              spellCheck={false}
+              style={{
+                width: '100%',
+                minHeight: 240,
+                background: '#0f0f0f',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8,
+                padding: '12px 14px',
+                color: 'rgba(255,255,255,0.85)',
+                fontSize: 13,
+                lineHeight: 1.7,
+                fontFamily: 'inherit',
+                resize: 'vertical',
+              }}
+            />
+          ) : (
+            <RenderContent content={obj.content} />
+          )}
         </div>
       )}
     </div>
@@ -553,6 +642,9 @@ function Divider() {
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ createObject, setActive }) {
+  const typeList = Object.values(OBJ_TYPE_META)
+    .map(meta => meta.label.toUpperCase())
+    .join(' · ');
   const QUICK_ACTIONS = [
     { label: 'New Code Object',  type: OBJ_TYPE.CODE,   title: 'Untitled Code',   content: '// Start coding here\n' },
     { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
@@ -644,7 +736,7 @@ function EmptyState({ createObject, setActive }) {
       </div>
 
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', letterSpacing: 0.5 }}>
-        CODE · SEARCH · SCRAPE · REPORT · DATA · LOG · UI · IMAGE · AGENT RUN · WORKFLOW
+        {typeList}
       </div>
     </div>
   );
