@@ -1,10 +1,10 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Target, Bot, FlaskConical,
   Send, FileText, BarChart2, BookOpen, Shield, Plug,
   Settings, ChevronRight, Zap, Eye, Wrench, Brain,
-  FlaskRound, Lock, Activity,
+  FlaskRound, Lock, Activity, Code2, Globe, Layers,
+  ScrollText, Package,
 } from 'lucide-react';
 
 const GOLD = '#c49e3c';
@@ -13,45 +13,55 @@ const sections = [
   {
     label: 'MAIN',
     items: [
-      { to: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
-      { to: '/crm',         label: 'CRM',          icon: Users },
-      { to: '/leads',       label: 'Leads',        icon: Target },
-      { to: '/ai-assistant',label: 'AI Assistant', icon: Bot },
-      { to: '/research',    label: 'Research Lab', icon: FlaskConical },
-      { to: '/outreach',    label: 'Outreach',     icon: Send },
-      { to: '/proposals',   label: 'Proposals',    icon: FileText },
-      { to: '/analytics',   label: 'Analytics',    icon: BarChart2 },
+      { id: 'dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+      { id: 'crm',          label: 'CRM',          icon: Users },
+      { id: 'leads',        label: 'Leads',        icon: Target },
+      { id: 'bytebot',      label: 'ByteBot',      icon: Bot },
+      { id: 'research',     label: 'Research Lab', icon: FlaskConical },
+      { id: 'outreach',     label: 'Outreach',     icon: Send },
+      { id: 'proposals',    label: 'Proposals',    icon: FileText },
+      { id: 'analytics',    label: 'Analytics',    icon: BarChart2 },
     ],
   },
   {
     label: 'INTELLIGENCE',
     items: [
-      { to: '/knowledge',   label: 'Knowledge Base', icon: BookOpen },
-      { to: '/competition', label: 'Competition',    icon: Shield },
-      { to: '/connectors',  label: 'Connectors',     icon: Plug },
+      { id: 'knowledge',    label: 'Knowledge Base', icon: BookOpen },
+      { id: 'competition',  label: 'Competition',    icon: Shield },
+      { id: 'connectors',   label: 'Connectors',     icon: Plug },
+    ],
+  },
+  {
+    label: 'OPERATOR',
+    items: [
+      { id: 'workspace',    label: 'Editor / Workspace', icon: Code2 },
+      { id: 'scraper',      label: 'Scraper Control',    icon: Globe },
+      { id: 'workflows',    label: 'Workflow Builder',   icon: Layers },
+      { id: 'logs',         label: 'Job Logs',           icon: ScrollText },
+      { id: 'artifacts',    label: 'Artifacts',          icon: Package },
     ],
   },
   {
     label: 'XPS SYSTEMS',
     items: [
-      { to: '/xps/admin',   label: 'Admin Control Plane', icon: Activity },
-      { to: '/xps/vision',  label: 'Vision Cortex',       icon: Eye },
-      { to: '/xps/builder', label: 'Auto Builder',        icon: Wrench },
-      { to: '/xps/intel',   label: 'Intel Core',          icon: Brain },
-      { to: '/xps/sandbox', label: 'Sandbox',             icon: FlaskRound },
-      { to: '/xps/quarantine', label: 'Quarantine',       icon: Lock },
+      { id: 'xps-admin',    label: 'Admin Control Plane', icon: Activity },
+      { id: 'xps-vision',   label: 'Vision Cortex',       icon: Eye },
+      { id: 'xps-builder',  label: 'Auto Builder',        icon: Wrench },
+      { id: 'xps-intel',    label: 'Intel Core',          icon: Brain },
+      { id: 'xps-sandbox',  label: 'Sandbox',             icon: FlaskRound },
+      { id: 'xps-quarantine', label: 'Quarantine',        icon: Lock },
     ],
   },
   {
     label: 'SYSTEM',
     items: [
-      { to: '/admin',    label: 'Admin',    icon: Zap },
-      { to: '/settings', label: 'Settings', icon: Settings },
+      { id: 'admin',     label: 'Admin',    icon: Zap },
+      { id: 'settings',  label: 'Settings', icon: Settings },
     ],
   },
 ];
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }) {
   return (
     <aside style={{
       width: collapsed ? 56 : 220,
@@ -106,36 +116,41 @@ export default function Sidebar({ collapsed, onToggle }) {
                 {section.label}
               </div>
             )}
-            {section.items.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: collapsed ? '9px 14px' : '8px 16px',
-                  margin: '1px 6px',
-                  borderRadius: 'var(--radius-sm)',
-                  color: isActive ? GOLD : 'var(--text-secondary)',
-                  background: isActive ? 'var(--bg-active)' : 'transparent',
-                  fontWeight: isActive ? 600 : 400,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                  transition: 'background 0.15s, color 0.15s',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                })}
-                title={collapsed ? item.label : undefined}
-              >
-                {({ isActive }) => (
-                  <>
-                    <item.icon size={15} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
-                    {!collapsed && <span>{item.label}</span>}
-                  </>
-                )}
-              </NavLink>
-            ))}
+            {section.items.map(item => {
+              const isActive = activePanel === item.id;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onNavigate(item.id)}
+                  title={collapsed ? item.label : undefined}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: collapsed ? '9px 14px' : '8px 16px',
+                    margin: '1px 6px',
+                    borderRadius: 'var(--radius-sm)',
+                    color: isActive ? GOLD : 'var(--text-secondary)',
+                    background: isActive ? 'var(--bg-active)' : 'transparent',
+                    fontWeight: isActive ? 600 : 400,
+                    fontSize: 13,
+                    border: 'none',
+                    cursor: 'pointer',
+                    width: 'calc(100% - 12px)',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    transition: 'background 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
+                  {!collapsed && <span>{item.label}</span>}
+                </button>
+              );
+            })}
           </div>
         ))}
       </nav>
@@ -151,7 +166,9 @@ export default function Sidebar({ collapsed, onToggle }) {
           color: 'var(--text-muted)',
           borderTop: '1px solid var(--border)',
           fontSize: 12,
+          cursor: 'pointer',
           transition: 'color 0.15s',
+          width: '100%',
         }}
         onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
         onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
@@ -161,3 +178,4 @@ export default function Sidebar({ collapsed, onToggle }) {
     </aside>
   );
 }
+
