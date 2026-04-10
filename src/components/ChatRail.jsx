@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -31,7 +32,7 @@ const PANEL_NAVIGATION_PHRASES = {
   'connectors panel': 'connectors', 'workspace panel': 'workspace',
 };
 
-export default function ChatRail({ onWorkspaceAction }) {
+export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [agent, setAgent] = useState('orchestrator');
   const [messages, setMessages] = useState([{
     role: 'assistant',
@@ -44,20 +45,57 @@ export default function ChatRail({ onWorkspaceAction }) {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Workspace engine actions
+  const { createObject, setStatus } = useWorkspace();
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
 
+  // Commit a completed reply to the workspace engine as a live object
+  const commitToWorkspace = useCallback((reply, agentId, prompt) => {
+    const type  = detectObjectType(reply, agentId);
+    const title = deriveTitle(reply, agentId) || prompt.slice(0, 55);
+
+    // Create the workspace object with the reply content
+    createObject({ type, title, content: reply, agent: agentId, status: RUN_STATUS.DONE });
+
+    // Navigate to workspace panel so the object is visible
+    onNavigate?.('workspace');
+
+    // Also fire legacy prop for any remaining navigation handlers
+    if (onWorkspaceAction) {
+      const lower = reply.toLowerCase();
+      for (const [phrase, panel] of Object.entries(PANEL_NAVIGATION_PHRASES)) {
+        if (lower.includes(phrase)) { onWorkspaceAction({ type: 'navigate', panel }); break; }
+      }
+    }
+  }, [createObject, onNavigate, onWorkspaceAction]);
+
   const send = async (e) => {
     e?.preventDefault();
     if (!input.trim() || loading) return;
     const userMsg = { role: 'user', content: input.trim(), agent };
+    const prompt  = userMsg.content;
     const history = [...messages, userMsg];
     setMessages(history);
     setInput('');
     setLoading(true);
+
+    // Pre-generate ID so we can update/close this log object when the run completes
+    const runId = genId();
+    createObject({
+      id:     runId,
+      type:   OBJ_TYPE.LOG,
+      title:  `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
+      content: '',
+      agent,
+      status: RUN_STATUS.RUNNING,
+    });
+    // Navigate immediately so the operator sees the live running indicator
+    onNavigate?.('workspace');
 
     // Build messages for API (strip agent metadata)
     const apiMessages = [
@@ -72,25 +110,21 @@ export default function ChatRail({ onWorkspaceAction }) {
         body: JSON.stringify({ messages: apiMessages, agent }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data  = await res.json();
       const reply = data.reply || data.error || 'No response.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply, agent }]);
 
-      // Propagate workspace actions from agent replies
-      if (onWorkspaceAction) {
-        const lower = reply.toLowerCase();
-        if (reply.includes('```') || lower.includes('generating') || lower.includes('workspace')) {
-          onWorkspaceAction({ type: 'ai_output', content: reply, agent });
-        }
-        for (const [phrase, panel] of Object.entries(PANEL_NAVIGATION_PHRASES)) {
-          if (lower.includes(phrase)) { onWorkspaceAction({ type: 'navigate', panel }); break; }
-        }
-      }
+      // Mark run log object done and commit a typed result object
+      setStatus(runId, RUN_STATUS.DONE);
+      commitToWorkspace(reply, agent, prompt);
     } catch (err) {
+      // Mark run log object as error
+      setStatus(runId, RUN_STATUS.ERROR);
+
       // Synthetic fallback
       const syntheticReplies = {
-        orchestrator: `[Synthetic] XPS Orchestrator received: "${userMsg.content}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
-        research:     `[Synthetic] Research Agent: Query queued for "${userMsg.content}". No live backend — synthetic mode active.`,
+        orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
+        research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
         scraper:      `[Synthetic] Scraper Agent: Target queued. Use the Scraper panel to run live scrape jobs.`,
         bytebot:      `[Synthetic] ByteBot: Task acknowledged. Multi-step execution requires live backend. Switch to ByteBot panel for the orchestration surface.`,
         default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
@@ -102,7 +136,10 @@ export default function ChatRail({ onWorkspaceAction }) {
         agent,
         synthetic: true,
       }]);
-      // Still route bytebot commands to bytebot panel even in synthetic mode
+
+      // Create a workspace object for the synthetic reply
+      commitToWorkspace(syntheticContent, agent, prompt);
+
       if (onWorkspaceAction && agent === 'bytebot') {
         onWorkspaceAction({ type: 'navigate', panel: 'bytebot' });
       }
