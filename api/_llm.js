@@ -89,12 +89,13 @@ async function callOllama(messages, model) {
 
 async function callGemini(messages, model, json = false) {
   const key = process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
-  const prompt = messages
-    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
-    .join('\n\n');
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
 
   const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents,
     generationConfig: {
       temperature: 0.4,
       response_mime_type: json ? 'application/json' : 'text/plain',

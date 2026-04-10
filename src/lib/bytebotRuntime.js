@@ -143,7 +143,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
   if (!run || run.cancelled) return;
 
   const wsObjId = run.wsObjId;
-  const retries = Math.max(0, Number(context?.retries ?? 1));
+  const maxRetries = Math.max(0, Number(context?.maxRetries ?? context?.retries ?? 1));
 
   try {
     _emitLog(runId, workspaceCtx, `[${agent}] Analyzing task…`);
@@ -157,7 +157,7 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
       });
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       return res.json();
-    }, retries, runId, workspaceCtx);
+    }, maxRetries, runId, workspaceCtx);
 
     if (run.cancelled) return;
 
@@ -682,14 +682,14 @@ function recordStaging(runId, staging, workspaceCtx, agent) {
   }
 }
 
-async function runWithRetry(fn, retries, runId, workspaceCtx) {
+async function runWithRetry(fn, maxRetries, runId, workspaceCtx) {
   let attempt = 0;
-  while (attempt <= retries) {
+  while (attempt <= maxRetries) {
     try {
-      if (attempt > 0) _emitLog(runId, workspaceCtx, `Retrying run (${attempt}/${retries})…`);
+      if (attempt > 0) _emitLog(runId, workspaceCtx, `Retrying run (${attempt}/${maxRetries})…`);
       return await fn();
     } catch (err) {
-      if (attempt >= retries) throw err;
+      if (attempt >= maxRetries) throw err;
       await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
       attempt += 1;
     }
