@@ -441,7 +441,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const lower = prompt.toLowerCase();
     if (/pull request|create pr|open pr/.test(lower)) return { intent: 'pr' };
     if (/commit|patch|diff/.test(lower)) return { intent: 'patch' };
-    if (/github/.test(lower)) return { intent: 'status' };
+    if (/github.*(status|repo|branch|write|commit|patch|pr)/.test(lower)) return { intent: 'status' };
     return null;
   };
 

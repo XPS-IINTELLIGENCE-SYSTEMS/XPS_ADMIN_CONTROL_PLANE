@@ -281,10 +281,9 @@ test.describe('XPS Control Plane', () => {
     await page.locator('aside nav button', { hasText: 'Editor' }).click();
     await page.waitForTimeout(300);
     const uiBtn = page.locator('[data-testid="quick-create-ui"]');
-    if (await uiBtn.isVisible()) {
-      await uiBtn.click();
-      await page.waitForTimeout(300);
-    }
+    await expect(uiBtn).toBeVisible();
+    await uiBtn.click();
+    await page.waitForTimeout(300);
     await page.getByText('Preview Changes').click();
     await page.waitForTimeout(300);
     await screenshot(page, 'ui-preview-confirm');

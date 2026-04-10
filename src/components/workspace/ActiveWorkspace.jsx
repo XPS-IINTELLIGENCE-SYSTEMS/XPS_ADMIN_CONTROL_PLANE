@@ -781,13 +781,14 @@ function UIBody({ obj }) {
   const appliedState = normalizeUiState(obj.meta?.uiState || DEFAULT_UI_STATE);
   const previewState = obj.meta?.preview?.state ? normalizeUiState(obj.meta.preview.state) : null;
   const activeState = previewState || appliedState;
+  const activeStateKey = JSON.stringify(activeState);
   const history = Array.isArray(obj.meta?.history) ? obj.meta.history : [];
 
   useEffect(() => {
     if (isEditor) {
       setDraftState(activeState);
     }
-  }, [isEditor, obj.updatedAt, obj.meta?.preview?.id]);
+  }, [isEditor, obj.updatedAt, obj.meta?.preview?.id, activeStateKey]);
 
   useEffect(() => {
     if (!isEditor) return;

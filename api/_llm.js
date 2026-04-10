@@ -30,6 +30,7 @@ export async function callLLM(messages, { model, provider = 'auto', json = false
     // Groq and Ollama ignore this parameter and return plain text.
     return callGroq(messages, model || process.env.GROQ_MODEL || 'llama3-8b-8192');
   }
+  // Prefer GEMINI_API_KEY; fall back to GCP_GEMINI_KEY for legacy setups.
   if (process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY) {
     return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json);
   }
