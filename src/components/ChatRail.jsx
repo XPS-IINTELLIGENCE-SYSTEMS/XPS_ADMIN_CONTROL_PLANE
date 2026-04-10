@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS } from '../lib/workspaceEngine.jsx';
+import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -46,10 +46,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const inputRef = useRef(null);
 
   // Workspace engine actions
-  const { createObject, updateObject, appendLog, setStatus } = useWorkspace();
-
-  // Track the active run-log object for the current in-flight request
-  const runObjectIdRef = useRef(null);
+  const { createObject, setStatus } = useWorkspace();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -87,19 +84,18 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     setInput('');
     setLoading(true);
 
-    // Create a RUNNING log object in the workspace so the center shows live state
+    // Pre-generate ID so we can update/close this log object when the run completes
+    const runId = genId();
     createObject({
+      id:     runId,
       type:   OBJ_TYPE.LOG,
       title:  `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
       content: '',
       agent,
       status: RUN_STATUS.RUNNING,
     });
-    // Navigate immediately so the operator sees the running indicator
+    // Navigate immediately so the operator sees the live running indicator
     onNavigate?.('workspace');
-
-    // Store the run object id via ref (createObject is synchronous in reducer)
-    // We'll close/mark it done when we get the reply.
 
     // Build messages for API (strip agent metadata)
     const apiMessages = [
@@ -118,9 +114,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const reply = data.reply || data.error || 'No response.';
       setMessages(prev => [...prev, { role: 'assistant', content: reply, agent }]);
 
-      // Commit result to workspace engine as a typed object
+      // Mark run log object done and commit a typed result object
+      setStatus(runId, RUN_STATUS.DONE);
       commitToWorkspace(reply, agent, prompt);
     } catch (err) {
+      // Mark run log object as error
+      setStatus(runId, RUN_STATUS.ERROR);
+
       // Synthetic fallback
       const syntheticReplies = {
         orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
@@ -137,7 +137,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         synthetic: true,
       }]);
 
-      // Still create a workspace object for the synthetic reply
+      // Create a workspace object for the synthetic reply
       commitToWorkspace(syntheticContent, agent, prompt);
 
       if (onWorkspaceAction && agent === 'bytebot') {

@@ -51,14 +51,14 @@ export const WS_CLOSE      = 'WS_CLOSE';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function genId() {
+export function genId() {
   return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function makeObject({ type = OBJ_TYPE.REPORT, title, content = '', agent = null, status = RUN_STATUS.IDLE } = {}) {
+function makeObject({ id, type = OBJ_TYPE.REPORT, title, content = '', agent = null, status = RUN_STATUS.IDLE } = {}) {
   const now = Date.now();
   return {
-    id: genId(),
+    id: id || genId(),
     type,
     title: title || `${OBJ_TYPE_META[type]?.label ?? type} — ${new Date(now).toLocaleTimeString()}`,
     content,
@@ -218,7 +218,9 @@ export function detectObjectType(content, agentId) {
  * Derive a short title from the first non-empty line of agent content.
  */
 export function deriveTitle(content, agentId) {
-  if (!content) return `${agentId ?? 'agent'} output`;
+  const fallback = `${agentId ?? 'agent'} output`;
+  if (!content) return fallback;
   const firstLine = content.split('\n').find(l => l.trim())?.replace(/^#+\s*/, '').replace(/^```\w*/, '').trim() ?? '';
-  return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine || `${agentId ?? 'agent'} output`;
+  if (!firstLine) return fallback;
+  return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
 }
