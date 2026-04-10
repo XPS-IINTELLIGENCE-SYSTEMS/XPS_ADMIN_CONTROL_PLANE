@@ -78,12 +78,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 
 :root {
-  --grad-gold: linear-gradient(90deg, #c49e3c, #e8d5a3, #9a7c2e, #d4b866, #b8cce0, #d4b866, #c49e3c);
+  /* Shared gradient stops — used by all gold accent classes */
+  --grad-gold-stops: #c49e3c, #e8d5a3, #9a7c2e, #d4af60, #b8cce0, #d4af60, #c49e3c;
 }
 
 /* Animated gradient text */
 .xps-gold-text {
-  background: linear-gradient(90deg, #c49e3c, #e8d5a3, #9a7c2e, #d4af60, #b8cce0, #d4af60, #c49e3c);
+  background: linear-gradient(90deg, var(--grad-gold-stops));
   background-size: 300% 100%;
   animation: xpsGoldShimmer 4s ease infinite;
   -webkit-background-clip: text;
@@ -92,7 +93,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   color: transparent;
 }
 
-/* Animated gradient border (via outline) */
+/* Animated gradient border (via mask) */
 .xps-gold-border {
   position: relative;
 }
@@ -102,7 +103,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(90deg, #c49e3c, #e8d5a3, #9a7c2e, #d4b866, #b8cce0, #d4b866, #c49e3c);
+  background: linear-gradient(90deg, var(--grad-gold-stops));
   background-size: 300% 100%;
   animation: xpsGoldShimmer 4s ease infinite;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -114,7 +115,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 /* Animated gradient background accent */
 .xps-gold-accent {
-  background: linear-gradient(90deg, #c49e3c, #e8d5a3, #9a7c2e, #d4b866, #b8cce0, #d4b866, #c49e3c);
+  background: linear-gradient(90deg, var(--grad-gold-stops));
   background-size: 300% 100%;
   animation: xpsGoldShimmer 4s ease infinite;
 }

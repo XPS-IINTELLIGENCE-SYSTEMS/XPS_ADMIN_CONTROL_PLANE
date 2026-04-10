@@ -162,7 +162,7 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
         <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%' }} className="xps-gold-accent" />
       </button>
 
-      {userContext.location && (
+      {typeof userContext.location === 'string' && userContext.location.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
           <MapPin size={12} />
           {userContext.location}
