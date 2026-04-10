@@ -1,20 +1,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
+import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
 import { persistSearchJob, persistScrapeJob, persistWorkspaceObject } from '../lib/supabasePersistence.js';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
 
 const AGENTS = [
-  { id: 'orchestrator',  label: 'XPS Orchestrator', icon: '🛡️' },
-  { id: 'research',      label: 'Research Agent',   icon: '🔍' },
-  { id: 'scraper',       label: 'Scraper Agent',    icon: '🕷️' },
-  { id: 'bytebot',       label: 'ByteBot',          icon: '🤖' },
-  { id: 'vision',        label: 'Vision Cortex',    icon: '👁️' },
-  { id: 'intel',         label: 'Intel Core',       icon: '💡' },
-  { id: 'builder',       label: 'Auto Builder',     icon: '🏗️' },
-  { id: 'gpt',           label: 'Generic GPT',      icon: '✨' },
+  { id: 'orchestrator',    label: 'XPS Orchestrator',  icon: '🛡️' },
+  { id: 'research',        label: 'Research Agent',    icon: '🔍' },
+  { id: 'scraper',         label: 'Scraper Agent',     icon: '🕷️' },
+  { id: 'bytebot',         label: 'ByteBot',           icon: '🤖' },
+  { id: 'browser',         label: 'Browser Agent',     icon: '🌐' },
+  { id: 'vision',          label: 'Vision Cortex',     icon: '👁️' },
+  { id: 'intel',           label: 'Intel Core',        icon: '💡' },
+  { id: 'builder',         label: 'Auto Builder',      icon: '🏗️' },
+  { id: 'gpt',             label: 'Generic GPT',       icon: '✨' },
 ];
 
 const SYSTEM_PROMPTS = {
@@ -39,6 +41,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [activeRuns, setActiveRuns] = useState([]);
+  const [activeJobs, setActiveJobs] = useState([]);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
@@ -49,6 +52,14 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const isActive = r => r.status === 'running' || r.status === 'queued';
     const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(isActive)));
     setActiveRuns(getRunList().filter(isActive));
+    return unsub;
+  }, []);
+
+  // Subscribe to browser job state
+  useEffect(() => {
+    const isActive = j => j.status === 'running' || j.status === 'queued';
+    const unsub = subscribeJobs(jobs => setActiveJobs(jobs.filter(isActive)));
+    setActiveJobs(getJobList().filter(isActive));
     return unsub;
   }, []);
 
@@ -100,6 +111,27 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           content: `ByteBot run started. Watching workspace for progress…`,
           agent:  'bytebot',
           runId,
+        }]);
+      });
+      return;
+    }
+
+    // ── Browser Agent: dispatch via browserJobRuntime ─────────────────────────
+    if (agent === 'browser') {
+      setLoading(false);
+      const isUrl = /^https?:\/\//i.test(prompt.trim());
+      const url   = isUrl ? prompt.trim() : `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
+      const action = isUrl ? 'scrape' : 'research';
+      startBrowserJob(
+        { url, action, prompt: isUrl ? '' : prompt },
+        { createObject, setStatus, appendLog, patchObject },
+        onNavigate,
+      ).then(jobId => {
+        setMessages(prev => [...prev, {
+          role:    'assistant',
+          content: `Browser job started for: ${url}\nAction: ${action} — watching workspace for result…`,
+          agent:   'browser',
+          jobId,
         }]);
       });
       return;

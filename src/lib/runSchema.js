@@ -29,6 +29,14 @@ export const EVT = {
   VIDEO_RESULT:             'video_result',
   CONNECTOR_STATE:          'connector_state',
   BLOCKED_CAPABILITY:       'blocked_capability',
+  // Phase 4 browser job events
+  BROWSER_JOB_QUEUED:       'browser_job_queued',
+  BROWSER_JOB_STATUS:       'browser_job_status',
+  BROWSER_RESULT:           'browser_result',
+  BROWSER_JOB_CANCELLED:    'browser_job_cancelled',
+  BROWSER_JOB_FAILED:       'browser_job_failed',
+  PARALLEL_GROUP_CREATED:   'parallel_group_created',
+  PARALLEL_GROUP_UPDATED:   'parallel_group_updated',
 };
 
 // ── Run statuses ──────────────────────────────────────────────────────────────
@@ -174,17 +182,22 @@ export function mkStep(n, label, status = STEP.PENDING) {
 
 export function wsTypeFromEvent(eventType) {
   const map = {
-    [EVT.SEARCH_RESULT]:  'search',
-    [EVT.SCRAPE_RESULT]:  'scrape',
-    [EVT.REPORT_RESULT]:  'report',
-    [EVT.CODE_RESULT]:    'code',
-    [EVT.UI_RESULT]:      'ui',
-    [EVT.IMAGE_RESULT]:   'image',
-    [EVT.VIDEO_RESULT]:   'video',
-    [EVT.RUN_COMPLETED]:  'agent_run',
-    [EVT.ARTIFACT_CREATED]:'artifact',
-    [EVT.CONNECTOR_STATE]:'runtime_state',
-    [EVT.BLOCKED_CAPABILITY]:'runtime_state',
+    [EVT.SEARCH_RESULT]:         'search',
+    [EVT.SCRAPE_RESULT]:         'scrape',
+    [EVT.REPORT_RESULT]:         'report',
+    [EVT.CODE_RESULT]:           'code',
+    [EVT.UI_RESULT]:             'ui',
+    [EVT.IMAGE_RESULT]:          'image',
+    [EVT.VIDEO_RESULT]:          'video',
+    [EVT.RUN_COMPLETED]:         'agent_run',
+    [EVT.ARTIFACT_CREATED]:      'artifact',
+    [EVT.CONNECTOR_STATE]:       'runtime_state',
+    [EVT.BLOCKED_CAPABILITY]:    'runtime_state',
+    [EVT.BROWSER_JOB_QUEUED]:    'browser_session',
+    [EVT.BROWSER_RESULT]:        'browser_result',
+    [EVT.BROWSER_JOB_FAILED]:    'browser_session',
+    [EVT.PARALLEL_GROUP_CREATED]:'parallel_run_group',
+    [EVT.PARALLEL_GROUP_UPDATED]:'parallel_run_group',
   };
   return map[eventType] ?? 'report';
 }
