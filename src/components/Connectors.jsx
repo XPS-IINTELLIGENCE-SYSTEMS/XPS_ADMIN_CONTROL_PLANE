@@ -7,7 +7,7 @@ const CONNECTORS = [
   { id: 'google-drive', name: 'Google Drive', emoji: '📁', desc: 'File storage, documents, and shared resources', connected: false, detail: '' },
   { id: 'groq', name: 'Groq', emoji: '🧠', desc: 'Ultra-fast LLM inference for AI assistant', connected: false, detail: '' },
   { id: 'redis', name: 'Redis', emoji: '🔴', desc: 'Job queues, caching, and session state', connected: false, detail: '' },
-  { id: 'openai', name: 'OpenAI', emoji: '🤖', desc: 'GPT-4o for reasoning, chat, and content generation', connected: false, detail: '' },
+  { id: 'openai', name: 'OpenAI', emoji: 'AI', desc: 'GPT-4o for reasoning, chat, and content generation', connected: false, detail: '' },
   { id: 'google-cloud', name: 'Google Cloud', emoji: '☁️', desc: 'GCS storage, BigQuery, and service account APIs', connected: false, detail: '' },
   { id: 'zapier', name: 'Zapier', emoji: '⚡', desc: 'Workflow automation and third-party integrations', connected: false, detail: '' },
 ];

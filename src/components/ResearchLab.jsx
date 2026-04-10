@@ -67,7 +67,7 @@ export default function ResearchLab() {
               />
             </div>
             <button className="btn-gold" onClick={run} disabled={loading}>
-              {loading ? '⏳ Researching...' : '🔍 Research Company'}
+              {loading ? '[...] Researching...' : 'Research Company'}
             </button>
           </div>
 

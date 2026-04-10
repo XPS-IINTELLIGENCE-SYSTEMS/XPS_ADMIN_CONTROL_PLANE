@@ -1,4 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Shield, Search, Globe, Bot, Eye, Lightbulb, Wrench, Sparkles,
+  ChevronDown, ChevronUp, Paperclip, X, FileText, Image, File,
+  HardDrive, AlertTriangle, Send, CheckCircle,
+  Map, Cpu, Zap, Compass, Radio,
+} from 'lucide-react';
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
 import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
@@ -7,16 +13,26 @@ import { persistSearchJob, persistScrapeJob, persistWorkspaceObject } from '../l
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
 
+// ── Agent registry (no emoji) ─────────────────────────────────────────────
 const AGENTS = [
-  { id: 'orchestrator',    label: 'XPS Orchestrator',  icon: '🛡️' },
-  { id: 'research',        label: 'Research Agent',    icon: '🔍' },
-  { id: 'scraper',         label: 'Scraper Agent',     icon: '🕷️' },
-  { id: 'bytebot',         label: 'ByteBot',           icon: '🤖' },
-  { id: 'browser',         label: 'Browser Agent',     icon: '🌐' },
-  { id: 'vision',          label: 'Vision Cortex',     icon: '👁️' },
-  { id: 'intel',           label: 'Intel Core',        icon: '💡' },
-  { id: 'builder',         label: 'Auto Builder',      icon: '🏗️' },
-  { id: 'gpt',             label: 'Generic GPT',       icon: '✨' },
+  { id: 'orchestrator', label: 'XPS Orchestrator', icon: Shield },
+  { id: 'research',     label: 'Research Agent',   icon: Search },
+  { id: 'scraper',      label: 'Scraper Agent',    icon: Globe },
+  { id: 'bytebot',      label: 'ByteBot',          icon: Bot },
+  { id: 'browser',      label: 'Browser Agent',    icon: Globe },
+  { id: 'vision',       label: 'Vision Cortex',    icon: Eye },
+  { id: 'intel',        label: 'Intel Core',       icon: Lightbulb },
+  { id: 'builder',      label: 'Auto Builder',     icon: Wrench },
+  { id: 'gpt',          label: 'Generic GPT',      icon: Sparkles },
+];
+
+// ── Mode registry ─────────────────────────────────────────────────────────
+const MODES = [
+  { id: 'planning',   label: 'Planning',        icon: Map },
+  { id: 'agent',      label: 'Agent Mode',      icon: Cpu },
+  { id: 'autonomous', label: 'Autonomous Mode', icon: Zap },
+  { id: 'scraping',   label: 'Scraping Mode',   icon: Globe },
+  { id: 'discover',   label: 'Discover Mode',   icon: Compass },
 ];
 
 const SYSTEM_PROMPTS = {
@@ -30,24 +46,39 @@ const SYSTEM_PROMPTS = {
   gpt:          'You are a helpful AI assistant for the XPS Intelligence Command Center. Help the operator with any task.',
 };
 
+// ── Attachment sources ─────────────────────────────────────────────────────
+const GOOGLE_DRIVE_CONFIGURED = !!(import.meta.env.GCP_SA_KEY || import.meta.env.GCP_PROJECT_ID);
+
+const ATTACH_SOURCES = [
+  { id: 'local',   label: 'Local File',     icon: File,      available: true,                  accept: '*/*' },
+  { id: 'image',   label: 'Image',          icon: Image,     available: true,                  accept: 'image/*' },
+  { id: 'doc',     label: 'Document',       icon: FileText,  available: true,                  accept: '.pdf,.doc,.docx,.txt,.md,.csv,.xlsx' },
+  { id: 'drive',   label: 'Google Drive',   icon: HardDrive, available: GOOGLE_DRIVE_CONFIGURED, blocked: !GOOGLE_DRIVE_CONFIGURED, note: 'Requires GCP OAuth' },
+];
+
 export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [agent, setAgent] = useState('orchestrator');
+  const [mode, setMode]   = useState('agent');
   const [messages, setMessages] = useState([{
     role: 'assistant',
     content: '— awaiting configuration —\n\nSelect an agent and configure your API key to begin live orchestration. Running in synthetic mode.',
     agent: 'orchestrator',
   }]);
-  const [input, setInput]     = useState('');
-  const [loading, setLoading] = useState(false);
+  const [input, setInput]         = useState('');
+  const [loading, setLoading]     = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [modeOpen, setModeOpen]   = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachments, setAttachments] = useState([]);
   const [activeRuns, setActiveRuns] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
+  const fileInputRef = useRef(null);
+  const currentAttachType = useRef(null);
 
   const { createObject, setStatus, appendLog, patchObject } = useWorkspace();
 
-  // Subscribe to ByteBot runtime run state
   useEffect(() => {
     const isActive = r => r.status === 'running' || r.status === 'queued';
     const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(isActive)));
@@ -55,7 +86,6 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     return unsub;
   }, []);
 
-  // Subscribe to browser job state
   useEffect(() => {
     const isActive = j => j.status === 'running' || j.status === 'queued';
     const unsub = subscribeJobs(jobs => setActiveJobs(jobs.filter(isActive)));
@@ -67,9 +97,16 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
-  // Commit a completed reply to the workspace engine as a live object
+  const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
+  const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
+
   const commitToWorkspace = useCallback((wsObj, agentId, prompt) => {
     const { type, title, content, steps = [], meta = {} } = wsObj;
     createObject({
@@ -82,8 +119,6 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       meta,
     });
     onNavigate?.('workspace');
-
-    // Persist workspace object
     persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
   }, [createObject, onNavigate]);
 
@@ -91,32 +126,29 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     e?.preventDefault();
     if (!input.trim() || loading) return;
 
-    const userMsg = { role: 'user', content: input.trim(), agent };
+    const userMsg = { role: 'user', content: input.trim(), agent, mode };
     const prompt  = userMsg.content;
     const history = [...messages, userMsg];
     setMessages(history);
     setInput('');
+    setAttachments([]);
     setLoading(true);
 
-    // ── ByteBot: use full multi-step runtime ──────────────────────────────────
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: {} },
+        { task: prompt, agent: 'bytebot', context: { mode } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
         setMessages(prev => [...prev, {
-          role:   'assistant',
-          content: `ByteBot run started. Watching workspace for progress…`,
-          agent:  'bytebot',
-          runId,
+          role: 'assistant', content: 'ByteBot run started. Watching workspace for progress…',
+          agent: 'bytebot', runId,
         }]);
       });
       return;
     }
 
-    // ── Browser Agent: dispatch via browserJobRuntime ─────────────────────────
     if (agent === 'browser') {
       setLoading(false);
       const isUrl = /^https?:\/\//i.test(prompt.trim());
@@ -128,26 +160,20 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         onNavigate,
       ).then(jobId => {
         setMessages(prev => [...prev, {
-          role:    'assistant',
-          content: `Browser job started for: ${url}\nAction: ${action} — watching workspace for result…`,
-          agent:   'browser',
-          jobId,
+          role: 'assistant', content: `Browser job started for: ${url}\nAction: ${action} — watching workspace for result…`,
+          agent: 'browser', jobId,
         }]);
       });
       return;
     }
 
-    // ── Other agents: call /api/chat with structured response ─────────────────
-    const runId = genId();
+    const runId   = genId();
     const wsObjId = genId();
 
     createObject({
-      id:      wsObjId,
-      type:    OBJ_TYPE.LOG,
-      title:   `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
-      content: '',
-      agent,
-      status:  RUN_STATUS.RUNNING,
+      id: wsObjId, type: OBJ_TYPE.LOG,
+      title: `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
+      content: '', agent, status: RUN_STATUS.RUNNING,
     });
     onNavigate?.('workspace');
 
@@ -158,43 +184,30 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     try {
       const res = await fetch(`${API_URL}/api/chat`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ messages: apiMessages, agent, runId }),
+        body: JSON.stringify({ messages: apiMessages, agent, runId, mode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      // Handle structured contract
       const reply   = data.reply || data.error || 'No response.';
       const wsObj   = data.workspace_object || null;
-      const mode    = data.mode || 'synthetic';
+      const evtMode = data.mode || 'synthetic';
       const evtType = data.event_type || 'run_completed';
 
       setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: reply,
-        agent,
-        mode,
-        synthetic: mode === 'synthetic',
+        role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic',
       }]);
-
       setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
 
       if (evtType !== 'run_failed' && wsObj) {
         commitToWorkspace(wsObj, agent, prompt);
       } else if (evtType !== 'run_failed') {
-        // Fallback: infer type from reply
-        commitToWorkspace({
-          type:    detectObjectType(reply, agent),
-          title:   deriveTitle(reply, agent) || prompt.slice(0, 55),
-          content: reply,
-        }, agent, prompt);
+        commitToWorkspace({ type: detectObjectType(reply, agent), title: deriveTitle(reply, agent) || prompt.slice(0, 55), content: reply }, agent, prompt);
       }
-
-    } catch (err) {
+    } catch {
       setStatus(wsObjId, RUN_STATUS.ERROR);
-
       const syntheticReplies = {
         orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
         research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
@@ -202,111 +215,159 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
       };
       const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
-
-      setMessages(prev => [...prev, {
-        role:      'assistant',
-        content:   syntheticContent,
-        agent,
-        synthetic: true,
-      }]);
-
-      commitToWorkspace({
-        type:    detectObjectType(syntheticContent, agent),
-        title:   `[Synthetic] ${selectedAgent.label}`,
-        content: syntheticContent,
-      }, agent, prompt);
+      setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true }]);
+      commitToWorkspace({ type: detectObjectType(syntheticContent, agent), title: `[Synthetic] ${selectedAgent.label}`, content: syntheticContent }, agent, prompt);
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  const handleFileSelected = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newAttachments = files.map(f => ({ id: genId(), name: f.name, size: f.size, type: f.type, file: f }));
+    setAttachments(prev => [...prev, ...newAttachments]);
+    setAttachOpen(false);
+    e.target.value = '';
+  };
+
+  const openFileChooser = (accept) => {
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = accept;
+      fileInputRef.current.click();
     }
   };
 
+  const AgentIcon = selectedAgent.icon;
+  const ModeIcon  = selectedMode.icon;
+
   return (
-    <div style={{
-      width: 340,
-      minWidth: 340,
-      height: '100%',
-      background: '#0f0f0f',
-      borderLeft: '1px solid rgba(255,255,255,0.07)',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
+    <div
+      data-testid="chat-rail"
+      style={{
+        width: 340, minWidth: 340, height: '100%',
+        background: '#0f0f0f',
+        borderLeft: '1px solid rgba(255,255,255,0.07)',
+        display: 'flex', flexDirection: 'column',
+      }}
+      onClick={e => e.stopPropagation()}
+    >
       {/* Rail header */}
-      <div style={{
-        padding: '12px 14px',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
-        flexShrink: 0,
-      }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.4, color: 'rgba(255,255,255,0.3)' }}>AGENT RAIL</span>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 0.6 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: 'rgba(255,255,255,0.3)' }}>AGENT RAIL</span>
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
             {messages.filter(m => m.role !== 'system').length} messages
           </span>
         </div>
 
         {/* Agent selector */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', marginBottom: 6 }} onClick={e => e.stopPropagation()}>
           <button
-            onClick={() => setAgentOpen(o => !o)}
+            data-testid="agent-selector"
+            onClick={() => { setAgentOpen(o => !o); setModeOpen(false); }}
             style={{
-              width: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '7px 10px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 8,
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '7px 10px', background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+              color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer',
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span>{selectedAgent.icon}</span>
+              <AgentIcon size={13} style={{ color: gold, flexShrink: 0 }} />
               <span>{selectedAgent.label}</span>
             </span>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round">
-              <path d={agentOpen ? 'M2 8l4-4 4 4' : 'M2 4l4 4 4-4'}/>
-            </svg>
+            {agentOpen ? <ChevronUp size={12} style={{ color: 'rgba(255,255,255,0.4)' }} /> : <ChevronDown size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />}
           </button>
 
           {agentOpen && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-              background: '#1a1a1a',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10,
-              zIndex: 50,
-              overflow: 'hidden',
+              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, zIndex: 50, overflow: 'hidden',
               boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
             }}>
-              {AGENTS.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => { setAgent(a.id); setAgentOpen(false); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    width: '100%', padding: '8px 12px',
-                    background: agent === a.id ? 'rgba(212,168,67,0.12)' : 'transparent',
-                    border: 'none',
-                    color: agent === a.id ? gold : 'rgba(255,255,255,0.75)',
-                    fontSize: 13, cursor: 'pointer', textAlign: 'left',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                  }}
-                  onMouseEnter={e => { if (agent !== a.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                  onMouseLeave={e => { if (agent !== a.id) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <span>{a.icon}</span>
-                  <span style={{ fontWeight: agent === a.id ? 600 : 400 }}>{a.label}</span>
-                  {agent === a.id && <span style={{ marginLeft: 'auto', color: gold, fontSize: 10 }}>●</span>}
-                </button>
-              ))}
+              {AGENTS.map(a => {
+                const AIcon = a.icon;
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => { setAgent(a.id); setAgentOpen(false); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '8px 12px',
+                      background: agent === a.id ? 'rgba(212,168,67,0.12)' : 'transparent',
+                      border: 'none', color: agent === a.id ? gold : 'rgba(255,255,255,0.75)',
+                      fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}
+                    onMouseEnter={e => { if (agent !== a.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                    onMouseLeave={e => { if (agent !== a.id) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <AIcon size={12} />
+                    <span style={{ fontWeight: agent === a.id ? 600 : 400 }}>{a.label}</span>
+                    {agent === a.id && <CheckCircle size={11} style={{ marginLeft: 'auto', color: gold }} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Mode selector */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button
+            data-testid="mode-selector"
+            onClick={() => { setModeOpen(o => !o); setAgentOpen(false); }}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 10px', background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7,
+              color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <ModeIcon size={11} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              <span>{selectedMode.label}</span>
+            </span>
+            {modeOpen ? <ChevronUp size={11} style={{ color: 'rgba(255,255,255,0.3)' }} /> : <ChevronDown size={11} style={{ color: 'rgba(255,255,255,0.3)' }} />}
+          </button>
+
+          {modeOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, zIndex: 50, overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+            }}>
+              {MODES.map(m => {
+                const MIcon = m.icon;
+                return (
+                  <button
+                    key={m.id}
+                    data-testid={`mode-option-${m.id}`}
+                    onClick={() => { setMode(m.id); setModeOpen(false); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', padding: '7px 12px',
+                      background: mode === m.id ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      border: 'none', color: mode === m.id ? '#e2e8f0' : 'rgba(255,255,255,0.6)',
+                      fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                      borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    }}
+                    onMouseEnter={e => { if (mode !== m.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                    onMouseLeave={e => { if (mode !== m.id) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <MIcon size={11} />
+                    <span style={{ fontWeight: mode === m.id ? 600 : 400 }}>{m.label}</span>
+                    {mode === m.id && <CheckCircle size={10} style={{ marginLeft: 'auto', color: gold }} />}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -314,89 +375,184 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
       {/* Message thread */}
       <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '12px 12px 0',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
+        flex: 1, overflowY: 'auto', padding: '12px 12px 0',
+        display: 'flex', flexDirection: 'column', gap: 8,
       }}>
-        {/* Active runs summary */}
-        {activeRuns.length > 0 && (
-          <ActiveRunsSummary runs={activeRuns} />
-        )}
-
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
-        ))}
+        {activeRuns.length > 0 && <ActiveRunsSummary runs={activeRuns} />}
+        {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px' }}>
             <ThinkingDots />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
-              {selectedAgent.label} thinking…
-            </span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{selectedAgent.label} thinking…</span>
           </div>
         )}
         <div ref={bottomRef} style={{ height: 8 }} />
       </div>
 
+      {/* Attachments preview */}
+      {attachments.length > 0 && (
+        <div style={{
+          padding: '8px 12px 0',
+          display: 'flex', flexWrap: 'wrap', gap: 6,
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          {attachments.map(att => (
+            <div key={att.id} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 8px', background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6,
+              fontSize: 11, color: 'rgba(255,255,255,0.7)', maxWidth: 160,
+            }}>
+              <FileText size={10} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {att.name}
+              </span>
+              <button
+                onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0, display: 'flex', lineHeight: 1 }}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input area */}
-      <div style={{
-        padding: '10px 12px 12px',
-        borderTop: '1px solid rgba(255,255,255,0.07)',
-        flexShrink: 0,
-      }}>
-        <form onSubmit={send} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+        {/* Attachment panel */}
+        {attachOpen && (
+          <div
+            data-testid="attachment-panel"
+            style={{
+              marginBottom: 8, background: '#161616',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: 1 }}>
+              ATTACH FILE
+            </div>
+            {ATTACH_SOURCES.map(src => {
+              const SIcon = src.icon;
+              return (
+                <button
+                  key={src.id}
+                  data-testid={`attach-source-${src.id}`}
+                  disabled={!src.available}
+                  onClick={() => {
+                    if (src.available && !src.blocked) {
+                      openFileChooser(src.accept || '*/*');
+                    }
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    width: '100%', padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    color: src.available ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)',
+                    fontSize: 12, cursor: src.available ? 'pointer' : 'not-allowed',
+                    textAlign: 'left',
+                  }}
+                  onMouseEnter={e => { if (src.available) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <SIcon size={13} style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{src.label}</span>
+                  {src.blocked && (
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      fontSize: 10, fontWeight: 600,
+                      color: '#ef4444', padding: '2px 7px', borderRadius: 99,
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                    }}>
+                      <AlertTriangle size={9} />
+                      {src.note || 'Blocked'}
+                    </span>
+                  )}
+                  {src.available && !src.blocked && (
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Select</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <form onSubmit={send} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <textarea
             ref={inputRef}
+            data-testid="chat-input"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${selectedAgent.label}…`}
             rows={3}
             style={{
-              resize: 'none',
-              width: '100%',
-              padding: '9px 12px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 8,
-              color: '#fff',
-              fontSize: 13,
-              lineHeight: 1.5,
-              outline: 'none',
-              fontFamily: 'inherit',
+              resize: 'none', width: '100%', padding: '9px 12px',
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 8, color: '#fff', fontSize: 13, lineHeight: 1.5,
+              outline: 'none', fontFamily: 'inherit',
             }}
             onFocus={e => { e.target.style.borderColor = 'rgba(212,168,67,0.4)'; }}
             onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>↵ Send  ⇧↵ Newline</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Paperclip */}
+            <button
+              type="button"
+              data-testid="attach-btn"
+              onClick={() => { setAttachOpen(o => !o); setAgentOpen(false); setModeOpen(false); }}
+              title="Attach file"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30,
+                background: attachOpen ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 7, color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Paperclip size={13} />
+            </button>
+
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', flex: 1 }}>
+              {attachments.length > 0 ? `${attachments.length} file(s)` : ''}
+            </span>
+
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>
+              {attachments.length === 0 && '↵ Send  ⇧↵ Newline'}
+            </span>
+
             <button
               type="submit"
+              data-testid="send-btn"
               disabled={loading || !input.trim()}
               style={{
                 padding: '6px 14px',
                 background: input.trim() && !loading ? gold : 'rgba(255,255,255,0.08)',
                 color: input.trim() && !loading ? '#0a0a0a' : 'rgba(255,255,255,0.3)',
-                border: 'none',
-                borderRadius: 7,
-                fontSize: 12,
-                fontWeight: 600,
+                border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600,
                 cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
                 transition: 'background 0.15s, color 0.15s',
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
               }}
             >
               {loading ? '…' : 'Send'}
-              {!loading && (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 11L11 1M11 1H4M11 1V8"/>
-                </svg>
-              )}
+              {!loading && <Send size={11} />}
             </button>
           </div>
         </form>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+          multiple
+        />
       </div>
     </div>
   );
@@ -405,35 +561,25 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 function ActiveRunsSummary({ runs }) {
   return (
     <div style={{
-      background: 'rgba(212,168,67,0.06)',
-      border: '1px solid rgba(212,168,67,0.2)',
-      borderRadius: 10,
-      padding: '8px 10px',
-      marginBottom: 4,
+      background: 'rgba(212,168,67,0.06)', border: '1px solid rgba(212,168,67,0.2)',
+      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
     }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: gold, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
-        ▶ Active Runs ({runs.length})
+        Active Runs ({runs.length})
       </div>
       {runs.map(run => (
         <div key={run.runId} style={{ marginBottom: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{
-              width: 5, height: 5, borderRadius: '50%',
-              background: gold,
-              animation: 'pulse 1s ease-in-out infinite',
-            }} />
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: gold, animation: 'xpsPulse 1s ease-in-out infinite' }} />
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {run.agent}: {run.task.slice(0, 35)}
             </span>
             <button
               onClick={() => cancelRun(run.runId)}
               title="Cancel run"
-              style={{
-                background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
-                cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1,
-              }}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}
             >
-              ×
+              <X size={12} />
             </button>
           </div>
           {run.progress > 0 && (
@@ -445,7 +591,6 @@ function ActiveRunsSummary({ runs }) {
           )}
         </div>
       ))}
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </div>
   );
 }
@@ -455,23 +600,24 @@ function MessageBubble({ msg }) {
   const agentInfo = AGENTS.find(a => a.id === msg.agent);
   const modeColor = msg.mode === 'live' ? '#4ade80' : msg.mode === 'synthetic' || msg.synthetic ? '#fbbf24' : 'rgba(255,255,255,0.25)';
   const modeLabel = msg.mode === 'live' ? 'live' : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
+  const ModeInfo = msg.mode ? MODES.find(m => m.id === msg.mode) : null;
 
   if (isUser) {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <div style={{
-          maxWidth: '88%',
-          padding: '8px 12px',
-          background: 'rgba(212,168,67,0.15)',
-          border: '1px solid rgba(212,168,67,0.25)',
-          borderRadius: '12px 12px 2px 12px',
-          color: '#fff',
-          fontSize: 13,
-          lineHeight: 1.5,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          maxWidth: '88%', padding: '8px 12px',
+          background: 'rgba(212,168,67,0.15)', border: '1px solid rgba(212,168,67,0.25)',
+          borderRadius: '12px 12px 2px 12px', color: '#fff', fontSize: 13, lineHeight: 1.5,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
         }}>
           {msg.content}
+          {msg.mode && ModeInfo && (
+            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, opacity: 0.5, fontSize: 10 }}>
+              <ModeInfo.icon size={9} />
+              {ModeInfo.label}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -481,21 +627,16 @@ function MessageBubble({ msg }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {agentInfo && (
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.5, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-          {agentInfo.icon} {agentInfo.label}
+          <agentInfo.icon size={10} />
+          {agentInfo.label}
           {modeLabel && <span style={{ color: modeColor, fontWeight: 600 }}>· {modeLabel}</span>}
         </span>
       )}
       <div style={{
-        maxWidth: '95%',
-        padding: '8px 12px',
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '2px 12px 12px 12px',
-        color: 'rgba(255,255,255,0.85)',
-        fontSize: 13,
-        lineHeight: 1.6,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
+        maxWidth: '95%', padding: '8px 12px',
+        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '2px 12px 12px 12px', color: 'rgba(255,255,255,0.85)',
+        fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
       }}>
         {msg.content}
       </div>
@@ -508,13 +649,11 @@ function ThinkingDots() {
     <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
       {[0, 1, 2].map(i => (
         <div key={i} style={{
-          width: 4, height: 4, borderRadius: '50%',
-          background: gold,
-          animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-          opacity: 0.7,
+          width: 4, height: 4, borderRadius: '50%', background: gold,
+          animation: `xpsPulse 1.2s ease-in-out ${i * 0.2}s infinite`, opacity: 0.7,
         }} />
       ))}
-      <style>{`@keyframes pulse { 0%,80%,100%{transform:scale(0.6);opacity:0.3} 40%{transform:scale(1);opacity:1} }`}</style>
     </div>
   );
 }
+

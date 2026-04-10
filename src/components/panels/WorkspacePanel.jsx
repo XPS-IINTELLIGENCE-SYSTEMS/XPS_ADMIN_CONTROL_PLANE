@@ -6,8 +6,8 @@ const gold = '#d4a843';
 const PANEL_TYPES = [
   { id: 'blank',   label: 'Blank Canvas',   icon: '□', desc: 'Empty editor surface' },
   { id: 'code',    label: 'Code Output',    icon: '</>', desc: 'Generated code / scripts' },
-  { id: 'scrape',  label: 'Scrape Result',  icon: '🕷️', desc: 'Web scraping output' },
-  { id: 'search',  label: 'Search Results', icon: '🔍', desc: 'Research / web search' },
+  { id: 'scrape',  label: 'Scrape Result',  icon: '[W]', desc: 'Web scraping output' },
+  { id: 'search',  label: 'Search Results', icon: '[S]', desc: 'Research / web search' },
   { id: 'image',   label: 'Image Output',   icon: '🖼️', desc: 'AI image generation result' },
   { id: 'data',    label: 'Structured Data',icon: '📊', desc: 'JSON / table data output' },
   { id: 'report',  label: 'Report',         icon: '📄', desc: 'AI-generated report' },
@@ -85,7 +85,7 @@ function BlankCanvas() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 28,
       }}>
-        🛡️
+        XPS
       </div>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 6 }}>XPS Command Workspace</div>

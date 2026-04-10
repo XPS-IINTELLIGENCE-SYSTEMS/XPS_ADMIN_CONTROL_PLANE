@@ -85,7 +85,7 @@ Context:
             Reset
           </button>
           <button className="btn-gold" style={{ fontSize: 12, padding: '5px 14px' }} onClick={runPrompt} disabled={running}>
-            {running ? '⏳ Running...' : '▶ Run'}
+            {running ? 'Running...' : 'Run'}
           </button>
         </div>
       </div>
@@ -111,7 +111,7 @@ Context:
                 <button className="btn-outline" style={{ fontSize: 11, padding: '4px 10px' }}>Context</button>
                 <span style={{ flex: 1 }} />
                 <button className="btn-gold" style={{ fontSize: 11, padding: '5px 14px' }} onClick={runPrompt} disabled={running}>
-                  {running ? '⏳' : '▶ Execute'}
+                  {running ? '[...]' : 'Execute'}
                 </button>
               </div>
             </>
@@ -130,7 +130,7 @@ Context:
                         border: `1px solid ${step.type === 'trigger' ? 'rgba(212,168,67,0.3)' : step.type === 'condition' ? 'rgba(168,85,247,0.3)' : 'rgba(59,130,246,0.3)'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
                       }}>
-                        {step.type === 'trigger' ? '⚡' : step.type === 'condition' ? '❓' : '⚙️'}
+                        {step.type === 'trigger' ? 'T' : step.type === 'condition' ? '?' : 'A'}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 }}>{step.type}</div>
@@ -158,7 +158,7 @@ Context:
                 <button className="btn-gold" style={{ fontSize: 12 }}>Navigate</button>
               </div>
               <div style={{ flex: 1, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'rgba(255,255,255,0.3)' }}>
-                <div style={{ fontSize: 32 }}>🌐</div>
+                <div style={{ fontSize: 32 }}>[W]</div>
                 <div style={{ fontSize: 13 }}>Enter a URL to browse via the orchestration agent</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {['Search Google', 'Browse LinkedIn', 'Check Competitor Site', 'Read News'].map(a => (
@@ -241,7 +241,7 @@ Context:
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>AGENT OUTPUT</span>
               </div>
               <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-                {running && <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>⏳ Agent is processing…</div>}
+                {running && <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>[...] Agent is processing…</div>}
                 {output && (
                   <div style={{ fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-wrap', color: 'rgba(255,255,255,0.9)' }}>
                     {output}

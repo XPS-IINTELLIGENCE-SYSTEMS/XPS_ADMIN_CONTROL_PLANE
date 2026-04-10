@@ -23,7 +23,7 @@ const SETTINGS = [
   },
   {
     title: 'Agents',
-    icon: '🤖',
+    icon: 'AI',
     items: [
       { label: 'Default Agent',      value: 'XPS Orchestrator',  locked: false },
       { label: 'Synthetic Fallback', value: 'Enabled',           locked: false },
@@ -32,7 +32,7 @@ const SETTINGS = [
   },
   {
     title: 'Data',
-    icon: '🗄️',
+    icon: 'DB',
     items: [
       { label: 'Auth Mode',    value: 'Dev (bypassed)',       locked: true },
       { label: 'DB Backend',   value: 'Supabase (not connected)', locked: false },

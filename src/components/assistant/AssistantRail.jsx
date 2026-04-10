@@ -138,7 +138,7 @@ export default function AssistantRail({ open, onToggle }) {
           <div>
             <div style={{ fontWeight: 600, fontSize: 13 }}>XPS AI Orchestrator</div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              {ORCHESTRATOR_MODE === 'live' ? '● live' : '◉ synthetic mode'}
+              {ORCHESTRATOR_MODE === 'live' ? 'live' : 'synthetic mode'}
               {' · '}
               {location.pathname.replace('/', '') || 'home'}
             </div>

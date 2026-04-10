@@ -8,8 +8,8 @@ const CONNECTORS = [
   { id: 'calendar',   name: 'Calendar',          desc: 'Calendar and scheduling integration',           icon: '📅', status: 'not_connected' },
   { id: 'analytics',  name: 'Analytics Source',  desc: 'Analytics and reporting data source',           icon: '📊', status: 'not_connected' },
   { id: 'storage',    name: 'Cloud Storage',     desc: 'Document and file storage integration',         icon: '☁️', status: 'not_connected' },
-  { id: 'supabase',   name: 'Supabase',          desc: 'Primary durable backend database',              icon: '🗄️', status: 'awaiting_config' },
-  { id: 'openai',     name: 'OpenAI',            desc: 'GPT-4 / chat completion backend',               icon: '🤖', status: 'awaiting_config' },
+  { id: 'supabase',   name: 'Supabase',          desc: 'Primary durable backend database',              icon: 'DB', status: 'awaiting_config' },
+  { id: 'openai',     name: 'OpenAI',            desc: 'GPT-4 / chat completion backend',               icon: 'AI', status: 'awaiting_config' },
   { id: 'webhook',    name: 'Webhooks',          desc: 'Outbound webhook endpoints',                    icon: '🔗', status: 'not_connected' },
 ];
 

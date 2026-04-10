@@ -12,18 +12,18 @@ const WORKFLOW_TEMPLATES = [
 
 const STEP_TYPES = [
   { type: 'trigger', icon: '⚡', label: 'Trigger', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
-  { type: 'action', icon: '⚙️', label: 'Action', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
+  { type: 'action', icon: '[A]', label: 'Action', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
   { type: 'condition', icon: '❓', label: 'Condition', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
-  { type: 'ai', icon: '🤖', label: 'AI Step', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
+  { type: 'ai', icon: '[AI]', label: 'AI Step', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
   { type: 'wait', icon: '⏱️', label: 'Wait / Delay', color: 'rgba(255,255,255,0.07)', border: 'rgba(255,255,255,0.15)' },
   { type: 'notify', icon: '📧', label: 'Notify', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
 ];
 
 const INIT_STEPS = [
   { id: 1, type: 'trigger', icon: '⚡', label: 'New Lead Added', color: 'rgba(212,168,67,0.15)', border: 'rgba(212,168,67,0.3)' },
-  { id: 2, type: 'ai', icon: '🤖', label: 'AI: Research Company', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
+  { id: 2, type: 'ai', icon: '[AI]', label: 'AI: Research Company', color: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)' },
   { id: 3, type: 'condition', icon: '❓', label: 'Score ≥ 70?', color: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)' },
-  { id: 4, type: 'action', icon: '⚙️', label: 'Assign to Sales Rep', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
+  { id: 4, type: 'action', icon: '[A]', label: 'Assign to Sales Rep', color: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)' },
   { id: 5, type: 'notify', icon: '📧', label: 'Send Welcome Email', color: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)' },
 ];
 
