@@ -787,7 +787,7 @@ function UIBody({ obj }) {
     if (isEditor) {
       setDraftState(activeState);
     }
-  }, [isEditor, activeState.theme, activeState.components]);
+  }, [isEditor, obj.updatedAt, obj.meta?.preview?.id]);
 
   useEffect(() => {
     if (!isEditor) return;

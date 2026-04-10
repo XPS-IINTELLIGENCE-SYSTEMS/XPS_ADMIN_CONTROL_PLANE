@@ -2,7 +2,7 @@
 // Priority: OpenAI → Groq → Ollama
 
 export async function callLLM(messages, { model, provider = 'auto', json = false } = {}) {
-  const resolved = provider?.toLowerCase?.() || 'auto';
+  const resolved = typeof provider === 'string' ? provider.toLowerCase() : 'auto';
   if (resolved !== 'auto') {
     switch (resolved) {
       case 'openai':
