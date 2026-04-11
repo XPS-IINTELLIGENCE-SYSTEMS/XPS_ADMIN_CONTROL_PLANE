@@ -273,7 +273,7 @@ export function getRuntimeSnapshot(env = process.env, req = null) {
       },
       webhookTargets: {
         twilioInbound: baseUrl ? `${baseUrl}/api/webhooks/twilio/inbound` : '/api/webhooks/twilio/inbound',
-        twilioStatus: baseUrl ? `${baseUrl}/api/webhooks/twilio/status` : '/api/webhooks/twilio/status',
+        twilioStatusCallback: baseUrl ? `${baseUrl}/api/webhooks/twilio/status` : '/api/webhooks/twilio/status',
         sendgridInbound: baseUrl ? `${baseUrl}/api/webhooks/sendgrid/inbound` : '/api/webhooks/sendgrid/inbound',
         sendgridEvents: baseUrl ? `${baseUrl}/api/webhooks/sendgrid/events` : '/api/webhooks/sendgrid/events',
       },

@@ -32,6 +32,9 @@ import {
 
 const API_URL = import.meta.env.API_URL || '';
 const RETRY_DELAY_BASE_MS = 600;
+// Keep autonomous runs bounded so queued state remains visible and the UI
+// does not saturate local/browser resources. Tune upward only when the
+// backend/runtime path can safely sustain more concurrent run execution.
 const MAX_ACTIVE_RUNS = 2;
 
 // ── Run state ─────────────────────────────────────────────────────────────────

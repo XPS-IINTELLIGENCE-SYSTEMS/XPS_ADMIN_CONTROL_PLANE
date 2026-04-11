@@ -16,6 +16,9 @@ import { persistBrowserJob } from './supabasePersistence.js';
 const API_URL = import.meta.env.API_URL || '';
 const BROWSER_POLL_INTERVAL_MS = 1000;
 const BROWSER_MAX_POLL_ATTEMPTS = 20;
+// Browser jobs are heavier than standard runs because they may reserve a
+// worker process/browser instance. Keep this low unless the worker/runtime
+// is explicitly provisioned for higher concurrency.
 const MAX_ACTIVE_BROWSER_JOBS = 2;
 
 // ── Job state ─────────────────────────────────────────────────────────────────
