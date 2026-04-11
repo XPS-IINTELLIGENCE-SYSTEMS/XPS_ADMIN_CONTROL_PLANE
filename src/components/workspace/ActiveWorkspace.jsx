@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../lib/workspaceEngine.jsx';
 import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, createHistoryEntry, createDefaultUiState, validateUiState } from '../../lib/uiMutations.js';
-import { persistUiPreview, persistUiVersion, persistUiRollback } from '../../lib/supabasePersistence.js';
+import { persistUiPreview, persistUiVersion, persistUiRollback, persistWorkspaceObject } from '../../lib/supabasePersistence.js';
 import { getGovernance, subscribeGovernance } from '../../lib/governance.js';
 import { getConnectionPrefs } from '../../lib/connectionPrefs.js';
 import { executeSendGridEmail, executeTwilioCall } from '../../lib/operatorActions.js';
@@ -783,6 +783,7 @@ function UIBody({ obj }) {
   const [tab, setTab] = useState('code');
   const [editorView, setEditorView] = useState('canvas');
   const [selectedComponentId, setSelectedComponentId] = useState(null);
+  const [selectedPageId, setSelectedPageId] = useState(null);
   const [draftState, setDraftState] = useState(normalizeUiState(obj.meta?.uiState || DEFAULT_UI_STATE));
   const [notice, setNotice] = useState(null);
   const [governance, setGovernanceState] = useState(getGovernance());
@@ -828,7 +829,16 @@ function UIBody({ obj }) {
     }
   }, [isEditor, draftState.components, selectedComponentId]);
 
+  useEffect(() => {
+    if (!isEditor) return;
+    const pages = draftState.site.pages || [];
+    if (!selectedPageId || !pages.find((page) => page.id === selectedPageId)) {
+      setSelectedPageId(draftState.site.activePageId || pages[0]?.id || null);
+    }
+  }, [isEditor, draftState.site.activePageId, draftState.site.pages, selectedPageId]);
+
   const selectedComponent = draftState.components.find(c => c.id === selectedComponentId);
+  const selectedPage = (draftState.site.pages || []).find((page) => page.id === selectedPageId) || null;
   const hasPreview = !!previewState;
   const previewMeta = obj.meta?.preview;
 
@@ -844,6 +854,57 @@ function UIBody({ obj }) {
 
   const toggleFeatureFlag = (flag) => {
     setDraftState(prev => applyUiPatch(prev, { toggleFeatureFlag: flag }));
+    setNotice(null);
+  };
+
+  const toggleModule = (module) => {
+    setDraftState(prev => applyUiPatch(prev, { toggleModule: module }));
+    setNotice(null);
+  };
+
+  const toggleCapability = (capability) => {
+    setDraftState(prev => applyUiPatch(prev, { toggleCapability: capability }));
+    setNotice(null);
+  };
+
+  const updatePage = (patch) => {
+    if (!selectedPageId) return;
+    setDraftState(prev => applyUiPatch(prev, { updatePage: { id: selectedPageId, patch } }));
+    setNotice(null);
+  };
+
+  const addPage = () => {
+    let nextPageId = null;
+    setDraftState((prev) => {
+      const next = applyUiPatch(prev, { addPage: { title: `Page ${prev.site.pages.length + 1}` } });
+      nextPageId = next.site.activePageId;
+      return next;
+    });
+    setSelectedPageId(nextPageId);
+    setNotice(null);
+  };
+
+  const movePage = (direction) => {
+    if (!selectedPageId) return;
+    setDraftState(prev => applyUiPatch(prev, { movePage: { id: selectedPageId, direction } }));
+    setNotice(null);
+  };
+
+  const removePage = () => {
+    if (!selectedPageId) return;
+    let fallbackPageId = null;
+    setDraftState((prev) => {
+      const next = applyUiPatch(prev, { removePageId: selectedPageId });
+      fallbackPageId = next.site.activePageId;
+      return next;
+    });
+    setSelectedPageId(fallbackPageId);
+    setNotice(null);
+  };
+
+  const activatePage = (pageId) => {
+    setSelectedPageId(pageId);
+    setDraftState(prev => applyUiPatch(prev, { setActivePageId: pageId }));
     setNotice(null);
   };
 
@@ -891,20 +952,24 @@ function UIBody({ obj }) {
         preview: nextPreview,
       },
     });
-    createObject({
+    const mutationObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Preview — ${summary}`,
       content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
       meta: { stage: 'preview', summary, source, validation, targetId: obj.id, previewId },
-    });
-    createObject({
+    };
+    createObject(mutationObject);
+    persistWorkspaceObject(mutationObject).catch(() => {});
+    const previewObject = {
       type: OBJ_TYPE.PREVIEW,
       title: `UI Preview — ${summary}`,
       content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: RUN_STATUS.IDLE,
       meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source, validation },
-    });
+    };
+    createObject(previewObject);
+    persistWorkspaceObject(previewObject).catch(() => {});
     persistUiPreview({ previewId, targetId: obj.id, state, summary, source }).catch(() => {});
     setEditorView('preview');
   };
@@ -943,13 +1008,15 @@ function UIBody({ obj }) {
       summary: latest.summary,
       source: latest.source,
     }).catch(() => {});
-    createObject({
+    const mutationObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Apply — ${previewMeta.summary || 'Apply preview'}`,
       content: `Applied governed mutation.\n\nSummary: ${previewMeta.summary || 'Apply preview'}\nValidation: ${previewMeta.validation?.summary || 'Validation passed.'}`,
       status: RUN_STATUS.DONE,
       meta: { stage: 'apply', summary: previewMeta.summary || 'Apply preview', source: previewMeta.source || 'manual', validation: previewMeta.validation || { valid: true, issues: [] }, targetId: obj.id },
-    });
+    };
+    createObject(mutationObject);
+    persistWorkspaceObject(mutationObject).catch(() => {});
     if (previewMeta.source === 'rollback' && updatedHistory.length > 1) {
       persistUiRollback({
         rollbackId: genId(),
@@ -1152,7 +1219,7 @@ function UIBody({ obj }) {
                 <input
                   value={(draftState.site.navItems || []).join(', ')}
                   onChange={e => updateSite({ navItems: e.target.value.split(',').map(item => item.trim()).filter(Boolean) })}
-                  placeholder="Navigation items"
+                  placeholder="Fallback navigation items"
                   style={editorInputStyle}
                 />
                 <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
@@ -1174,6 +1241,78 @@ function UIBody({ obj }) {
               </div>
 
               <div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Pages</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <button onClick={addPage} className="xps-electric-hover" style={pageActionStyle}>
+                    <Plus size={10} style={{ marginRight: 4 }} /> Add page
+                  </button>
+                  <button onClick={() => movePage(-1)} className="xps-electric-hover" style={pageActionStyle} disabled={!selectedPageId}>
+                    <MoveUp size={10} style={{ marginRight: 4 }} /> Move up
+                  </button>
+                  <button onClick={() => movePage(1)} className="xps-electric-hover" style={pageActionStyle} disabled={!selectedPageId}>
+                    <MoveDown size={10} style={{ marginRight: 4 }} /> Move down
+                  </button>
+                  <button onClick={removePage} className="xps-electric-hover" style={{ ...pageActionStyle, border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }} disabled={!selectedPageId}>
+                    <Trash2 size={10} style={{ marginRight: 4 }} /> Remove
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                  {(draftState.site.pages || []).map((page) => (
+                    <button
+                      key={page.id}
+                      onClick={() => activatePage(page.id)}
+                      className="xps-electric-hover"
+                      style={{
+                        ...pageListStyle,
+                        borderColor: page.id === selectedPageId ? 'rgba(212,168,67,0.35)' : 'rgba(255,255,255,0.08)',
+                        background: page.id === selectedPageId ? 'rgba(212,168,67,0.08)' : 'rgba(255,255,255,0.03)',
+                      }}
+                    >
+                      <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{page.title}</span>
+                      <span style={{ fontSize: 10, color: page.visible ? GREEN : 'rgba(255,255,255,0.35)' }}>{page.visible ? 'visible' : 'hidden'}</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedPage ? (
+                  <>
+                    <input
+                      value={selectedPage.title || ''}
+                      onChange={e => updatePage({ title: e.target.value })}
+                      placeholder="Page title"
+                      style={editorInputStyle}
+                    />
+                    <input
+                      value={selectedPage.route || ''}
+                      onChange={e => updatePage({ route: e.target.value })}
+                      placeholder="/page-route"
+                      style={editorInputStyle}
+                    />
+                    <input
+                      value={selectedPage.navLabel || ''}
+                      onChange={e => updatePage({ navLabel: e.target.value })}
+                      placeholder="Navigation label"
+                      style={editorInputStyle}
+                    />
+                    <textarea
+                      value={selectedPage.description || ''}
+                      onChange={e => updatePage({ description: e.target.value })}
+                      placeholder="Page description"
+                      style={{ ...editorInputStyle, minHeight: 56 }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPage.visible !== false}
+                        onChange={() => updatePage({ visible: selectedPage.visible === false })}
+                        style={{ accentColor: GOLD }}
+                      />
+                      <span>Page visible in navigation and canvas</span>
+                    </label>
+                  </>
+                ) : null}
+              </div>
+
+              <div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Theme</div>
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Primary</label>
                 <input type="color" value={draftState.theme.primaryColor} onChange={e => updateTheme({ primaryColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
@@ -1181,10 +1320,28 @@ function UIBody({ obj }) {
                 <input type="color" value={draftState.theme.accentColor} onChange={e => updateTheme({ accentColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Background</label>
                 <input type="color" value={draftState.theme.background} onChange={e => updateTheme({ background: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Text</label>
+                <input type="color" value={draftState.theme.textColor} onChange={e => updateTheme({ textColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Font</label>
                 <input
                   value={draftState.theme.fontFamily}
                   onChange={e => updateTheme({ fontFamily: e.target.value })}
+                  style={editorInputStyle}
+                />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Heading scale</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={draftState.theme.headingScale}
+                  onChange={e => updateTheme({ headingScale: Number(e.target.value) })}
+                  style={editorInputStyle}
+                />
+                <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Body scale</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={draftState.theme.bodyScale}
+                  onChange={e => updateTheme({ bodyScale: Number(e.target.value) })}
                   style={editorInputStyle}
                 />
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 8, display: 'block' }}>Border Radius</label>
@@ -1194,6 +1351,42 @@ function UIBody({ obj }) {
                   onChange={e => updateTheme({ borderRadius: Number(e.target.value) })}
                   style={editorInputStyle}
                 />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Modules / Capability Toggles</div>
+                <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                  {Object.entries(draftState.site.moduleToggles || {}).map(([module, enabled]) => (
+                    <label key={module} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!enabled}
+                        onChange={() => toggleModule(module)}
+                        style={{ accentColor: GOLD }}
+                      />
+                      <span>{module}</span>
+                      <span style={{ marginLeft: 'auto', color: enabled ? GREEN : 'rgba(255,255,255,0.3)' }}>
+                        {enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {Object.entries(draftState.site.capabilityToggles || {}).map(([capability, enabled]) => (
+                    <label key={capability} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!enabled}
+                        onChange={() => toggleCapability(capability)}
+                        style={{ accentColor: GOLD }}
+                      />
+                      <span>{capability}</span>
+                      <span style={{ marginLeft: 'auto', color: enabled ? GREEN : 'rgba(255,255,255,0.3)' }}>
+                        {enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -1333,6 +1526,42 @@ const miniActionStyle = {
   cursor: 'pointer',
 };
 
+const pageActionStyle = {
+  padding: '4px 8px',
+  fontSize: 10,
+  borderRadius: 6,
+  border: '1px solid rgba(212,168,67,0.3)',
+  background: 'rgba(212,168,67,0.12)',
+  color: GOLD,
+  cursor: 'pointer',
+};
+
+const pageListStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  padding: '8px 10px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,0.08)',
+  background: 'rgba(255,255,255,0.03)',
+  cursor: 'pointer',
+  fontSize: 11,
+  textAlign: 'left',
+};
+
+function canvasTogglePillStyle(theme, enabled, label) {
+  return {
+    padding: '4px 8px',
+    borderRadius: 999,
+    border: `1px solid ${enabled ? theme.primaryColor : theme.borderColor}`,
+    fontSize: 10,
+    color: enabled ? theme.primaryColor : 'rgba(255,255,255,0.45)',
+    background: enabled ? 'rgba(212,168,67,0.08)' : 'rgba(255,255,255,0.03)',
+    textTransform: 'none',
+  };
+}
+
 const primaryActionStyle = {
   display: 'flex',
   alignItems: 'center',
@@ -1366,6 +1595,15 @@ const secondaryActionStyle = {
 function UiCanvas({ state, selectedId, onSelect, previewMode }) {
   const theme = state.theme;
   const site = state.site || {};
+  const visiblePages = (site.pages || []).filter((page) => page.visible !== false);
+  const activePage = (site.pages || []).find((page) => page.id === site.activePageId) || visiblePages[0] || site.pages?.[0] || null;
+  const navItems = visiblePages.length
+    ? visiblePages.map((page) => ({ id: page.id, label: page.navLabel || page.title || page.route }))
+    : (site.navItems || []).map((item, index) => ({ id: `${item}-${index}`, label: item }));
+  const moduleToggles = site.moduleToggles || {};
+  const capabilityToggles = site.capabilityToggles || {};
+  const headingScale = Number(theme.headingScale || 1.2);
+  const bodyScale = Number(theme.bodyScale || 1);
   return (
     <div style={{
       background: theme.surface,
@@ -1379,41 +1617,70 @@ function UiCanvas({ state, selectedId, onSelect, previewMode }) {
       flexDirection: 'column',
       gap: 14,
       transition: 'all 0.2s ease',
-    }}>
-      {previewMode && (
-        <div style={{ fontSize: 10, color: '#fbbf24', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-          Preview Mode
-        </div>
-      )}
-      <div style={{
-        borderRadius: theme.borderRadius - 2,
-        border: `1px solid ${theme.borderColor}`,
-        padding: 12,
-        background: 'rgba(255,255,255,0.02)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: theme.primaryColor }}>{site.pageTitle}</div>
-          <code style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{site.route}</code>
+        {previewMode && (
+          <div style={{ fontSize: 10, color: '#fbbf24', letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            Preview Mode
+          </div>
+        )}
+        <div style={{
+          borderRadius: theme.borderRadius - 2,
+          border: `1px solid ${theme.borderColor}`,
+          padding: 12,
+          background: 'rgba(255,255,255,0.02)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: `${headingScale}rem`, fontWeight: 700, color: theme.primaryColor }}>{site.pageTitle}</div>
+          <code style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>{site.route}</code>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: theme.accentColor, textTransform: 'uppercase', letterSpacing: 0.7 }}>
             {site.effectPreset}
           </span>
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>{site.description}</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          {(site.navItems || []).map((item) => (
-            <span key={item} style={{
+        <div style={{ fontSize: `${bodyScale}rem`, color: theme.textColor, marginTop: 6, opacity: 0.8 }}>{site.description}</div>
+        {moduleToggles.navigation !== false && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {navItems.map((item) => (
+            <span key={item.id} style={{
               padding: '4px 8px',
               borderRadius: 999,
-              border: `1px solid ${theme.borderColor}`,
+              border: `1px solid ${activePage && activePage.id === item.id ? theme.primaryColor : theme.borderColor}`,
               fontSize: 10,
-              color: 'rgba(255,255,255,0.72)',
+              color: activePage && activePage.id === item.id ? theme.primaryColor : theme.textColor,
+              opacity: activePage && activePage.id === item.id ? 1 : 0.72,
             }}>
-              {item}
+              {item.label}
+            </span>
+          ))}
+        </div>
+        )}
+        {activePage && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.borderColor}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: theme.primaryColor }}>{activePage.title}</span>
+              <code style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{activePage.route}</code>
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: activePage.visible !== false ? GREEN : RED }}>
+                {activePage.visible !== false ? 'visible' : 'hidden'}
+              </span>
+            </div>
+            <div style={{ fontSize: `${bodyScale}rem`, color: theme.textColor, opacity: 0.75, marginTop: 4 }}>
+              {activePage.description}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          {Object.entries(moduleToggles).map(([module, enabled]) => (
+            <span key={module} style={canvasTogglePillStyle(theme, enabled, module)}>
+              {module}
+            </span>
+          ))}
+          {Object.entries(capabilityToggles).map(([capability, enabled]) => (
+            <span key={capability} style={canvasTogglePillStyle(theme, enabled, capability)}>
+              {capability}
             </span>
           ))}
         </div>
       </div>
-      {state.components.map(component => {
+      {moduleToggles.commandSurface !== false && state.components.map(component => {
         const isSelected = component.id === selectedId;
         const baseStyle = {
           borderRadius: theme.borderRadius - 2,
@@ -1481,6 +1748,29 @@ function UiCanvas({ state, selectedId, onSelect, previewMode }) {
         }
         return null;
       })}
+      {moduleToggles.runtimePanel !== false && (
+        <div style={{ borderRadius: theme.borderRadius - 2, border: `1px solid ${theme.borderColor}`, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: theme.accentColor, marginBottom: 6 }}>Runtime / Feature Visibility</div>
+          <div style={{ display: 'grid', gap: 4, fontSize: 11, color: theme.textColor }}>
+            {Object.entries(site.featureFlags || {}).map(([flag, enabled]) => (
+              <div key={flag} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{flag}</span>
+                <span style={{ marginLeft: 'auto', color: enabled ? GREEN : 'rgba(255,255,255,0.35)' }}>
+                  {enabled ? 'enabled' : 'disabled'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {moduleToggles.deploymentPanel !== false && (
+        <div style={{ borderRadius: theme.borderRadius - 2, border: `1px solid ${theme.borderColor}`, padding: 12, background: theme.gradient }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: theme.primaryColor, marginBottom: 4 }}>Governed Deploy Surface</div>
+          <div style={{ fontSize: 11, color: theme.textColor, opacity: 0.78 }}>
+            Preview/apply/rollback remains governed. Repo-linked mutation: {capabilityToggles.repoLinkedMutation ? 'enabled' : 'blocked'}.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

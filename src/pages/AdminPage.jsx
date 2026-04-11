@@ -15,20 +15,21 @@ import {
   ChevronDown, ChevronRight, Lock, Unlock, Activity,
   Key, Server, RefreshCw, Shield,
   BookOpen, Zap, Code, Package, GitPullRequest,
-  Users, HardDrive, Brain, Cloud,
+  Users, HardDrive, Brain, Cloud, Bot,
   Ban, Info, GitCommit, Tag, Workflow, Eye, PhoneCall, Clapperboard, LayoutPanelTop,
 } from 'lucide-react';
 import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
 import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
 import { useWorkspace, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
-import { createDefaultUiState, createHistoryEntry, normalizeUiState, validateUiState } from '../lib/uiMutations.js';
+import { applyUiPatch, createDefaultUiState, createHistoryEntry, normalizeUiState, validateUiState } from '../lib/uiMutations.js';
 import { requestAppShellNavigation } from '../lib/appShellEvents.js';
 import { executeSendGridEmail, executeTwilioCall, buildConnectorCredentials } from '../lib/operatorActions.js';
 import { subscribeRuns, getRunList, retryRun, recoverRun, cancelRun } from '../lib/bytebotRuntime.js';
 import { subscribeJobs, getJobList, retryBrowserJob, recoverBrowserJob, cancelBrowserJob } from '../lib/browserJobRuntime.js';
 import { subscribeGroups, getGroupList } from '../lib/parallelRunGroup.js';
 import { loadAdminStatusSnapshot, saveAdminStatusSnapshot } from '../lib/orchestrationPersistence.js';
+import { persistUiPreview, persistUiRollback, persistUiVersion, persistWorkspaceObject } from '../lib/supabasePersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -2008,6 +2009,57 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
     return created;
   };
 
+  const getBuilderState = () => {
+    const target = ensureUiEditor();
+    const appliedState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
+    const previewState = target.meta?.preview?.state ? normalizeUiState(target.meta.preview.state) : null;
+    return { target, appliedState, previewState, state: previewState || appliedState };
+  };
+
+  const stageBuilderPreview = (patch, summary, source = 'admin') => {
+    if (!governance.allowUiEdits) {
+      setBuilderNotice('Builder mutation is blocked because UI edits are disabled in governance.');
+      return;
+    }
+    if (!governance.allowSiteMutations) {
+      setBuilderNotice('Builder mutation is blocked because site mutations are disabled in governance.');
+      return;
+    }
+    const { target, appliedState } = getBuilderState();
+    const nextState = normalizeUiState(applyUiPatch(appliedState, patch));
+    const validation = validateUiState(nextState);
+    const preview = {
+      id: genId(),
+      summary,
+      source,
+      createdAt: new Date().toISOString(),
+      state: nextState,
+      validation,
+    };
+    workspace.patchObject(target.id, {
+      meta: {
+        ...target.meta,
+        uiEditor: true,
+        uiState: appliedState,
+        history: Array.isArray(target.meta?.history) ? target.meta.history : [createHistoryEntry(appliedState, 'Initial UI state', 'seed')],
+        preview,
+      },
+    });
+    const mutationObject = {
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Preview — ${summary}`,
+      content: `Admin preview prepared.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
+      meta: { stage: 'preview', summary, source, validation, targetId: target.id, previewId: preview.id },
+    };
+    workspace.createObject(mutationObject);
+    persistWorkspaceObject(mutationObject).catch(() => {});
+    persistUiPreview({ previewId: preview.id, targetId: target.id, state: nextState, summary, source }).catch(() => {});
+    workspace.setActive(target.id);
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice(`Preview staged: ${summary}. Review in the workspace before apply.`);
+  };
+
   const openBuilderCanvas = () => {
     const target = ensureUiEditor();
     workspace.setActive(target.id);
@@ -2034,13 +2086,32 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
     const history = Array.isArray(target.meta?.history) ? [...target.meta.history] : [];
     history.push(createHistoryEntry(nextState, preview.summary || 'Apply preview', 'admin'));
     workspace.patchObject(target.id, { meta: { ...target.meta, uiState: nextState, history, preview: null } });
-    workspace.createObject({
+    const latest = history[history.length - 1];
+    persistUiVersion({
+      versionId: latest.id,
+      targetId: target.id,
+      state: nextState,
+      summary: latest.summary,
+      source: latest.source,
+    }).catch(() => {});
+    const applyObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Apply — ${preview.summary || 'Apply preview'}`,
       content: `Applied governed mutation from admin.\n\nSummary: ${preview.summary || 'Apply preview'}\nValidation: ${preview.validation?.summary || 'Validation passed.'}`,
       status: RUN_STATUS.DONE,
       meta: { stage: 'apply', summary: preview.summary || 'Apply preview', source: 'admin', validation: preview.validation || { valid: true, issues: [] }, targetId: target.id },
-    });
+    };
+    workspace.createObject(applyObject);
+    persistWorkspaceObject(applyObject).catch(() => {});
+    if (preview.source === 'admin-rollback' && history.length > 1) {
+      persistUiRollback({
+        rollbackId: genId(),
+        targetId: target.id,
+        fromVersion: history[history.length - 2]?.id,
+        toVersion: latest.id,
+        summary: latest.summary,
+      }).catch(() => {});
+    }
     workspace.setActive(target.id);
     requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
     setBuilderNotice('Pending preview applied. Rollback remains available.');
@@ -2065,17 +2136,111 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
       validation,
     };
     workspace.patchObject(target.id, { meta: { ...target.meta, preview } });
-    workspace.createObject({
+    persistUiPreview({ previewId: preview.id, targetId: target.id, state: nextState, summary: preview.summary, source: 'admin-rollback' }).catch(() => {});
+    const rollbackObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Rollback Preview — ${previous.summary || previous.id}`,
       content: `Rollback preview prepared.\n\nSummary: ${preview.summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
       meta: { stage: 'rollback-preview', summary: preview.summary, source: 'admin', validation, targetId: target.id, previewId: preview.id },
-    });
+    };
+    workspace.createObject(rollbackObject);
+    persistWorkspaceObject(rollbackObject).catch(() => {});
     workspace.setActive(target.id);
     requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
     setBuilderNotice('Rollback preview created in the workspace.');
   };
+
+  const stageNewPage = () => {
+    const { state } = getBuilderState();
+    const pageTitle = `Admin Page ${state.site.pages.length + 1}`;
+    stageBuilderPreview({ addPage: { title: pageTitle, navLabel: pageTitle } }, `Create page ${pageTitle}`, 'admin-page-create');
+  };
+
+  const stagePageVisibilityToggle = () => {
+    const { state } = getBuilderState();
+    const targetPage = [...(state.site.pages || [])].reverse().find((page) => page.visible !== false) || state.site.pages?.[0];
+    if (!targetPage) {
+      setBuilderNotice('No governed page is available to toggle.');
+      return;
+    }
+    stageBuilderPreview(
+      { updatePage: { id: targetPage.id, patch: { visible: targetPage.visible === false } } },
+      `${targetPage.visible === false ? 'Show' : 'Hide'} page ${targetPage.title}`,
+      'admin-page-visibility',
+    );
+  };
+
+  const stageModuleToggle = () => {
+    const { state } = getBuilderState();
+    const enabled = state.site.moduleToggles?.deploymentPanel !== false;
+    stageBuilderPreview(
+      { site: { moduleToggles: { deploymentPanel: !enabled } } },
+      `${enabled ? 'Disable' : 'Enable'} deployment panel`,
+      'admin-module-toggle',
+    );
+  };
+
+  const generateBuilderArtifact = (kind) => {
+    const { target, state, previewState } = getBuilderState();
+    const pages = state.site.pages || [];
+    const visiblePages = pages.filter((page) => page.visible !== false);
+    if (kind === 'agent-builder') {
+      const agentArtifact = {
+        type: OBJ_TYPE.AGENT_RUN,
+        title: `Agent Builder Artifact — ${state.site.pageTitle}`,
+        content: [
+          `Agent builder artifact prepared for ${state.site.pageTitle}.`,
+          '',
+          `Pages: ${pages.length}`,
+          `Visible pages: ${visiblePages.length}`,
+          `Pending preview: ${previewState ? 'yes' : 'no'}`,
+          '',
+          'Execution surfaces:',
+          '- Site builder object',
+          '- Page builder object',
+          '- Feature builder object',
+          '- Governed preview/apply/rollback path',
+        ].join('\n'),
+        status: RUN_STATUS.DONE,
+        meta: { builderArtifact: 'agent-builder', targetId: target.id, pageCount: pages.length, previewPending: !!previewState },
+      };
+      workspace.createObject(agentArtifact);
+      persistWorkspaceObject(agentArtifact).catch(() => {});
+      requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+      setBuilderNotice('Agent builder artifact rendered in the workspace.');
+      return;
+    }
+
+    const runbookObject = {
+      type: OBJ_TYPE.WORKFLOW,
+      title: `Site Builder Runbook — ${state.site.pageTitle}`,
+      content: [
+        `Objective: governed site control for ${state.site.pageTitle}`,
+        '',
+        `Preview pending: ${previewState ? 'yes' : 'no'}`,
+        `Rollback history entries: ${(target.meta?.history || []).length}`,
+        '',
+        'Pages:',
+        ...pages.map((page) => `- ${page.title} (${page.route}) · ${page.visible !== false ? 'visible' : 'hidden'}`),
+        '',
+        'Modules:',
+        ...Object.entries(state.site.moduleToggles || {}).map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'disabled'}`),
+        '',
+        'Capabilities:',
+        ...Object.entries(state.site.capabilityToggles || {}).map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'blocked'}`),
+      ].join('\n'),
+      status: RUN_STATUS.DONE,
+      meta: { builderArtifact: 'runbook', targetId: target.id, previewPending: !!previewState, pages },
+    };
+    workspace.createObject(runbookObject);
+    persistWorkspaceObject(runbookObject).catch(() => {});
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice('Builder runbook rendered in the workspace.');
+  };
+
+  const builderCapabilityStatus = governance.allowUiEdits ? STATUS.LIVE : STATUS.BLOCKED;
+  const governedApplyStatus = governance.previewOnly || governance.requireApproval ? STATUS.BLOCKED : STATUS.LIVE;
 
   return (
     <div data-testid="admin-builder-panel">
@@ -2092,10 +2257,19 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
         <CapRow icon={LayoutPanelTop} label="UI preview + apply flow" status={STATUS.LIVE} note={siteMutation.ui_preview || 'write-enabled'} />
         <CapRow icon={RefreshCw}      label="Rollback flow"           status={STATUS.LIVE} note={siteMutation.rollback_flow || 'write-enabled'} />
         <CapRow icon={GitBranch}      label="Repo-linked mutation path" status={deriveStatus(ghConfigured)} note={siteMutation.repo_mutation || 'blocked'} />
+        <CapRow icon={LayoutPanelTop} label="Page builder objects" status={builderCapabilityStatus} note={governance.allowSiteMutations ? 'governed preview object' : 'blocked by governance'} />
+        <CapRow icon={BookOpen} label="Runbook generation" status={STATUS.LIVE} note="workspace workflow artifact" />
+        <CapRow icon={Bot} label="Agent builder artifact" status={STATUS.LIVE} note="workspace execution artifact" />
+        <CapRow icon={Shield} label="Governed apply path" status={governedApplyStatus} note={governance.previewOnly || governance.requireApproval ? 'preview-only / approval required' : 'apply enabled'} />
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={openBuilderCanvas} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Open builder canvas</button>
+          <button onClick={stageNewPage} className="xps-electric-hover" style={actionBtnStyle(false, '#a855f7')}>Stage new page</button>
+          <button onClick={stagePageVisibilityToggle} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Stage page visibility</button>
+          <button onClick={stageModuleToggle} className="xps-electric-hover" style={actionBtnStyle(false, '#38bdf8')}>Stage module toggle</button>
           <button onClick={applyPendingPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#22c55e')}>Apply pending preview</button>
-          <button onClick={stageRollbackPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Create rollback preview</button>
+          <button onClick={stageRollbackPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#fb7185')}>Create rollback preview</button>
+          <button onClick={() => generateBuilderArtifact('runbook')} className="xps-electric-hover" style={actionBtnStyle(false, '#fbbf24')}>Generate runbook</button>
+          <button onClick={() => generateBuilderArtifact('agent-builder')} className="xps-electric-hover" style={actionBtnStyle(false, '#94a3b8')}>Generate agent-builder artifact</button>
         </div>
       </CapPanel>
 

@@ -463,20 +463,24 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         preview: previewMeta,
       },
     });
-    createObject({
+    const mutationObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Preview — ${summary}`,
       content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
       meta: { stage: 'preview', summary, source, validation, targetId: target.id, previewId },
-    });
-    createObject({
+    };
+    createObject(mutationObject);
+    persistWorkspaceObject(mutationObject).catch(() => {});
+    const previewObject = {
       type: OBJ_TYPE.PREVIEW,
       title: `UI Preview — ${summary}`,
       content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: RUN_STATUS.IDLE,
       meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source, validation },
-    });
+    };
+    createObject(previewObject);
+    persistWorkspaceObject(previewObject).catch(() => {});
     persistUiPreview({ previewId, targetId: target.id, state: nextState, summary, source }).catch(() => {});
     return { target, previewMeta };
   }, [ensureUiEditor, patchObject, createObject]);
@@ -496,13 +500,15 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         preview: null,
       },
     });
-    createObject({
+    const mutationObject = {
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Apply — ${previewMeta.summary || 'Apply preview'}`,
       content: `Applied governed mutation.\n\nSummary: ${previewMeta.summary || 'Apply preview'}\nValidation: ${previewMeta.validation?.summary || 'Validation passed.'}`,
       status: RUN_STATUS.DONE,
       meta: { stage: 'apply', summary: previewMeta.summary || 'Apply preview', source, validation: previewMeta.validation || { valid: true, issues: [] }, targetId: target.id },
-    });
+    };
+    createObject(mutationObject);
+    persistWorkspaceObject(mutationObject).catch(() => {});
     persistUiVersion({
       versionId: history[history.length - 1]?.id || genId(),
       targetId: target.id,
@@ -520,7 +526,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       }).catch(() => {});
     }
     return history;
-  }, [patchObject]);
+  }, [patchObject, createObject]);
 
   const createRollbackPreview = useCallback((target, source = 'chat') => {
     const history = Array.isArray(target?.meta?.history) ? target.meta.history : [];
@@ -530,11 +536,138 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     return createUiPreview({ site: previous.state?.site, theme: previous.state?.theme, components: previous.state?.components }, summary, source);
   }, [createUiPreview]);
 
+  const createBuilderArtifact = useCallback((kind, source = 'chat') => {
+    const target = ensureUiEditor();
+    const appliedState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
+    const previewState = target.meta?.preview?.state ? normalizeUiState(target.meta.preview.state) : null;
+    const state = previewState || appliedState;
+    const pages = state.site.pages || [];
+    const visiblePages = pages.filter((page) => page.visible !== false);
+    const modules = Object.entries(state.site.moduleToggles || {})
+      .map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'disabled'}`)
+      .join('\n');
+    const capabilities = Object.entries(state.site.capabilityToggles || {})
+      .map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'blocked'}`)
+      .join('\n');
+
+    if (kind === 'agent-builder') {
+      const agentArtifact = {
+        type: OBJ_TYPE.AGENT_RUN,
+        title: `Agent Builder Artifact — ${state.site.pageTitle}`,
+        content: [
+          `Agent builder artifact prepared for ${state.site.pageTitle}.`,
+          '',
+          `Pages in scope: ${pages.length}`,
+          `Visible pages: ${visiblePages.length}`,
+          `Pending governed preview: ${previewState ? 'yes' : 'no'}`,
+          '',
+          'Builder execution targets:',
+          '- Site builder object',
+          '- Page builder object',
+          '- Feature builder object',
+          '- Governed apply / rollback history',
+        ].join('\n'),
+        agent,
+        status: RUN_STATUS.DONE,
+        meta: {
+          builderArtifact: 'agent-builder',
+          source,
+          targetId: target.id,
+          pageCount: pages.length,
+          visiblePageCount: visiblePages.length,
+          previewPending: !!previewState,
+        },
+      };
+      createObject(agentArtifact);
+      persistWorkspaceObject(agentArtifact).catch(() => {});
+      onNavigate?.('workspace');
+      return 'Agent builder artifact created in the workspace.';
+    }
+
+    const runbookObject = {
+      type: OBJ_TYPE.WORKFLOW,
+      title: `Site Builder Runbook — ${state.site.pageTitle}`,
+      content: [
+        `Objective: Governed mutation path for ${state.site.pageTitle}`,
+        '',
+        `Preview pending: ${previewState ? 'yes' : 'no'}`,
+        `Rollback history entries: ${(target.meta?.history || []).length}`,
+        '',
+        'Pages:',
+        ...pages.map((page) => `- ${page.title} (${page.route}) · ${page.visible !== false ? 'visible' : 'hidden'}`),
+        '',
+        'Modules:',
+        modules || '- none',
+        '',
+        'Capabilities:',
+        capabilities || '- none',
+      ].join('\n'),
+      agent,
+      status: RUN_STATUS.DONE,
+      meta: {
+        builderArtifact: 'runbook',
+        source,
+        targetId: target.id,
+        previewPending: !!previewState,
+        pages,
+      },
+    };
+    createObject(runbookObject);
+    persistWorkspaceObject(runbookObject).catch(() => {});
+    onNavigate?.('workspace');
+    return 'Site builder runbook created in the workspace.';
+  }, [agent, createObject, ensureUiEditor, onNavigate]);
+
+  const parseBuilderArtifactCommand = (prompt) => {
+    const lower = prompt.toLowerCase();
+    if (/agent builder|builder agent|agent-builder/.test(lower)) return { intent: 'agent-builder' };
+    if (/runbook|builder plan|mutation plan|site plan/.test(lower)) return { intent: 'runbook' };
+    return null;
+  };
+
   const parseUiCommand = (prompt) => {
     const lower = prompt.toLowerCase();
     if (/rollback|revert|undo/.test(lower)) return { intent: 'rollback' };
     if (/apply|confirm/.test(lower) && /preview|changes|mutation/.test(lower)) return { intent: 'apply' };
     if (/cancel.*preview|discard.*preview|reject/.test(lower)) return { intent: 'cancel' };
+
+    const createPageMatch = prompt.match(/(?:create|add)\s+page(?: called| named| titled)?\s+["“]?([^"\n”]+)["”]?/i);
+    if (createPageMatch) {
+      const title = createPageMatch[1].trim();
+      return {
+        intent: 'preview',
+        patch: { addPage: { title, navLabel: title } },
+        summary: `Create page ${title}`,
+      };
+    }
+
+    const pageVisibilityMatch = prompt.match(/(show|hide)\s+page\s+["“]?([^"\n”]+)["”]?/i);
+    if (pageVisibilityMatch) {
+      const action = pageVisibilityMatch[1].toLowerCase();
+      const label = pageVisibilityMatch[2].trim();
+      const target = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE)
+        .site.pages.find((page) => [page.title, page.navLabel, page.route].some((value) => value?.toLowerCase() === label.toLowerCase()));
+      if (target) {
+        return {
+          intent: 'preview',
+          patch: { updatePage: { id: target.id, patch: { visible: action === 'show' } } },
+          summary: `${action === 'show' ? 'Show' : 'Hide'} page ${target.title}`,
+        };
+      }
+    }
+
+    const navLabelMatch = prompt.match(/nav(?:igation)? label for ["“]?([^"\n”]+)["”]?(?: to)? ["“]?([^"\n”]+)["”]?/i);
+    if (navLabelMatch) {
+      const target = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE)
+        .site.pages.find((page) => [page.title, page.navLabel, page.route].some((value) => value?.toLowerCase() === navLabelMatch[1].trim().toLowerCase()));
+      if (target) {
+        return {
+          intent: 'preview',
+          patch: { updatePage: { id: target.id, patch: { navLabel: navLabelMatch[2].trim() } } },
+          summary: `Update nav label for ${target.title}`,
+        };
+      }
+    }
 
     const titleMatch = prompt.match(/page title(?: to)? ["“]?([^"\n”]+)["”]?/i);
     if (titleMatch) {
@@ -579,9 +712,37 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       return { intent: 'preview', patch: { theme: { fontFamily: fontMatch[1].trim() } }, summary: 'Update font family' };
     }
 
+    const headingScaleMatch = prompt.match(/heading scale(?: to)? (\d+(?:\.\d+)?)/i);
+    if (headingScaleMatch) {
+      return { intent: 'preview', patch: { theme: { headingScale: Number(headingScaleMatch[1]) } }, summary: 'Update heading scale' };
+    }
+
+    const bodyScaleMatch = prompt.match(/body scale(?: to)? (\d+(?:\.\d+)?)/i);
+    if (bodyScaleMatch) {
+      return { intent: 'preview', patch: { theme: { bodyScale: Number(bodyScaleMatch[1]) } }, summary: 'Update body scale' };
+    }
+
     const radiusMatch = prompt.match(/border radius (\d+)/i);
     if (radiusMatch) {
       return { intent: 'preview', patch: { theme: { borderRadius: Number(radiusMatch[1]) } }, summary: 'Update border radius' };
+    }
+
+    const moduleMatch = prompt.match(/(enable|disable)\s+module\s+([\w-]+)/i);
+    if (moduleMatch) {
+      return {
+        intent: 'preview',
+        patch: { site: { moduleToggles: { [moduleMatch[2]]: moduleMatch[1].toLowerCase() === 'enable' } } },
+        summary: `${moduleMatch[1][0].toUpperCase()}${moduleMatch[1].slice(1).toLowerCase()} module ${moduleMatch[2]}`,
+      };
+    }
+
+    const capabilityMatch = prompt.match(/(enable|disable)\s+capability\s+([\w-]+)/i);
+    if (capabilityMatch) {
+      return {
+        intent: 'preview',
+        patch: { site: { capabilityToggles: { [capabilityMatch[2]]: capabilityMatch[1].toLowerCase() === 'enable' } } },
+        summary: `${capabilityMatch[1][0].toUpperCase()}${capabilityMatch[1].slice(1).toLowerCase()} capability ${capabilityMatch[2]}`,
+      };
     }
 
     for (const cmd of UI_ADD_COMMANDS) {
@@ -722,6 +883,16 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           setLoading(false);
           return;
         }
+      }
+    }
+
+    if (agent === 'orchestrator' || agent === 'builder') {
+      const builderArtifactCommand = parseBuilderArtifactCommand(prompt);
+      if (builderArtifactCommand) {
+        const message = createBuilderArtifact(builderArtifactCommand.intent, 'chat');
+        setMessages(prev => [...prev, { role: 'assistant', content: message, agent, mode: 'synthetic' }]);
+        setLoading(false);
+        return;
       }
     }
 

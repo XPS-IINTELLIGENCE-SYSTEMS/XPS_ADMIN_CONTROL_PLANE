@@ -1,5 +1,17 @@
 import { genId } from './workspaceEngine.jsx';
 
+function createDefaultPage(overrides = {}) {
+  return {
+    id: genId(),
+    title: 'Overview',
+    route: '/workspace',
+    navLabel: 'Overview',
+    description: 'Primary operator overview page.',
+    visible: true,
+    ...overrides,
+  };
+}
+
 export const DEFAULT_UI_STATE = {
   site: {
     pageTitle: 'XPS Operator Workspace',
@@ -7,6 +19,40 @@ export const DEFAULT_UI_STATE = {
     description: 'Governed operator workspace for orchestration, research, and site control.',
     navItems: ['Overview', 'Workspace', 'Connectors', 'Deploy'],
     effectPreset: 'operator-grid',
+    activePageId: null,
+    pages: [
+      createDefaultPage({
+        title: 'Workspace',
+        route: '/workspace',
+        navLabel: 'Workspace',
+        description: 'Governed operator workspace for orchestration, research, and site control.',
+      }),
+      createDefaultPage({
+        title: 'Connectors',
+        route: '/connectors',
+        navLabel: 'Connectors',
+        description: 'Connector awareness, capability state, and orchestration entry point.',
+      }),
+      createDefaultPage({
+        title: 'Deploy',
+        route: '/deploy',
+        navLabel: 'Deploy',
+        description: 'Preview, deployment, and rollback visibility.',
+      }),
+    ],
+    moduleToggles: {
+      navigation: true,
+      commandSurface: true,
+      runtimePanel: true,
+      deploymentPanel: true,
+      builderRail: true,
+    },
+    capabilityToggles: {
+      repoLinkedMutation: false,
+      connectorActions: true,
+      browserResearch: true,
+      deploymentPreview: false,
+    },
     featureFlags: {
       liveChat: true,
       browserResearch: true,
@@ -28,6 +74,8 @@ export const DEFAULT_UI_STATE = {
     gradient: 'linear-gradient(135deg, rgba(212,168,67,0.18), rgba(59,130,246,0.12))',
     shadow: '0 18px 32px rgba(0,0,0,0.35)',
     animation: 'none',
+    headingScale: 1.2,
+    bodyScale: 1,
   },
   components: [
     { id: genId(), type: 'section', title: 'Command Surface', body: 'Editable intelligence surface for ops, research, and deployment.' },
@@ -37,9 +85,40 @@ export const DEFAULT_UI_STATE = {
   ],
 };
 
+function normalizePages(site = {}) {
+  const pages = Array.isArray(site.pages) && site.pages.length
+    ? site.pages
+    : [createDefaultPage({
+      title: site.pageTitle || DEFAULT_UI_STATE.site.pageTitle,
+      route: site.route || DEFAULT_UI_STATE.site.route,
+      navLabel: site.pageTitle || DEFAULT_UI_STATE.site.pageTitle,
+      description: site.description || DEFAULT_UI_STATE.site.description,
+    })];
+
+  return pages.map((page, index) => ({
+    ...createDefaultPage({
+      title: index === 0 ? 'Workspace' : `Page ${index + 1}`,
+      route: index === 0 ? '/workspace' : `/page-${index + 1}`,
+      navLabel: index === 0 ? 'Workspace' : `Page ${index + 1}`,
+    }),
+    ...(page || {}),
+    id: page?.id || genId(),
+    visible: page?.visible !== false,
+  }));
+}
+
 export function normalizeUiState(state) {
+  const site = {
+    ...DEFAULT_UI_STATE.site,
+    ...(state?.site || {}),
+    featureFlags: { ...DEFAULT_UI_STATE.site.featureFlags, ...(state?.site?.featureFlags || {}) },
+    moduleToggles: { ...DEFAULT_UI_STATE.site.moduleToggles, ...(state?.site?.moduleToggles || {}) },
+    capabilityToggles: { ...DEFAULT_UI_STATE.site.capabilityToggles, ...(state?.site?.capabilityToggles || {}) },
+  };
+  site.pages = normalizePages(site);
+  site.activePageId = site.pages.find((page) => page.id === site.activePageId)?.id || site.pages[0]?.id || null;
   return {
-    site: { ...DEFAULT_UI_STATE.site, ...(state?.site || {}), featureFlags: { ...DEFAULT_UI_STATE.site.featureFlags, ...(state?.site?.featureFlags || {}) } },
+    site,
     theme: { ...DEFAULT_UI_STATE.theme, ...(state?.theme || {}) },
     components: Array.isArray(state?.components) ? state.components : DEFAULT_UI_STATE.components,
   };
@@ -73,6 +152,14 @@ export function applyUiPatch(state, patch) {
       featureFlags: {
         ...next.site.featureFlags,
         ...(patch.site.featureFlags || {}),
+      },
+      moduleToggles: {
+        ...next.site.moduleToggles,
+        ...(patch.site.moduleToggles || {}),
+      },
+      capabilityToggles: {
+        ...next.site.capabilityToggles,
+        ...(patch.site.capabilityToggles || {}),
       },
     };
   }
@@ -112,11 +199,87 @@ export function applyUiPatch(state, patch) {
       },
     };
   }
+  if (patch.toggleModule) {
+    next.site = {
+      ...next.site,
+      moduleToggles: {
+        ...next.site.moduleToggles,
+        [patch.toggleModule]: !next.site.moduleToggles?.[patch.toggleModule],
+      },
+    };
+  }
+  if (patch.toggleCapability) {
+    next.site = {
+      ...next.site,
+      capabilityToggles: {
+        ...next.site.capabilityToggles,
+        [patch.toggleCapability]: !next.site.capabilityToggles?.[patch.toggleCapability],
+      },
+    };
+  }
+  if (patch.addPage) {
+    const pagePatch = typeof patch.addPage === 'string'
+      ? { title: patch.addPage }
+      : (patch.addPage || {});
+    const title = pagePatch.title || 'New Page';
+    const route = pagePatch.route || `/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'new-page'}`;
+    const page = createDefaultPage({
+      title,
+      route,
+      navLabel: pagePatch.navLabel || title,
+      description: pagePatch.description || 'Governed page mutation staged in builder.',
+      ...pagePatch,
+    });
+    next.site.pages = [...normalizePages(next.site), page];
+    next.site.activePageId = page.id;
+  }
+  if (patch.updatePage?.id) {
+    next.site.pages = normalizePages(next.site).map((page) =>
+      page.id === patch.updatePage.id ? { ...page, ...patch.updatePage.patch } : page
+    );
+  }
+  if (patch.removePageId) {
+    next.site.pages = normalizePages(next.site).filter((page) => page.id !== patch.removePageId);
+    if (!next.site.pages.length) {
+      next.site.pages = [createDefaultPage({
+        title: next.site.pageTitle || 'Workspace',
+        route: next.site.route || '/workspace',
+        navLabel: next.site.pageTitle || 'Workspace',
+        description: next.site.description || DEFAULT_UI_STATE.site.description,
+      })];
+    }
+    if (!next.site.pages.find((page) => page.id === next.site.activePageId)) {
+      next.site.activePageId = next.site.pages[0]?.id || null;
+    }
+  }
+  if (patch.movePage?.id) {
+    const pages = [...normalizePages(next.site)];
+    const idx = pages.findIndex((page) => page.id === patch.movePage.id);
+    if (idx >= 0) {
+      const nextIndex = Math.max(0, Math.min(pages.length - 1, idx + patch.movePage.direction));
+      const [page] = pages.splice(idx, 1);
+      pages.splice(nextIndex, 0, page);
+      next.site.pages = pages;
+    }
+  }
+  if (patch.setActivePageId) {
+    next.site.activePageId = patch.setActivePageId;
+  }
+  next.site.pages = normalizePages(next.site);
+  if (!next.site.pages.find((page) => page.id === next.site.activePageId)) {
+    next.site.activePageId = next.site.pages[0]?.id || null;
+  }
   return next;
 }
 
 export function summarizeUiPatch(patch) {
   if (patch.addComponent) return `Add ${patch.addComponent}`;
+  if (patch.addPage) return `Add page ${typeof patch.addPage === 'string' ? patch.addPage : patch.addPage?.title || ''}`.trim();
+  if (patch.updatePage) return 'Update page';
+  if (patch.removePageId) return 'Remove page';
+  if (patch.movePage) return patch.movePage.direction < 0 ? 'Move page up' : 'Move page down';
+  if (patch.toggleModule) return `Toggle module: ${patch.toggleModule}`;
+  if (patch.toggleCapability) return `Toggle capability: ${patch.toggleCapability}`;
   if (patch.removeComponentId) return 'Remove component';
   if (patch.moveComponent) return patch.moveComponent.direction < 0 ? 'Move component up' : 'Move component down';
   if (patch.updateComponent) return 'Update component';
@@ -161,6 +324,24 @@ export function validateUiState(state) {
   if (!Array.isArray(next.components) || next.components.length === 0) {
     issues.push('At least one component is required.');
   }
+  if (!Array.isArray(next.site.pages) || next.site.pages.length === 0) {
+    issues.push('At least one page is required.');
+  }
+  if (!next.site.pages.some((page) => page.visible !== false)) {
+    issues.push('At least one visible page is required.');
+  }
+  if (next.site.activePageId && !next.site.pages.find((page) => page.id === next.site.activePageId)) {
+    issues.push('Active page must reference a valid page.');
+  }
+
+  next.site.pages.forEach((page, index) => {
+    if (!page?.title?.trim()) {
+      issues.push(`Page ${index + 1} is missing a title.`);
+    }
+    if (!page?.route?.trim() || !page.route.startsWith('/')) {
+      issues.push(`Page ${index + 1} route must start with /.`);
+    }
+  });
 
   next.components.forEach((component, index) => {
     if (!component?.id) {
