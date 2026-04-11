@@ -15,10 +15,16 @@ export default function LoginPage({ onContinue }) {
   const [email, setEmail] = useState('you@xpsxpress.com');
   const [password, setPassword] = useState('password');
   const [showPassword, setShowPassword] = useState(false);
+  const [message, setMessage] = useState('This screen is visual only and does not require authentication.');
 
   const handleSubmit = (event) => {
     event.preventDefault();
     onContinue({ email, password });
+  };
+
+  const handleAuxAction = (event) => {
+    event.preventDefault();
+    setMessage('Authentication is disabled in this build. Use Sign In to continue.');
   };
 
   return (
@@ -133,7 +139,7 @@ export default function LoginPage({ onContinue }) {
             </label>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-              <button type="button" onClick={handleSubmit} style={{ background: 'transparent', border: 'none', color: GOLD, fontSize: 14 }}>
+              <button type="button" onClick={handleAuxAction} style={{ background: 'transparent', border: 'none', color: GOLD, fontSize: 14 }}>
                 Forgot password?
               </button>
             </div>
@@ -160,7 +166,7 @@ export default function LoginPage({ onContinue }) {
             Don&apos;t have an account?{' '}
             <button
               type="button"
-              onClick={handleSubmit}
+              onClick={handleAuxAction}
               style={{ background: 'transparent', border: 'none', color: GOLD, fontSize: 15, fontWeight: 700, padding: 0 }}
             >
               Sign up
@@ -168,7 +174,7 @@ export default function LoginPage({ onContinue }) {
           </div>
 
           <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 12, marginTop: 18, textAlign: 'center' }}>
-            This screen is visual only and does not require authentication.
+            {message}
           </div>
         </div>
       </section>
