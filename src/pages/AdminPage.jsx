@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
 import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
-import { getConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
+import { getConnectionPrefs, getConnectionPrefMeta, getConnectionPrefSource, updateConnectionPrefs, resetConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
 import { useWorkspace, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { applyUiPatch, createDefaultUiState, createHistoryEntry, normalizeUiState, validateUiState } from '../lib/uiMutations.js';
 import { requestAppShellNavigation } from '../lib/appShellEvents.js';
@@ -93,6 +93,39 @@ function StatusPill({ status }) {
       fontSize: 11, fontWeight: 600, color: meta.color,
     }}>
       <Icon size={10} className="xps-icon" style={{ color: 'var(--icon-silver)' }} />
+      {meta.label}
+    </span>
+  );
+}
+
+const SOURCE_META = {
+  backend: { label: 'backend', color: '#4ade80' },
+  session: { label: 'session', color: '#60a5fa' },
+  persisted: { label: 'persisted', color: '#a855f7' },
+  build: { label: 'build', color: '#fbbf24' },
+  default: { label: 'unconfigured', color: 'rgba(255,255,255,0.38)' },
+  local: { label: 'local', color: '#60a5fa' },
+  cloud: { label: 'cloud', color: '#4ade80' },
+  'substitute-path': { label: 'substitute-path', color: '#fbbf24' },
+};
+
+function SourcePill({ source = 'default' }) {
+  const meta = SOURCE_META[source] || SOURCE_META.default;
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '2px 7px',
+      borderRadius: 99,
+      border: `1px solid ${meta.color}25`,
+      background: `${meta.color}12`,
+      fontSize: 10,
+      fontWeight: 700,
+      color: meta.color,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    }}>
       {meta.label}
     </span>
   );
@@ -321,11 +354,11 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
   const updateGovernance = (patch) => {
     setGovernanceState(setGovernance(patch));
   };
-  const updateSessionConnections = (patch) => {
-    setConnectionPrefsState(updateConnectionPrefs(patch));
+  const updateSessionConnections = (patch, options) => {
+    setConnectionPrefsState(updateConnectionPrefs(patch, options));
   };
-  const resetSessionConnections = (keys) => {
-    setConnectionPrefsState(resetConnectionPrefs(keys));
+  const resetSessionConnections = (keys, options) => {
+    setConnectionPrefsState(resetConnectionPrefs(keys, options));
   };
 
   const handleOAuth = async (provider) => {
@@ -548,6 +581,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
           <RuntimeSection
             statusSnapshot={liveStatus || savedStatus}
             statusSource={runtimeStatusSource}
+            connectionPrefs={connectionPrefs}
             workspace={workspace}
           />
         )}
@@ -559,6 +593,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             ghConfigured={ghConfigured}
             liveStatus={live}
             governance={governance}
+            connectionPrefs={connectionPrefs}
             workspace={workspace}
           />
         )}
@@ -683,7 +718,7 @@ function IntegrationsSection({
 
       <BlockedPassthroughPanel openaiConfigured={openaiConfigured} ghConfigured={ghConfigured} />
 
-      <SectionHeading>SESSION PASSTHROUGH / TOKEN INPUTS</SectionHeading>
+      <SectionHeading>SESSION / PERSISTED CONNECTION CONFIG</SectionHeading>
 
       <SessionConnectionMatrix
         connectionPrefs={connectionPrefs}
@@ -699,6 +734,7 @@ function IntegrationsSection({
           vercel: vercelConfigured,
           hubspot: hubspotConfigured,
           airtable: airtableConfigured,
+          google: googleConfigured,
           browser: browserWorkerConfigured,
           twilio: twilioConfigured,
           sendgrid: sendgridConfigured,
@@ -973,6 +1009,12 @@ function BlockedPassthroughPanel({ openaiConfigured, ghConfigured }) {
 }
 
 function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onResetConnectionPrefs, statuses }) {
+  const connectionMeta = getConnectionPrefMeta();
+  const pickSource = (...keys) => {
+    if (keys.some((key) => connectionMeta[key] === 'session')) return 'session';
+    if (keys.some((key) => connectionMeta[key] === 'persisted')) return 'persisted';
+    return 'backend';
+  };
   const cards = [
     {
       key: 'openai',
@@ -980,10 +1022,13 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       description: 'Strongest supported substitute for ChatGPT product passthrough.',
       fields: [
         { key: 'openaiApiKey', label: 'Session API key', placeholder: 'sk-…', secret: true },
+        { key: 'openaiOrgId', label: 'Org ID', placeholder: 'org_…' },
+        { key: 'openaiBaseUrl', label: 'Base URL', placeholder: 'https://api.openai.com/v1' },
         { key: 'openaiModel', label: 'Preferred model', placeholder: 'gpt-4o-mini' },
       ],
       status: statuses.openai || !!connectionPrefs.openaiApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.openai ? 'Backend token configured.' : connectionPrefs.openaiApiKey ? 'Browser session token configured.' : 'Requires OPENAI_API_KEY or a session token.',
+      source: statuses.openai ? 'backend' : pickSource('openaiApiKey', 'openaiOrgId', 'openaiBaseUrl', 'openaiModel'),
     },
     {
       key: 'groq',
@@ -991,10 +1036,12 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       description: 'OpenAI-compatible live inference path for fast chat.',
       fields: [
         { key: 'groqApiKey', label: 'Session API key', placeholder: 'gsk_…', secret: true },
+        { key: 'groqBaseUrl', label: 'Base URL', placeholder: 'https://api.groq.com/openai/v1' },
         { key: 'groqModel', label: 'Preferred model', placeholder: 'llama-3.3-70b-versatile' },
       ],
       status: statuses.groq || !!connectionPrefs.groqApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.groq ? 'Backend token configured.' : connectionPrefs.groqApiKey ? 'Browser session token configured.' : 'Requires GROQ_API_KEY or a session token.',
+      source: statuses.groq ? 'backend' : pickSource('groqApiKey', 'groqBaseUrl', 'groqModel'),
     },
     {
       key: 'gemini',
@@ -1002,10 +1049,12 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       description: 'Provider-supported Google Gemini API path.',
       fields: [
         { key: 'geminiApiKey', label: 'Session API key', placeholder: 'AIza…', secret: true },
+        { key: 'geminiProjectId', label: 'Project ID', placeholder: 'my-gcp-project' },
         { key: 'geminiModel', label: 'Preferred model', placeholder: 'gemini-1.5-flash' },
       ],
       status: statuses.gemini || !!connectionPrefs.geminiApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.gemini ? 'Backend token configured.' : connectionPrefs.geminiApiKey ? 'Browser session token configured.' : 'Requires GEMINI_API_KEY or a session token.',
+      source: statuses.gemini ? 'backend' : pickSource('geminiApiKey', 'geminiProjectId', 'geminiModel'),
     },
     {
       key: 'ollama',
@@ -1017,14 +1066,22 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       ],
       status: statuses.ollama || !!connectionPrefs.ollamaBaseUrl ? STATUS.LOCAL : STATUS.BLOCKED,
       note: statuses.ollama ? 'Backend base URL configured.' : connectionPrefs.ollamaBaseUrl ? 'Browser session base URL configured.' : 'Requires OLLAMA_BASE_URL or a session URL.',
+      source: statuses.ollama ? 'backend' : pickSource('ollamaBaseUrl', 'ollamaModel'),
     },
     {
       key: 'github',
       title: 'GitHub / Copilot Substitute',
       description: 'Token surface for GitHub REST actions and truthful Copilot substitute controls.',
-      fields: [{ key: 'githubToken', label: 'Session token', placeholder: 'ghp_…', secret: true }],
+      fields: [
+        { key: 'githubToken', label: 'Session token', placeholder: 'ghp_…', secret: true },
+        { key: 'githubRepoOwner', label: 'Repo owner', placeholder: 'XPS-IINTELLIGENCE-SYSTEMS' },
+        { key: 'githubRepoName', label: 'Repo name', placeholder: 'XPS_ADMIN_CONTROL_PLANE' },
+        { key: 'githubRepoBranch', label: 'Branch', placeholder: 'main' },
+        { key: 'githubWorkflowFile', label: 'Workflow file', placeholder: 'deploy-vercel.yml' },
+      ],
       status: statuses.github || !!connectionPrefs.githubToken ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.github ? 'Backend token configured.' : connectionPrefs.githubToken ? 'Browser session token configured.' : 'Requires GITHUB_TOKEN or a session token.',
+      source: statuses.github ? 'backend' : pickSource('githubToken', 'githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubWorkflowFile'),
     },
     {
       key: 'supabase',
@@ -1036,14 +1093,21 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       ],
       status: statuses.supabase || (!!connectionPrefs.supabaseUrl && !!connectionPrefs.supabaseAnonKey) ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.supabase ? 'Backend project configured.' : connectionPrefs.supabaseUrl && connectionPrefs.supabaseAnonKey ? 'Browser session project configured.' : 'Requires SUPABASE_URL + SUPABASE_ANON_KEY.',
+      source: statuses.supabase ? 'backend' : pickSource('supabaseUrl', 'supabaseAnonKey'),
     },
     {
       key: 'vercel',
       title: 'Vercel',
       description: 'Token surface for truthful deployment control readiness.',
-      fields: [{ key: 'vercelToken', label: 'Session token', placeholder: 'vercel_…', secret: true }],
+      fields: [
+        { key: 'vercelToken', label: 'Session token', placeholder: 'vercel_…', secret: true },
+        { key: 'vercelProjectId', label: 'Project ID', placeholder: 'prj_…' },
+        { key: 'vercelTeamId', label: 'Team ID', placeholder: 'team_…' },
+        { key: 'vercelDeployHookUrl', label: 'Deploy hook URL', placeholder: 'https://api.vercel.com/v1/integrations/deploy/…' },
+      ],
       status: statuses.vercel || !!connectionPrefs.vercelToken ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.vercel ? 'Backend token configured.' : connectionPrefs.vercelToken ? 'Browser session token configured.' : 'Requires VERCEL_TOKEN or a session token.',
+      source: statuses.vercel ? 'backend' : pickSource('vercelToken', 'vercelProjectId', 'vercelTeamId', 'vercelDeployHookUrl'),
     },
     {
       key: 'hubspot',
@@ -1052,6 +1116,7 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       fields: [{ key: 'hubspotApiKey', label: 'Session token', placeholder: 'pat-…', secret: true }],
       status: statuses.hubspot || !!connectionPrefs.hubspotApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.hubspot ? 'Backend token configured.' : connectionPrefs.hubspotApiKey ? 'Browser session token configured.' : 'Requires HUBSPOT_API_KEY or a session token.',
+      source: statuses.hubspot ? 'backend' : pickSource('hubspotApiKey'),
     },
     {
       key: 'airtable',
@@ -1063,14 +1128,35 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       ],
       status: statuses.airtable || (!!connectionPrefs.airtableApiKey && !!connectionPrefs.airtableBaseId) ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.airtable ? 'Backend Airtable credentials configured.' : connectionPrefs.airtableApiKey ? 'Browser session Airtable credentials configured.' : 'Requires AIRTABLE_API_KEY + AIRTABLE_BASE_ID.',
+      source: statuses.airtable ? 'backend' : pickSource('airtableApiKey', 'airtableBaseId'),
+    },
+    {
+      key: 'google',
+      title: 'Google Workspace / Cloud',
+      description: 'Admin/customer/project configuration for Google Workspace and GCP routing surfaces.',
+      fields: [
+        { key: 'googleWorkspaceCustomerId', label: 'Workspace customer ID', placeholder: 'C0123abc' },
+        { key: 'googleWorkspaceAdminEmail', label: 'Workspace admin email', placeholder: 'admin@example.com' },
+        { key: 'googleCloudProjectId', label: 'Cloud project ID', placeholder: 'xps-project' },
+        { key: 'googleCloudRegion', label: 'Cloud region', placeholder: 'us-central1' },
+      ],
+      status: statuses.google ? STATUS.LIVE : (connectionPrefs.googleWorkspaceCustomerId || connectionPrefs.googleCloudProjectId ? STATUS.LOCAL : STATUS.BLOCKED),
+      note: statuses.google ? 'Backend GCP/Workspace runtime configured.' : connectionPrefs.googleCloudProjectId || connectionPrefs.googleWorkspaceCustomerId ? 'Browser-scoped Google target metadata configured.' : 'Requires backend GCP config or browser-scoped target metadata.',
+      source: statuses.google ? 'backend' : pickSource('googleWorkspaceCustomerId', 'googleWorkspaceAdminEmail', 'googleCloudProjectId', 'googleCloudRegion'),
     },
     {
       key: 'browser',
       title: 'Browser Worker',
       description: 'Optional session worker URL for local/browser automation substitute path.',
-      fields: [{ key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'http://localhost:3001' }],
+      fields: [
+        { key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'http://localhost:3001' },
+        { key: 'runtimeTarget', label: 'Runtime target', type: 'select', options: ['local', 'cloud', 'browser-worker'] },
+        { key: 'localRuntimeUrl', label: 'Local runtime URL', placeholder: 'http://localhost:5173' },
+        { key: 'cloudRuntimeUrl', label: 'Cloud runtime URL', placeholder: 'https://my-xps.vercel.app' },
+      ],
       status: statuses.browser || !!connectionPrefs.browserWorkerUrl ? STATUS.LOCAL : STATUS.BLOCKED,
       note: statuses.browser ? 'Backend browser worker configured.' : connectionPrefs.browserWorkerUrl ? 'Browser session worker configured.' : 'Requires BROWSER_WORKER_URL or a session worker URL.',
+      source: statuses.browser ? 'backend' : pickSource('browserWorkerUrl', 'runtimeTarget', 'localRuntimeUrl', 'cloudRuntimeUrl'),
     },
     {
       key: 'twilio',
@@ -1080,9 +1166,11 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
         { key: 'twilioAccountSid', label: 'Account SID', placeholder: 'AC…' },
         { key: 'twilioAuthToken', label: 'Auth token', placeholder: '••••', secret: true },
         { key: 'twilioPhoneNumber', label: 'Phone number', placeholder: '+15555555555' },
+        { key: 'twilioWebhookUrl', label: 'Inbound webhook target', placeholder: 'https://my-xps.vercel.app/api/webhooks/twilio/inbound' },
       ],
       status: statuses.twilio || (!!connectionPrefs.twilioAccountSid && !!connectionPrefs.twilioAuthToken) ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.twilio ? 'Backend Twilio credentials configured.' : connectionPrefs.twilioAccountSid ? 'Browser session Twilio credentials configured.' : 'Requires TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN.',
+      source: statuses.twilio ? 'backend' : pickSource('twilioAccountSid', 'twilioAuthToken', 'twilioPhoneNumber', 'twilioWebhookUrl'),
     },
     {
       key: 'sendgrid',
@@ -1091,9 +1179,36 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       fields: [
         { key: 'sendgridApiKey', label: 'API key', placeholder: 'SG.…', secret: true },
         { key: 'sendgridFromEmail', label: 'From email', placeholder: 'ops@example.com' },
+        { key: 'sendgridWebhookUrl', label: 'Event webhook target', placeholder: 'https://my-xps.vercel.app/api/webhooks/sendgrid/events' },
       ],
       status: statuses.sendgrid || !!connectionPrefs.sendgridApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.sendgrid ? 'Backend SendGrid credentials configured.' : connectionPrefs.sendgridApiKey ? 'Browser session SendGrid credentials configured.' : 'Requires SENDGRID_API_KEY.',
+      source: statuses.sendgrid ? 'backend' : pickSource('sendgridApiKey', 'sendgridFromEmail', 'sendgridWebhookUrl'),
+    },
+    {
+      key: 'webhooks',
+      title: 'Webhook / Routing Targets',
+      description: 'Stateful routing targets for inbound/outbound hooks and generic callback paths.',
+      fields: [
+        { key: 'genericWebhookUrl', label: 'Generic webhook target', placeholder: 'https://hooks.example.com/xps' },
+        { key: 'repoTarget', label: 'Repo target label', placeholder: 'XPS-IINTELLIGENCE-SYSTEMS/XPS_ADMIN_CONTROL_PLANE' },
+        { key: 'deploymentTarget', label: 'Deployment target', type: 'select', options: ['preview', 'production', 'staging'] },
+      ],
+      status: connectionPrefs.genericWebhookUrl || connectionPrefs.repoTarget ? STATUS.LOCAL : STATUS.BLOCKED,
+      note: connectionPrefs.genericWebhookUrl || connectionPrefs.repoTarget ? 'Browser-scoped webhook/repo routing target configured.' : 'Add explicit webhook and execution targets for connector actions.',
+      source: pickSource('genericWebhookUrl', 'repoTarget', 'deploymentTarget'),
+    },
+    {
+      key: 'preferences',
+      title: 'Provider / Agent Preferences',
+      description: 'Default routing preferences for chat, ByteBot, runtime, and model lanes.',
+      fields: [
+        { key: 'providerPreference', label: 'Preferred provider', type: 'select', options: ['auto', 'openai', 'groq', 'gemini', 'ollama'] },
+        { key: 'bytebotProvider', label: 'ByteBot lane', type: 'select', options: ['auto', 'openai', 'groq', 'gemini', 'ollama'] },
+      ],
+      status: STATUS.LOCAL,
+      note: 'Operator preferences are always actionable because they route browser-side provider selection.',
+      source: pickSource('providerPreference', 'bytebotProvider'),
     },
   ];
 
@@ -1120,14 +1235,16 @@ function SessionConnectorCard({ card, connectionPrefs, onUpdateConnectionPrefs, 
     setDraft(Object.fromEntries(card.fields.map((field) => [field.key, connectionPrefs[field.key] || ''])));
   }, [card.fields, connectionPrefs]);
 
-  const handleSave = () => {
-    onUpdateConnectionPrefs(draft);
-    setNotice('Saved to this browser for session-scoped passthrough and testing.');
+  const handleSave = (scope) => {
+    onUpdateConnectionPrefs(draft, { scope });
+    setNotice(scope === 'session'
+      ? 'Saved to session storage for this tab/runtime only.'
+      : 'Saved to persisted browser storage for future sessions.');
   };
 
   const handleClear = () => {
-    onResetConnectionPrefs(card.fields.map((field) => field.key));
-    setNotice('Cleared browser session values.');
+    onResetConnectionPrefs(card.fields.map((field) => field.key), { scope: 'all' });
+    setNotice('Cleared session and persisted values for this connector.');
   };
 
   return (
@@ -1137,37 +1254,66 @@ function SessionConnectorCard({ card, connectionPrefs, onUpdateConnectionPrefs, 
           <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{card.title}</div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>{card.description}</div>
         </div>
-        <StatusPill status={card.status} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <StatusPill status={card.status} />
+          <SourcePill source={card.source} />
+        </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {card.fields.map((field) => (
           <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>{field.label}</span>
-            <input
-              type={field.secret ? 'password' : 'text'}
-              value={draft[field.key] || ''}
-              placeholder={field.placeholder}
-              onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
-              style={{
-                width: '100%',
-                padding: '9px 11px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 8,
-                color: '#f8fafc',
-                fontSize: 12,
-              }}
-            />
+            {field.type === 'select' ? (
+              <select
+                value={draft[field.key] || field.options?.[0] || ''}
+                onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '9px 11px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#f8fafc',
+                  fontSize: 12,
+                }}
+              >
+                {(field.options || []).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={field.secret ? 'password' : 'text'}
+                value={draft[field.key] || ''}
+                placeholder={field.placeholder}
+                onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '9px 11px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#f8fafc',
+                  fontSize: 12,
+                }}
+              />
+            )}
+            {!field.secret && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                Current: {connectionPrefs[field.key] || 'not set'} · source {getConnectionPrefSource(field.key)}
+              </span>
+            )}
             {field.secret && (
               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
-                Current: {maskSecret(connectionPrefs[field.key])}
+                Current: {maskSecret(connectionPrefs[field.key])} · source {getConnectionPrefSource(field.key)}
               </span>
             )}
           </label>
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={handleSave} className="xps-electric-hover" style={actionBtnStyle(false, '#4ade80')}>Save Session</button>
+        <button onClick={() => handleSave('session')} className="xps-electric-hover" style={actionBtnStyle(false, '#4ade80')}>Save Session</button>
+        <button onClick={() => handleSave('persisted')} className="xps-electric-hover" style={actionBtnStyle(false, '#a855f7')}>Save Persisted</button>
         <button onClick={handleClear} className="xps-electric-hover" style={actionBtnStyle(false, '#ef4444')}>Clear</button>
       </div>
       <div style={{ fontSize: 11, color: card.status === STATUS.BLOCKED ? '#fbbf24' : 'rgba(255,255,255,0.45)', marginTop: 10 }}>
@@ -1796,7 +1942,7 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
   );
 }
 
-function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
+function RuntimeSection({ statusSnapshot, statusSource = 'live', connectionPrefs, workspace }) {
   const runtimeOps = statusSnapshot?.runtimeOps || {};
   const continuitySnapshot = statusSnapshot?.persistence || null;
   const runtimeSourceMeta = getRuntimeSourceMeta(statusSource);
@@ -1884,6 +2030,36 @@ function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
     });
     openWorkspace();
   };
+  const pushExecutionTargets = () => {
+    workspace.createObject({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: 'Execution Targets',
+      content: [
+        `Runtime target: ${connectionPrefs.runtimeTarget || 'local'}`,
+        `Local runtime URL: ${connectionPrefs.localRuntimeUrl || 'not set'}`,
+        `Cloud runtime URL: ${connectionPrefs.cloudRuntimeUrl || 'not set'}`,
+        `Browser worker URL: ${connectionPrefs.browserWorkerUrl || runtimeOps.targets?.browserWorker?.target || 'not set'}`,
+        `Repo target: ${connectionPrefs.repoTarget || 'not set'}`,
+        `Deployment target: ${connectionPrefs.deploymentTarget || 'preview'}`,
+        `Twilio webhook target: ${connectionPrefs.twilioWebhookUrl || runtimeOps.targets?.webhookTargets?.twilioInbound || 'not set'}`,
+        `SendGrid webhook target: ${connectionPrefs.sendgridWebhookUrl || runtimeOps.targets?.webhookTargets?.sendgridEvents || 'not set'}`,
+        `Generic webhook target: ${connectionPrefs.genericWebhookUrl || 'not set'}`,
+      ].join('\n'),
+      status: RUN_STATUS.DONE,
+      meta: {
+        runtimeTarget: connectionPrefs.runtimeTarget || 'local',
+        localRuntimeUrl: connectionPrefs.localRuntimeUrl || null,
+        cloudRuntimeUrl: connectionPrefs.cloudRuntimeUrl || null,
+        browserWorkerUrl: connectionPrefs.browserWorkerUrl || runtimeOps.targets?.browserWorker?.target || null,
+        repoTarget: connectionPrefs.repoTarget || null,
+        deploymentTarget: connectionPrefs.deploymentTarget || 'preview',
+        twilioWebhookUrl: connectionPrefs.twilioWebhookUrl || runtimeOps.targets?.webhookTargets?.twilioInbound || null,
+        sendgridWebhookUrl: connectionPrefs.sendgridWebhookUrl || runtimeOps.targets?.webhookTargets?.sendgridEvents || null,
+        genericWebhookUrl: connectionPrefs.genericWebhookUrl || null,
+      },
+    });
+    openWorkspace();
+  };
 
   return (
     <div data-testid="admin-runtime-panel">
@@ -1904,9 +2080,17 @@ function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
         <InfoRow label="History store" value={runtimeOps.environment?.historyStore || 'unknown'} />
         <InfoRow label="Snapshot source" value={runtimeSourceMeta.label} />
         <InfoRow label="Continuity save" value={continuitySnapshot?.savedAt || 'No browser-local runtime snapshot saved yet'} />
+        <InfoRow label="Preferred runtime target" value={connectionPrefs.runtimeTarget || 'local'} />
+        <InfoRow label="Local runtime URL" value={connectionPrefs.localRuntimeUrl || 'Not configured'} />
+        <InfoRow label="Cloud runtime URL" value={connectionPrefs.cloudRuntimeUrl || 'Not configured'} />
         <InfoRow label="Browser worker target" value={runtimeOps.targets?.browserWorker?.target || 'Blocked — no worker target configured'} />
-        <InfoRow label="Twilio inbound target" value={runtimeOps.targets?.webhookTargets?.twilioInbound || '/api/webhooks/twilio/inbound'} />
-        <InfoRow label="SendGrid event target" value={runtimeOps.targets?.webhookTargets?.sendgridEvents || '/api/webhooks/sendgrid/events'} />
+        <InfoRow label="Twilio inbound target" value={connectionPrefs.twilioWebhookUrl || runtimeOps.targets?.webhookTargets?.twilioInbound || '/api/webhooks/twilio/inbound'} />
+        <InfoRow label="SendGrid event target" value={connectionPrefs.sendgridWebhookUrl || runtimeOps.targets?.webhookTargets?.sendgridEvents || '/api/webhooks/sendgrid/events'} />
+        <InfoRow label="Generic webhook target" value={connectionPrefs.genericWebhookUrl || 'Not configured'} />
+        <InfoRow label="Repo/deploy target" value={connectionPrefs.repoTarget ? `${connectionPrefs.repoTarget} · ${connectionPrefs.deploymentTarget || 'preview'}` : 'Not configured'} />
+        <div style={{ padding: '0 16px 12px' }}>
+          <button onClick={pushExecutionTargets} className="xps-electric-hover" style={actionBtnStyle(false, '#a855f7')}>Render execution targets</button>
+        </div>
         {(runtimeOps.environment?.fallbackRouting || []).map((item) => (
           <div key={item} style={{ padding: '0 16px 10px', fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>• {item}</div>
         ))}
@@ -1987,7 +2171,7 @@ function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
   );
 }
 
-function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfigured, ghConfigured, liveStatus, governance, workspace }) {
+function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfigured, ghConfigured, liveStatus, governance, connectionPrefs, workspace }) {
   const media = liveStatus?.operatorModules?.media || {};
   const siteMutation = liveStatus?.operatorModules?.siteMutation || {};
   const orchestration = liveStatus?.operatorModules?.orchestration || {};
@@ -2246,6 +2430,36 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
     requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
     setBuilderNotice('Builder runbook rendered in the workspace.');
   };
+  const renderRepoDeployTarget = () => {
+    workspace.createObject({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: 'Repo / Deploy Mutation Target',
+      content: [
+        `Repo target: ${connectionPrefs.repoTarget || [connectionPrefs.githubRepoOwner, connectionPrefs.githubRepoName].filter(Boolean).join('/') || 'not configured'}`,
+        `Branch: ${connectionPrefs.githubRepoBranch || 'main'}`,
+        `Workflow: ${connectionPrefs.githubWorkflowFile || 'not configured'}`,
+        `Deployment target: ${connectionPrefs.deploymentTarget || 'preview'}`,
+        `Vercel project: ${connectionPrefs.vercelProjectId || 'not configured'}`,
+        `Vercel team: ${connectionPrefs.vercelTeamId || 'not configured'}`,
+        `Deploy hook: ${connectionPrefs.vercelDeployHookUrl || 'not configured'}`,
+        `Repo-linked mutation path: ${ghConfigured ? 'token-configured' : 'blocked until GitHub token exists'}`,
+      ].join('\n'),
+      status: ghConfigured || connectionPrefs.repoTarget || connectionPrefs.vercelProjectId ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
+      meta: {
+        repoTarget: connectionPrefs.repoTarget || null,
+        githubRepoOwner: connectionPrefs.githubRepoOwner || null,
+        githubRepoName: connectionPrefs.githubRepoName || null,
+        githubRepoBranch: connectionPrefs.githubRepoBranch || 'main',
+        githubWorkflowFile: connectionPrefs.githubWorkflowFile || null,
+        deploymentTarget: connectionPrefs.deploymentTarget || 'preview',
+        vercelProjectId: connectionPrefs.vercelProjectId || null,
+        vercelTeamId: connectionPrefs.vercelTeamId || null,
+        vercelDeployHookUrl: connectionPrefs.vercelDeployHookUrl || null,
+      },
+    });
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice('Repo/deploy mutation target rendered in the workspace.');
+  };
 
   const builderCapabilityStatus = governance.allowUiEdits ? STATUS.LIVE : STATUS.BLOCKED;
   const governedApplyStatus = governance.previewOnly || governance.requireApproval ? STATUS.BLOCKED : STATUS.LIVE;
@@ -2278,6 +2492,17 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
           <button onClick={stageRollbackPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#fb7185')}>Create rollback preview</button>
           <button onClick={() => generateBuilderArtifact('runbook')} className="xps-electric-hover" style={actionBtnStyle(false, '#fbbf24')}>Generate runbook</button>
           <button onClick={() => generateBuilderArtifact('agent-builder')} className="xps-electric-hover" style={actionBtnStyle(false, '#94a3b8')}>Generate agent-builder artifact</button>
+        </div>
+      </CapPanel>
+
+      <CapPanel icon={GitPullRequest} title="Repo / Deploy Targets" subtitle="Repo-linked mutation and deployment awareness" status={ghConfigured || connectionPrefs.vercelProjectId ? STATUS.LIVE : STATUS.BLOCKED} defaultOpen={false}>
+        <InfoRow label="Repo target" value={connectionPrefs.repoTarget || [connectionPrefs.githubRepoOwner, connectionPrefs.githubRepoName].filter(Boolean).join('/') || 'Not configured'} />
+        <InfoRow label="Branch / workflow" value={`${connectionPrefs.githubRepoBranch || 'main'}${connectionPrefs.githubWorkflowFile ? ` · ${connectionPrefs.githubWorkflowFile}` : ''}`} />
+        <InfoRow label="Deployment target" value={connectionPrefs.deploymentTarget || 'preview'} />
+        <InfoRow label="Vercel project / team" value={[connectionPrefs.vercelProjectId || 'project unset', connectionPrefs.vercelTeamId || 'team unset'].join(' · ')} />
+        <InfoRow label="Deploy hook state" value={connectionPrefs.vercelDeployHookUrl ? 'configured' : 'blocked — no deploy hook configured'} />
+        <div style={{ padding: '0 16px 14px' }}>
+          <button onClick={renderRepoDeployTarget} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Render repo/deploy target</button>
         </div>
       </CapPanel>
 

@@ -1,3 +1,5 @@
+import { getConnectionPrefSource } from './connectionPrefs.js';
+
 const DEFAULT_MODELS = {
   openai: 'gpt-4o-mini',
   groq: 'llama-3.3-70b-versatile',
@@ -5,23 +7,31 @@ const DEFAULT_MODELS = {
   ollama: 'llama3.1:8b',
 };
 
-function getConfiguredSource(apiConfigured, sessionConfigured, envConfigured) {
+const DEFAULT_AVAILABLE_MODELS = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+  ollama: ['llama3.1:8b', 'mistral:7b', 'qwen2.5:7b'],
+};
+
+function getConfiguredSource(apiConfigured, prefSource, envConfigured) {
   if (apiConfigured) return 'backend';
-  if (sessionConfigured) return 'session';
+  if (prefSource && prefSource !== 'default') return prefSource;
   if (envConfigured) return 'build';
   return 'none';
 }
 
-function buildProvider(provider, apiProvider = {}, { sessionValue, sessionModel, envValue, envModel, mode = 'live', missingReason }) {
+function buildProvider(provider, apiProvider = {}, { sessionValue, sessionModel, envValue, envModel, mode = 'live', missingReason, prefSource }) {
   const apiConfigured = !!apiProvider?.configured;
   const sessionConfigured = !!sessionValue;
   const envConfigured = !!envValue;
   const configured = apiConfigured || sessionConfigured || envConfigured;
-  const source = getConfiguredSource(apiConfigured, sessionConfigured, envConfigured);
+  const source = getConfiguredSource(apiConfigured, sessionConfigured ? prefSource : 'default', envConfigured);
 
   return {
     configured,
     model: apiProvider?.model || sessionModel || envModel || DEFAULT_MODELS[provider],
+    availableModels: apiProvider?.availableModels || DEFAULT_AVAILABLE_MODELS[provider] || [DEFAULT_MODELS[provider]],
     mode: configured ? (provider === 'ollama' ? 'local' : mode) : 'blocked',
     reason: configured ? null : missingReason,
     source,
@@ -39,6 +49,7 @@ export function resolveClientProviderState(apiState = null, connectionPrefs = {}
       envValue: env.OPENAI_API_KEY,
       envModel: env.OPENAI_MODEL,
       missingReason: 'Missing OPENAI_API_KEY or session API key.',
+      prefSource: getConnectionPrefSource('openaiApiKey'),
     }),
     groq: buildProvider('groq', apiProviders.groq, {
       sessionValue: connectionPrefs.groqApiKey,
@@ -46,6 +57,7 @@ export function resolveClientProviderState(apiState = null, connectionPrefs = {}
       envValue: env.GROQ_API_KEY,
       envModel: env.GROQ_MODEL,
       missingReason: 'Missing GROQ_API_KEY or session API key.',
+      prefSource: getConnectionPrefSource('groqApiKey'),
     }),
     gemini: buildProvider('gemini', apiProviders.gemini, {
       sessionValue: connectionPrefs.geminiApiKey,
@@ -53,6 +65,7 @@ export function resolveClientProviderState(apiState = null, connectionPrefs = {}
       envValue: env.GEMINI_API_KEY || env.GCP_GEMINI_KEY,
       envModel: env.GEMINI_MODEL,
       missingReason: 'Missing GEMINI_API_KEY / GCP_GEMINI_KEY or session API key.',
+      prefSource: getConnectionPrefSource('geminiApiKey'),
     }),
     ollama: buildProvider('ollama', apiProviders.ollama, {
       sessionValue: connectionPrefs.ollamaBaseUrl,
@@ -60,6 +73,7 @@ export function resolveClientProviderState(apiState = null, connectionPrefs = {}
       envValue: env.OLLAMA_BASE_URL,
       envModel: env.OLLAMA_MODEL,
       missingReason: 'Missing OLLAMA_BASE_URL or session base URL.',
+      prefSource: getConnectionPrefSource('ollamaBaseUrl'),
     }),
   };
 

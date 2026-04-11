@@ -5,6 +5,13 @@ function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
 }
 
+const KNOWN_MODELS = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+  ollama: ['llama3.1:8b', 'mistral:7b', 'qwen2.5:7b'],
+};
+
 function getRuntimeCredentials(env = process.env, credentials = {}) {
   return {
     openaiApiKey: credentials.openaiApiKey || env.OPENAI_API_KEY,
@@ -21,6 +28,7 @@ export function getProviderCatalog(env = process.env, credentials = {}) {
       configured: !!runtime.openaiApiKey,
       mode: runtime.openaiApiKey ? 'live' : 'blocked',
       model: credentials.openaiModel || env.OPENAI_MODEL || 'gpt-4o-mini',
+      availableModels: KNOWN_MODELS.openai,
       envKey: 'OPENAI_API_KEY',
       reason: runtime.openaiApiKey ? null : 'OPENAI_API_KEY not set.',
     },
@@ -28,6 +36,7 @@ export function getProviderCatalog(env = process.env, credentials = {}) {
       configured: !!runtime.groqApiKey,
       mode: runtime.groqApiKey ? 'live' : 'blocked',
       model: credentials.groqModel || env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      availableModels: KNOWN_MODELS.groq,
       envKey: 'GROQ_API_KEY',
       reason: runtime.groqApiKey ? null : 'GROQ_API_KEY not set.',
     },
@@ -35,6 +44,7 @@ export function getProviderCatalog(env = process.env, credentials = {}) {
       configured: !!runtime.geminiApiKey,
       mode: runtime.geminiApiKey ? 'live' : 'blocked',
       model: credentials.geminiModel || env.GEMINI_MODEL || 'gemini-1.5-flash',
+      availableModels: KNOWN_MODELS.gemini,
       envKey: 'GEMINI_API_KEY or GCP_GEMINI_KEY',
       reason: runtime.geminiApiKey ? null : 'GEMINI_API_KEY or GCP_GEMINI_KEY not set.',
     },
@@ -42,6 +52,7 @@ export function getProviderCatalog(env = process.env, credentials = {}) {
       configured: !!runtime.ollamaBaseUrl,
       mode: runtime.ollamaBaseUrl ? 'local' : 'blocked',
       model: credentials.ollamaModel || env.OLLAMA_MODEL || 'llama3.1:8b',
+      availableModels: KNOWN_MODELS.ollama,
       envKey: 'OLLAMA_BASE_URL',
       reason: runtime.ollamaBaseUrl ? null : 'OLLAMA_BASE_URL not set.',
     },
@@ -210,8 +221,8 @@ function buildConnectorState(configured, {
   };
 }
 
-export function connectorState() {
-  const llm = getLlmState();
+export function connectorState(credentials = {}) {
+  const llm = getLlmState(process.env, credentials);
   const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
   const twilioWriteEnabled = !!(twilioConfigured && process.env.TWILIO_PHONE_NUMBER);
   const sendgridConfigured = !!process.env.SENDGRID_API_KEY;

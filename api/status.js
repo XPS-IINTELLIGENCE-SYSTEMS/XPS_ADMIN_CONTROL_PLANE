@@ -30,6 +30,8 @@ export default async function handler(req, res) {
   // ── GitHub ─────────────────────────────────────────────────────────────
   const hasGitHub = !!(env.GITHUB_TOKEN || env.GITHUB_API_TOKEN);
   const githubOrg = env.GITHUB_ORG || env.GITHUB_OWNER || null;
+  const githubRepo = env.GITHUB_REPO || env.GITHUB_REPOSITORY || null;
+  const githubBranch = env.GITHUB_BRANCH || env.VERCEL_GIT_COMMIT_REF || null;
 
   // ── Supabase ───────────────────────────────────────────────────────────
   const hasSupabase = !!(env.SUPABASE_URL && (env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY));
@@ -38,6 +40,8 @@ export default async function handler(req, res) {
   // ── Vercel ─────────────────────────────────────────────────────────────
   const hasVercel  = !!(env.VERCEL_TOKEN || env.VERCEL_ACCESS_TOKEN);
   const vercelTeam = env.VERCEL_TEAM_ID || null;
+  const vercelProjectId = env.VERCEL_PROJECT_ID || null;
+  const vercelDeployHookConfigured = !!env.VERCEL_DEPLOY_HOOK_URL;
 
   // ── Google / GCP ───────────────────────────────────────────────────────
   const hasGCP      = !!(env.GCP_SA_KEY || env.GCP_PROJECT_ID);
@@ -92,6 +96,8 @@ export default async function handler(req, res) {
       configured: hasGitHub,
       mode:       hasGitHub ? 'live' : 'blocked',
       org:        githubOrg,
+      repo:       githubRepo,
+      branch:     githubBranch,
       reason:     hasGitHub ? null : 'GITHUB_TOKEN or GITHUB_API_TOKEN not set.',
       capabilities: {
         repos:       hasGitHub,
@@ -131,6 +137,8 @@ export default async function handler(req, res) {
       configured: hasVercel,
       mode:       hasVercel ? 'live' : 'blocked',
       teamId:     vercelTeam,
+      projectId:  vercelProjectId,
+      deployHookConfigured: vercelDeployHookConfigured,
       reason:     hasVercel ? null : 'VERCEL_TOKEN or VERCEL_ACCESS_TOKEN not set.',
       capabilities: {
         deployments:   hasVercel,
@@ -138,6 +146,7 @@ export default async function handler(req, res) {
         build_logs:    hasVercel,
         domains:       hasVercel,
         project_info:  hasVercel,
+        deploy_hooks:  hasVercel && vercelDeployHookConfigured,
       },
       envKey: 'VERCEL_TOKEN',
     },

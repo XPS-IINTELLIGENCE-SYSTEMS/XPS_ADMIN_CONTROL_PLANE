@@ -175,6 +175,36 @@ function buildModelProfiles(providerMap) {
       status: providerMap.groq?.available ? 'live' : 'blocked',
       systemHint: 'Use concise, fast, reasoning-oriented responses optimized for a Groq-hosted model.',
     },
+    {
+      id: 'gemini',
+      label: 'Gemini · Flash',
+      provider: 'gemini',
+      backendModel: 'gemini-1.5-flash',
+      available: !!providerMap.gemini?.available,
+      truth: 'Gemini API path.',
+      status: providerMap.gemini?.available ? 'live' : 'blocked',
+      systemHint: 'Use the Google Gemini API path and be explicit about multimodal and Workspace-adjacent capability truth.',
+    },
+    {
+      id: 'ollama',
+      label: 'Ollama · Local Runtime',
+      provider: 'ollama',
+      backendModel: 'llama3.1:8b',
+      available: !!providerMap.ollama?.available,
+      truth: 'Local/self-hosted Ollama runtime path.',
+      status: providerMap.ollama?.available ? 'local' : 'blocked',
+      systemHint: 'Use a local-runtime tone and mention that execution is routed through the configured Ollama base URL.',
+    },
+    {
+      id: 'bytebot-lane',
+      label: 'ByteBot · Active Provider Lane',
+      provider: 'auto',
+      backendModel: null,
+      available: hasAnyLive,
+      truth: 'ByteBot/orchestrator lane uses the active live provider or remains synthetic when none is configured.',
+      status: hasAnyLive ? 'live' : 'blocked',
+      systemHint: 'Operate as the ByteBot/orchestrator lane and surface truthful runtime and connector state while using the active provider.',
+    },
   ];
 }
 
@@ -357,6 +387,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
   const modelProfiles = buildModelProfiles(providerMap);
   const selectedModelProfile = modelProfiles.find((profile) => profile.id === selectedProfileId) || modelProfiles[0];
+  const providerModelOptions = resolvedProviderState?.llm?.providers?.[selectedProvider === 'auto' ? resolvedProviderState?.llm?.active : selectedProvider]?.availableModels || [];
   const operatorState = buildOperatorState(providerState, connectionPrefs);
   const operatorModules = providerState?.operatorModules || {
     media: {
@@ -371,6 +402,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     }
   }, [selectedProviderOption?.model, selectedProvider]);
   useEffect(() => {
+    if (connectionPrefs.providerPreference && connectionPrefs.providerPreference !== 'auto' && providerMap[connectionPrefs.providerPreference]?.available) {
+      setSelectedProvider(connectionPrefs.providerPreference);
+    }
+  }, [connectionPrefs.providerPreference, providerMap]);
+  useEffect(() => {
     if (!selectedModelProfile?.available) {
       const fallbackProfile = modelProfiles.find((profile) => profile.available) || modelProfiles[0];
       if (fallbackProfile && fallbackProfile.id !== selectedProfileId) {
@@ -378,6 +414,19 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       }
     }
   }, [modelProfiles, selectedModelProfile, selectedProfileId]);
+  useEffect(() => {
+    if (selectedProvider === 'auto') return;
+    const preferredModel = selectedProvider === 'openai'
+      ? connectionPrefs.openaiModel
+      : selectedProvider === 'groq'
+        ? connectionPrefs.groqModel
+        : selectedProvider === 'gemini'
+          ? connectionPrefs.geminiModel
+          : selectedProvider === 'ollama'
+            ? connectionPrefs.ollamaModel
+            : '';
+    if (preferredModel) setSelectedModel(preferredModel);
+  }, [connectionPrefs.geminiModel, connectionPrefs.groqModel, connectionPrefs.ollamaModel, connectionPrefs.openaiModel, selectedProvider]);
   useEffect(() => {
     if (selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto') {
       setSelectedProvider(selectedModelProfile.provider);
@@ -1043,12 +1092,12 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const effectiveProvider = selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto'
       ? selectedModelProfile.provider
       : selectedProvider;
-    const effectiveModel = selectedModelProfile?.backendModel || selectedModel || selectedProviderOption?.model;
+    const effectiveModel = selectedModel || selectedModelProfile?.backendModel || selectedProviderOption?.model;
 
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl } },
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: effectiveProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -1066,7 +1115,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: effectiveProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -1084,7 +1133,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const url   = isUrl ? prompt.trim() : `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
       const action = isUrl ? 'scrape' : 'research';
       startBrowserJob(
-        { url, action, prompt: isUrl ? '' : prompt, workerUrl: connectionPrefs.browserWorkerUrl },
+        { url, action, prompt: isUrl ? '' : prompt, workerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(jobId => {
@@ -1629,6 +1678,62 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               })}
             </div>
           )}
+        </div>
+
+        <div style={{
+          marginBottom: 10,
+          padding: '9px 11px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 8,
+          display: 'grid',
+          gap: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>
+              Runtime model
+            </span>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+              {selectedProviderOption?.note || 'No provider note'}
+            </span>
+          </div>
+          {providerModelOptions.length > 0 && (
+            <select
+              value={providerModelOptions.includes(selectedModel) ? selectedModel : ''}
+              onChange={(e) => setSelectedModel(e.target.value || selectedModel)}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8,
+                color: '#f8fafc',
+                fontSize: 12,
+              }}
+            >
+              <option value="">Select known model</option>
+              {providerModelOptions.map((modelName) => (
+                <option key={modelName} value={modelName}>{modelName}</option>
+              ))}
+            </select>
+          )}
+          <input
+            value={selectedModel || ''}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            placeholder="Enter exact model name"
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 8,
+              color: '#f8fafc',
+              fontSize: 12,
+            }}
+          />
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)' }}>
+            Source truth: {selectedProviderOption?.status || 'synthetic'} · {selectedProviderOption?.note || 'No live provider configured'}.
+          </div>
         </div>
 
         <form onSubmit={send} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
