@@ -14,9 +14,11 @@ import {
   Palette, MoveUp, MoveDown, Trash2, CheckCircle, XCircle, Plus, LayoutGrid,
 } from 'lucide-react';
 import { useWorkspace, OBJ_TYPE_META, RUN_STATUS, OBJ_TYPE, genId } from '../../lib/workspaceEngine.jsx';
-import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, createHistoryEntry, createDefaultUiState } from '../../lib/uiMutations.js';
+import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, createHistoryEntry, createDefaultUiState, validateUiState } from '../../lib/uiMutations.js';
 import { persistUiPreview, persistUiVersion, persistUiRollback } from '../../lib/supabasePersistence.js';
 import { getGovernance, subscribeGovernance } from '../../lib/governance.js';
+import { getConnectionPrefs } from '../../lib/connectionPrefs.js';
+import { executeSendGridEmail, executeTwilioCall } from '../../lib/operatorActions.js';
 
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
@@ -852,6 +854,7 @@ function UIBody({ obj }) {
   };
 
   const createPreview = (state, summary, source = 'manual') => {
+    const validation = validateUiState(state);
     const previewId = genId();
     const nextPreview = {
       id: previewId,
@@ -859,6 +862,7 @@ function UIBody({ obj }) {
       source,
       createdAt: new Date().toISOString(),
       state,
+      validation,
     };
     patchObject(obj.id, {
       meta: {
@@ -870,11 +874,18 @@ function UIBody({ obj }) {
       },
     });
     createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Preview — ${summary}`,
+      content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
+      meta: { stage: 'preview', summary, source, validation, targetId: obj.id, previewId },
+    });
+    createObject({
       type: OBJ_TYPE.PREVIEW,
       title: `UI Preview — ${summary}`,
-      content: summary,
+      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: RUN_STATUS.IDLE,
-      meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source },
+      meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source, validation },
     });
     persistUiPreview({ previewId, targetId: obj.id, state, summary, source }).catch(() => {});
     setEditorView('preview');
@@ -897,6 +908,10 @@ function UIBody({ obj }) {
       setNotice('No preview ready to apply.');
       return;
     }
+    if (previewMeta.validation && !previewMeta.validation.valid) {
+      setNotice(`Apply blocked by validation. ${previewMeta.validation.issues.join(' ')}`);
+      return;
+    }
     const nextState = normalizeUiState(previewMeta.state);
     const updatedHistory = [...history, createHistoryEntry(nextState, previewMeta.summary || 'Apply preview', previewMeta.source || 'manual')];
     patchObject(obj.id, {
@@ -910,6 +925,13 @@ function UIBody({ obj }) {
       summary: latest.summary,
       source: latest.source,
     }).catch(() => {});
+    createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Apply — ${previewMeta.summary || 'Apply preview'}`,
+      content: `Applied governed mutation.\n\nSummary: ${previewMeta.summary || 'Apply preview'}\nValidation: ${previewMeta.validation?.summary || 'Validation passed.'}`,
+      status: RUN_STATUS.DONE,
+      meta: { stage: 'apply', summary: previewMeta.summary || 'Apply preview', source: previewMeta.source || 'manual', validation: previewMeta.validation || { valid: true, issues: [] }, targetId: obj.id },
+    });
     if (previewMeta.source === 'rollback' && updatedHistory.length > 1) {
       persistUiRollback({
         rollbackId: genId(),
@@ -1744,9 +1766,38 @@ function WorkflowBody({ obj }) {
 // ── Connector action body ─────────────────────────────────────────────────────
 
 function ConnectorActionBody({ obj }) {
+  const { patchObject } = useWorkspace();
   const running    = obj.status === RUN_STATUS.RUNNING;
   const connectors = obj.meta?.connectors || {};
   const mode       = obj.meta?.mode || 'synthetic';
+  const draft      = obj.meta?.draft || {};
+  const connector  = obj.meta?.connector || null;
+  const [executing, setExecuting] = useState(false);
+
+  const executeDraft = async () => {
+    if (!connector || executing) return;
+    setExecuting(true);
+    patchObject(obj.id, { status: RUN_STATUS.RUNNING, meta: { ...obj.meta, status: 'running' } });
+    try {
+      const credentials = buildRuntimeConnectorCredentials(getConnectionPrefs());
+      const result = connector === 'sendgrid'
+        ? await executeSendGridEmail({ ...draft, credentials })
+        : await executeTwilioCall({ ...draft, credentials });
+      patchObject(obj.id, {
+        status: result.status === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+        content: result.workspaceObject?.content || result.message,
+        meta: { ...obj.meta, ...(result.workspaceObject?.meta || {}), connector, draft },
+      });
+    } catch (err) {
+      patchObject(obj.id, {
+        status: RUN_STATUS.ERROR,
+        content: `${connector === 'sendgrid' ? 'SendGrid' : 'Twilio'} execution failed.\n\nReason: ${err.message}`,
+        meta: { ...obj.meta, connector, draft, mode: 'blocked', status: 'error', reason: err.message },
+      });
+    } finally {
+      setExecuting(false);
+    }
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -1781,6 +1832,43 @@ function ConnectorActionBody({ obj }) {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {connector && (
+          <div style={{ marginBottom: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>
+              Action Draft
+            </div>
+            {Object.entries(draft).filter(([, value]) => value).map(([key, value]) => (
+              <div key={key} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', minWidth: 60, textTransform: 'uppercase' }}>{key}</span>
+                <span style={{ fontSize: 11, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</span>
+              </div>
+            ))}
+            {obj.meta?.reason && (
+              <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 8 }}>{obj.meta.reason}</div>
+            )}
+            {obj.meta?.executeAction && (
+              <button
+                onClick={executeDraft}
+                disabled={executing || obj.meta?.mode === 'blocked'}
+                className="xps-electric-hover"
+                style={{
+                  marginTop: 10,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(212,168,67,0.28)',
+                  background: executing || obj.meta?.mode === 'blocked' ? 'rgba(255,255,255,0.05)' : 'rgba(212,168,67,0.12)',
+                  color: executing || obj.meta?.mode === 'blocked' ? 'rgba(255,255,255,0.35)' : GOLD,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: executing || obj.meta?.mode === 'blocked' ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {executing ? 'Executing…' : (obj.meta.executeLabel || 'Execute now')}
+              </button>
+            )}
           </div>
         )}
 
@@ -2011,6 +2099,16 @@ function modeColor(mode) {
   if (mode === 'blocked')   return RED;
   if (mode === 'local')     return '#60a5fa';
   return '#fbbf24'; // synthetic
+}
+
+function buildRuntimeConnectorCredentials(connectionPrefs = {}) {
+  return {
+    twilioAccountSid: connectionPrefs.twilioAccountSid,
+    twilioAuthToken: connectionPrefs.twilioAuthToken,
+    twilioPhoneNumber: connectionPrefs.twilioPhoneNumber,
+    sendgridApiKey: connectionPrefs.sendgridApiKey,
+    sendgridFromEmail: connectionPrefs.sendgridFromEmail,
+  };
 }
 
 // ── Phase 4: Browser / Parallel renderers ─────────────────────────────────────

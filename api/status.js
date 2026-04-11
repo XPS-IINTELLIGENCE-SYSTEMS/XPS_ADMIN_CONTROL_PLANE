@@ -216,7 +216,7 @@ export default async function handler(req, res) {
       capabilities: {
         outbound_calls: hasTwilio && hasTwilioNumber,
         inbound_webhooks: hasTwilio,
-        ai_call_orchestration: false,
+        ai_call_orchestration: hasTwilio && hasTwilioNumber,
       },
       envKey: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN',
     },

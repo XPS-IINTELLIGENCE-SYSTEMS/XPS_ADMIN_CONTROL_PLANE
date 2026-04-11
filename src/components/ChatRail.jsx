@@ -9,7 +9,7 @@ import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genI
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
 import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
 import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPreview, persistUiVersion, persistUiRollback } from '../lib/supabasePersistence.js';
-import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState } from '../lib/uiMutations.js';
+import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState, validateUiState } from '../lib/uiMutations.js';
 import { getGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, subscribeConnectionPrefs } from '../lib/connectionPrefs.js';
 import { resolveClientProviderState } from '../lib/providerState.js';
@@ -436,6 +436,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       ? target.meta.history
       : [createHistoryEntry(currentState, 'Initial UI state', 'seed')];
     const nextState = patch ? applyUiPatch(currentState, patch) : currentState;
+    const validation = validateUiState(nextState);
     const previewId = genId();
     const previewMeta = {
       id: previewId,
@@ -443,6 +444,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       source,
       createdAt: new Date().toISOString(),
       state: nextState,
+      validation,
     };
     patchObject(target.id, {
       meta: {
@@ -454,11 +456,18 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       },
     });
     createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Preview — ${summary}`,
+      content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
+      meta: { stage: 'preview', summary, source, validation, targetId: target.id, previewId },
+    });
+    createObject({
       type: OBJ_TYPE.PREVIEW,
       title: `UI Preview — ${summary}`,
-      content: summary,
+      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: RUN_STATUS.IDLE,
-      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source },
+      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source, validation },
     });
     persistUiPreview({ previewId, targetId: target.id, state: nextState, summary, source }).catch(() => {});
     return { target, previewMeta };
@@ -466,6 +475,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   const applyUiPreview = useCallback((target, previewMeta, source = 'chat') => {
     if (!target || !previewMeta) return null;
+    if (previewMeta.validation && !previewMeta.validation.valid) return null;
     const nextState = normalizeUiState(previewMeta.state);
     const history = Array.isArray(target.meta?.history) ? [...target.meta.history] : [];
     history.push(createHistoryEntry(nextState, previewMeta.summary || 'Apply preview', source));
@@ -477,6 +487,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         history,
         preview: null,
       },
+    });
+    createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Apply — ${previewMeta.summary || 'Apply preview'}`,
+      content: `Applied governed mutation.\n\nSummary: ${previewMeta.summary || 'Apply preview'}\nValidation: ${previewMeta.validation?.summary || 'Validation passed.'}`,
+      status: RUN_STATUS.DONE,
+      meta: { stage: 'apply', summary: previewMeta.summary || 'Apply preview', source, validation: previewMeta.validation || { valid: true, issues: [] }, targetId: target.id },
     });
     persistUiVersion({
       versionId: history[history.length - 1]?.id || genId(),
@@ -502,7 +519,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (history.length < 2) return null;
     const previous = history[history.length - 2];
     const summary = `Rollback to ${previous.summary || previous.id}`;
-    return createUiPreview({ theme: previous.state?.theme, components: previous.state?.components }, summary, source);
+    return createUiPreview({ site: previous.state?.site, theme: previous.state?.theme, components: previous.state?.components }, summary, source);
   }, [createUiPreview]);
 
   const parseUiCommand = (prompt) => {
@@ -579,8 +596,17 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   const parseCommunicationCommand = (prompt) => {
     const lower = prompt.toLowerCase();
-    if (/email|sendgrid|outreach/.test(lower)) return { intent: 'email', channel: 'sendgrid' };
-    if (/call|phone|twilio/.test(lower)) return { intent: 'call', channel: 'twilio' };
+    if (/email|sendgrid|outreach/.test(lower)) {
+      const to = prompt.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
+      const subject = prompt.match(/subject(?:\s*:|\s+)(.+?)(?:\n|$)/i)?.[1]?.trim() || 'XPS control plane message';
+      const body = prompt.match(/body(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || prompt;
+      return { intent: 'email', channel: 'sendgrid', payload: { to, subject, text: body } };
+    }
+    if (/call|phone|twilio/.test(lower)) {
+      const to = prompt.match(/\+?[0-9][0-9()\-\s]{7,}/)?.[0]?.trim() || '';
+      const message = prompt.match(/(?:say|message)(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || prompt;
+      return { intent: 'call', channel: 'twilio', payload: { to, message } };
+    }
     return null;
   };
 
@@ -596,6 +622,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     groqApiKey: connectionPrefs.groqApiKey,
     geminiApiKey: connectionPrefs.geminiApiKey,
     ollamaBaseUrl: connectionPrefs.ollamaBaseUrl,
+    twilioAccountSid: connectionPrefs.twilioAccountSid,
+    twilioAuthToken: connectionPrefs.twilioAuthToken,
+    twilioPhoneNumber: connectionPrefs.twilioPhoneNumber,
+    sendgridApiKey: connectionPrefs.sendgridApiKey,
+    sendgridFromEmail: connectionPrefs.sendgridFromEmail,
   };
 
   const send = async (e) => {
@@ -653,7 +684,12 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             setLoading(false);
             return;
           }
-          applyUiPreview(target, previewMeta, 'chat');
+          const applied = applyUiPreview(target, previewMeta, 'chat');
+          if (!applied) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `Apply blocked by validation. ${previewMeta.validation?.issues?.join(' ') || 'Resolve validation issues first.'}`, agent, mode: 'blocked' }]);
+            setLoading(false);
+            return;
+          }
           setMessages(prev => [...prev, { role: 'assistant', content: `Applied preview: ${previewMeta.summary || 'UI update'}. Rollback available.`, agent, mode: 'synthetic' }]);
           setLoading(false);
           return;
@@ -725,11 +761,18 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const commsCommand = parseCommunicationCommand(prompt);
       if (commsCommand) {
         const governanceAllowed = governance.communicationActions && governance.connectorPermissions;
-        const ready = commsCommand.channel === 'sendgrid'
+        const payloadReady = commsCommand.channel === 'sendgrid'
+          ? !!(commsCommand.payload?.to && commsCommand.payload?.text)
+          : !!(commsCommand.payload?.to && commsCommand.payload?.message);
+        const ready = (commsCommand.channel === 'sendgrid'
           ? operatorState.sendgrid?.configured
-          : operatorState.twilio?.configured;
+          : operatorState.twilio?.configured) && payloadReady;
         const reason = !governanceAllowed
           ? 'Communications actions are blocked by governance.'
+          : !payloadReady
+            ? commsCommand.channel === 'sendgrid'
+              ? 'Provide a destination email address and body to execute SendGrid.'
+              : 'Provide a destination phone number and message to execute Twilio.'
           : commsCommand.channel === 'sendgrid'
             ? operatorState.sendgrid?.reason || 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
             : operatorState.twilio?.reason || 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.';
@@ -738,19 +781,28 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           type: OBJ_TYPE.CONNECTOR_ACTION,
           title: commsCommand.intent === 'email' ? 'SendGrid Email Surface' : 'Twilio Call Surface',
           content: ready && governanceAllowed
-            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} runbook staged.\n\nPrompt: ${prompt}\n\nState: substitute-path\nNext action: review content in workspace and hand off to a dedicated execution endpoint when server-side send/call is wired.`
+            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action ready.\n\nTarget: ${commsCommand.payload?.to || 'missing target'}\n${commsCommand.intent === 'email' ? `Subject: ${commsCommand.payload?.subject || 'XPS control plane message'}\n` : ''}\nUse Execute in the workspace to trigger the live connector path.`
             : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked.\n\nPrompt: ${prompt}\n\nReason: ${reason}`,
           agent,
           status: RUN_STATUS.DONE,
-          meta: { connector: commsCommand.channel, mode: ready && governanceAllowed ? 'substitute-path' : 'blocked' },
+          meta: {
+            connector: commsCommand.channel,
+            mode: ready && governanceAllowed ? 'live' : 'blocked',
+            status: ready && governanceAllowed ? 'ready' : 'blocked',
+            reason: ready && governanceAllowed ? null : reason,
+            draft: commsCommand.payload,
+            executeAction: commsCommand.channel === 'sendgrid' ? 'sendgrid_email' : 'twilio_call',
+            executeLabel: commsCommand.channel === 'sendgrid' ? 'Send email now' : 'Place call now',
+          },
         });
+        onNavigate?.('workspace');
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: ready && governanceAllowed
-            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} runbook staged in the workspace with truthful substitute-path status.`
+            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action opened in the workspace. Use the execute control to trigger the live path.`
             : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked: ${reason}`,
           agent,
-          mode: ready && governanceAllowed ? 'synthetic' : 'blocked',
+          mode: ready && governanceAllowed ? 'live' : 'blocked',
         }]);
         setLoading(false);
         return;
@@ -811,7 +863,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules } },
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -829,7 +881,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -847,7 +899,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const url   = isUrl ? prompt.trim() : `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
       const action = isUrl ? 'scrape' : 'research';
       startBrowserJob(
-        { url, action, prompt: isUrl ? '' : prompt },
+        { url, action, prompt: isUrl ? '' : prompt, workerUrl: connectionPrefs.browserWorkerUrl },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(jobId => {

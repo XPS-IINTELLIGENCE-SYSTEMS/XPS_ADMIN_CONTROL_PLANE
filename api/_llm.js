@@ -213,6 +213,7 @@ function buildConnectorState(configured, {
 export function connectorState() {
   const llm = getLlmState();
   const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+  const twilioWriteEnabled = !!(twilioConfigured && process.env.TWILIO_PHONE_NUMBER);
   const sendgridConfigured = !!process.env.SENDGRID_API_KEY;
   const sendgridWriteEnabled = !!(sendgridConfigured && process.env.SENDGRID_FROM_EMAIL);
   return {
@@ -228,7 +229,7 @@ export function connectorState() {
     hubspot:  buildConnectorState(!!process.env.HUBSPOT_API_KEY, { reason: 'HUBSPOT_API_KEY not set.', capabilityState: 'token-configured' }),
     airtable: buildConnectorState(!!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID), { reason: 'AIRTABLE_API_KEY or AIRTABLE_BASE_ID not set.', capabilityState: 'token-configured' }),
     browser:  buildConnectorState(!!process.env.BROWSER_WORKER_URL, { modeWhenConfigured: 'local', reason: 'BROWSER_WORKER_URL not set.', capabilityState: 'local-only' }),
-    twilio:   buildConnectorState(twilioConfigured, { reason: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set.', capabilityState: 'token-configured' }),
+    twilio:   buildConnectorState(twilioConfigured, { reason: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set.', capabilityState: twilioWriteEnabled ? 'write-enabled' : 'token-configured' }),
     sendgrid: buildConnectorState(sendgridConfigured, { reason: 'SENDGRID_API_KEY not set.', capabilityState: sendgridWriteEnabled ? 'write-enabled' : 'token-configured' }),
   };
 }
