@@ -176,6 +176,26 @@ test.describe('XPS Control Plane', () => {
     await screenshot(page, 'admin-google-workspace-panel');
   });
 
+  test('Admin — communications panel renders with Twilio and SendGrid truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-communications"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-communications-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="admin-communications-panel"]')).toContainText('Twilio');
+    await expect(page.locator('[data-testid="admin-communications-panel"]')).toContainText('SendGrid');
+    await screenshot(page, 'admin-communications-panel');
+  });
+
+  test('Admin — builder panel renders mutation and media truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-builder"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-builder-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="admin-builder-panel"]')).toContainText('Site Mutation');
+    await expect(page.locator('[data-testid="admin-builder-panel"]')).toContainText('Media Surfaces');
+    await screenshot(page, 'admin-builder-panel');
+  });
+
   test('Admin — blocked ChatGPT/Copilot passthrough state renders honestly', async ({ page }) => {
     await page.click('[data-testid="page-tab-admin"]');
     // The overview (integrations) section shows the blocked passthrough panel

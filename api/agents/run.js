@@ -43,7 +43,7 @@ Your response MUST be valid JSON with this exact schema:
   ],
   "summary": "... one-line summary ...",
   "connector_actions": [
-    { "connector": "supabase|github|hubspot|airtable|browser_worker", "action": "read|write|blocked|queued", "status": "complete|blocked|error", "reason": "..." }
+    { "connector": "supabase|github|hubspot|airtable|browser_worker|twilio|sendgrid|site_mutation|media_runtime", "action": "read|write|blocked|queued|substitute_path", "status": "complete|blocked|error", "reason": "..." }
   ],
   "staging": {
     "pre_stage": [ { "type": "...", "payload": {} } ],
@@ -92,7 +92,7 @@ Research the given topic thoroughly. Return JSON:
   "summary": "..."
 }`,
 
-    builder: `You are the XPS Auto Builder. Generate production-quality code or UI. Return JSON:
+     builder: `You are the XPS Auto Builder. Generate production-quality code or UI. Return JSON:
 {
   "plan": [
     { "step": 1, "label": "Analyze requirements", "action": "analyze", "parallel": false },
@@ -296,6 +296,12 @@ function deriveBlockedCapabilities() {
   }
   if (!process.env.BROWSER_WORKER_URL) {
     blocked.push({ capability: 'browser_worker', reason: 'BROWSER_WORKER_URL not set', required_env: ['BROWSER_WORKER_URL'] });
+  }
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    blocked.push({ capability: 'twilio', reason: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set', required_env: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'] });
+  }
+  if (!process.env.SENDGRID_API_KEY) {
+    blocked.push({ capability: 'sendgrid', reason: 'SENDGRID_API_KEY not set', required_env: ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL'] });
   }
   return blocked;
 }

@@ -15,6 +15,14 @@ const DEFAULTS = {
   supabaseAnonKey: '',
   vercelToken: '',
   hubspotApiKey: '',
+  airtableApiKey: '',
+  airtableBaseId: '',
+  browserWorkerUrl: '',
+  twilioAccountSid: '',
+  twilioAuthToken: '',
+  twilioPhoneNumber: '',
+  sendgridApiKey: '',
+  sendgridFromEmail: '',
 };
 
 function readStorage() {
