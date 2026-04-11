@@ -6,19 +6,14 @@
  * persistence failures.
  */
 
-import { supabase } from './supabaseClient.js';
-
-const enabled = !!(
-  import.meta.env.SUPABASE_URL &&
-  import.meta.env.SUPABASE_ANON_KEY
-);
+import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient.js';
 
 // ── Agent runs ────────────────────────────────────────────────────────────────
 
 export async function persistRun({ runId, agent, task, status, mode, steps = [], result = null, error = null, summary = null, artifacts = [] }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('agent_runs')
       .upsert({
         id:           runId,
@@ -48,9 +43,9 @@ export async function persistRun({ runId, agent, task, status, mode, steps = [],
 // ── Agent logs ────────────────────────────────────────────────────────────────
 
 export async function persistLog(runId, level, message, data = null) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { error: err } = await supabase
+    const { error: err } = await getSupabaseClient()
       .from('agent_logs')
       .insert({ run_id: runId, level, message, data });
     if (err) console.warn('[persist] log insert:', err.message);
@@ -63,9 +58,9 @@ export async function persistLog(runId, level, message, data = null) {
 // ── Artifacts ─────────────────────────────────────────────────────────────────
 
 export async function persistArtifact({ type, title, content, agent, runId = null, meta = {} }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('artifacts')
       .insert({ type, title, content, agent, run_id: runId, meta })
       .select()
@@ -81,9 +76,9 @@ export async function persistArtifact({ type, title, content, agent, runId = nul
 // ── Workspace objects ─────────────────────────────────────────────────────────
 
 export async function persistWorkspaceObject({ id, type, title, content, agent, runId = null, status = 'done', steps = [], progress = 0, meta = {} }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { error: err } = await supabase
+    const { error: err } = await getSupabaseClient()
       .from('workspace_objects')
       .insert({
         ws_obj_id: id,
@@ -107,9 +102,9 @@ export async function persistWorkspaceObject({ id, type, title, content, agent, 
 // ── Scrape jobs ───────────────────────────────────────────────────────────────
 
 export async function persistScrapeJob({ url, prompt, status, result = null, rawContent = null, mode = 'synthetic' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('scrape_jobs')
       .insert({
         url, prompt, status, result, raw_content: rawContent, mode,
@@ -128,9 +123,9 @@ export async function persistScrapeJob({ url, prompt, status, result = null, raw
 // ── Search jobs ───────────────────────────────────────────────────────────────
 
 export async function persistSearchJob({ query, context, status, summary = null, sources = [], mode = 'synthetic' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('search_jobs')
       .insert({
         query, context, status, summary, sources, mode,
@@ -149,9 +144,9 @@ export async function persistSearchJob({ query, context, status, summary = null,
 // ── Control plane action log ──────────────────────────────────────────────────
 
 export async function persistControlAction(action, payload, result, status = 'complete') {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { error: err } = await supabase
+    const { error: err } = await getSupabaseClient()
       .from('control_plane_actions')
       .insert({ action, payload, result, status });
     if (err) console.warn('[persist] control_action insert:', err.message);
@@ -164,9 +159,9 @@ export async function persistControlAction(action, payload, result, status = 'co
 // ── Recent runs query ─────────────────────────────────────────────────────────
 
 export async function fetchRecentRuns(limit = 20) {
-  if (!enabled) return [];
+  if (!isSupabaseConfigured()) return [];
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('agent_runs')
       .select('*')
       .order('created_at', { ascending: false })
@@ -179,14 +174,16 @@ export async function fetchRecentRuns(limit = 20) {
   }
 }
 
-export { enabled as supabaseEnabled };
+export function supabaseEnabled() {
+  return isSupabaseConfigured();
+}
 
 // ── Browser jobs ──────────────────────────────────────────────────────────────
 
 export async function persistBrowserJob({ jobId, url, action, status, mode, result = null, evidence = null }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('browser_jobs')
       .upsert({
         id:           jobId,
@@ -211,9 +208,9 @@ export async function persistBrowserJob({ jobId, url, action, status, mode, resu
 // ── Parallel run groups ───────────────────────────────────────────────────────
 
 export async function persistParallelGroup({ groupId, title, jobIds = [], status }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('parallel_run_groups')
       .upsert({
         id:      groupId,
@@ -235,9 +232,9 @@ export async function persistParallelGroup({ groupId, title, jobIds = [], status
 // ── UI mutation pipeline ───────────────────────────────────────────────────────
 
 export async function persistUiPreview({ previewId, targetId, state, summary, source = 'manual', status = 'preview' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('ui_mutation_previews')
       .insert({
         id: previewId,
@@ -258,9 +255,9 @@ export async function persistUiPreview({ previewId, targetId, state, summary, so
 }
 
 export async function persistUiVersion({ versionId, targetId, state, summary, source = 'apply' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('ui_versions')
       .insert({
         id: versionId,
@@ -280,9 +277,9 @@ export async function persistUiVersion({ versionId, targetId, state, summary, so
 }
 
 export async function persistUiRollback({ rollbackId, targetId, fromVersion, toVersion, summary }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('ui_rollbacks')
       .insert({
         id: rollbackId,
@@ -302,9 +299,9 @@ export async function persistUiRollback({ rollbackId, targetId, fromVersion, toV
 }
 
 export async function persistGovernanceSettings(settings) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('governance_settings')
       .insert({ settings })
       .select()
@@ -320,9 +317,9 @@ export async function persistGovernanceSettings(settings) {
 // ── Page snapshots ────────────────────────────────────────────────────────────
 
 export async function persistSnapshot({ jobId, url, snapshotText, extractedData = null }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('page_snapshots')
       .insert({ job_id: jobId, url, snapshot_text: snapshotText, extracted_data: extractedData })
       .select()
@@ -338,9 +335,9 @@ export async function persistSnapshot({ jobId, url, snapshotText, extractedData 
 // ── Connector snapshots ────────────────────────────────────────────────────────
 
 export async function persistConnectorSnapshot({ connectors, mode = 'synthetic', triggeredBy = 'auto' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('connector_snapshots')
       .insert({ connectors, mode, triggered_by: triggeredBy })
       .select()
@@ -356,9 +353,9 @@ export async function persistConnectorSnapshot({ connectors, mode = 'synthetic',
 // ── Staging / exports ─────────────────────────────────────────────────────────
 
 export async function persistPreStageItem({ runId = null, source = 'runtime', payload = {}, status = 'queued' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('pre_stage_items')
       .insert({ run_id: runId, source, payload, status })
       .select()
@@ -372,9 +369,9 @@ export async function persistPreStageItem({ runId = null, source = 'runtime', pa
 }
 
 export async function persistStageItem({ runId = null, source = 'runtime', payload = {}, status = 'queued' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('stage_items')
       .insert({ run_id: runId, source, payload, status })
       .select()
@@ -388,9 +385,9 @@ export async function persistStageItem({ runId = null, source = 'runtime', paylo
 }
 
 export async function persistHubSpotExport({ runId = null, payload = {}, status = 'queued', blockedReason = null }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('hubspot_exports')
       .insert({ run_id: runId, payload, status, blocked_reason: blockedReason })
       .select()
@@ -404,9 +401,9 @@ export async function persistHubSpotExport({ runId = null, payload = {}, status 
 }
 
 export async function persistAirtableExport({ runId = null, payload = {}, status = 'queued', blockedReason = null }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('airtable_exports')
       .insert({ run_id: runId, payload, status, blocked_reason: blockedReason })
       .select()
@@ -422,9 +419,9 @@ export async function persistAirtableExport({ runId = null, payload = {}, status
 // ── Runtime ledger / recovery ─────────────────────────────────────────────────
 
 export async function persistRuntimeLedger({ runId = null, entryType, payload = {}, status = 'recorded' }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('runtime_ledgers')
       .insert({ run_id: runId, entry_type: entryType, payload, status })
       .select()
@@ -438,9 +435,9 @@ export async function persistRuntimeLedger({ runId = null, entryType, payload = 
 }
 
 export async function persistRecoveryQueue({ runId = null, action, payload = {}, status = 'queued', retryCount = 0, lastError = null }) {
-  if (!enabled) return null;
+  if (!isSupabaseConfigured()) return null;
   try {
-    const { data, error: err } = await supabase
+    const { data, error: err } = await getSupabaseClient()
       .from('recovery_queue')
       .insert({ run_id: runId, action, payload, status, retry_count: retryCount, last_error: lastError })
       .select()

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, Bot, Plug, ShieldCheck, Sparkles } from 'lucide-react';
+import { getSession, getSupabaseClient, isSupabaseConfigured, signInWithEmail, signInWithProvider, signOut } from '../lib/supabaseClient.js';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4a843';
@@ -32,6 +33,66 @@ const valueCards = [
 ];
 
 export default function HomePage({ onEnterApp }) {
+  const [session, setSession] = useState(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authStatus, setAuthStatus] = useState('');
+  const authReady = isSupabaseConfigured();
+
+  useEffect(() => {
+    let mounted = true;
+    getSession().then((nextSession) => {
+      if (mounted) setSession(nextSession);
+    }).catch(() => {});
+    const { data: authListener } = getSupabaseClient().auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+    return () => {
+      mounted = false;
+      authListener?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  const handleOAuth = async (provider) => {
+    if (!authReady) {
+      setAuthStatus('Supabase auth is not configured for login yet.');
+      return;
+    }
+    setAuthStatus('');
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+      await signInWithProvider(provider, redirectTo);
+      setAuthStatus(`Redirecting to ${provider} sign-in…`);
+    } catch (error) {
+      setAuthStatus(error.message);
+    }
+  };
+
+  const handleMagicLink = async () => {
+    if (!authReady) {
+      setAuthStatus('Supabase auth is not configured for login yet.');
+      return;
+    }
+    if (!authEmail.trim()) return;
+    setAuthStatus('');
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+      await signInWithEmail(authEmail.trim(), redirectTo);
+      setAuthStatus('Magic link sent.');
+    } catch (error) {
+      setAuthStatus(error.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthStatus('');
+    try {
+      await signOut();
+      setAuthStatus('Signed out.');
+    } catch (error) {
+      setAuthStatus(error.message);
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#06070a', color: '#fff' }}>
       <div
@@ -131,6 +192,10 @@ export default function HomePage({ onEnterApp }) {
                 A clearer front door, a cleaner left navigation, and a focused sales intelligence workflow built around dashboard, CRM, leads, assistant, research, outreach, proposals, analytics, connectors, admin, and settings.
               </p>
 
+              <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 13, letterSpacing: 0.3, marginBottom: 18 }}>
+                Click through directly — no username, password, or sign-in gate required.
+              </div>
+
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 32 }}>
                 <button
                   onClick={() => onEnterApp('dashboard')}
@@ -168,6 +233,63 @@ export default function HomePage({ onEnterApp }) {
                   <Plug size={16} />
                   View Connectors
                 </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  marginBottom: 28,
+                  background: 'rgba(255,255,255,0.035)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 18,
+                  padding: 18,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 15 }}>Optional account sign-in</div>
+                    <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 12, marginTop: 4 }}>
+                      Optional website sign-in for connected account access. The platform still opens without login.
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: authReady ? '#4ade80' : 'rgba(255,255,255,0.45)' }}>
+                    {session?.user?.email || (authReady ? 'Supabase auth ready' : 'Auth not configured')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => handleOAuth('google')} style={authButtonStyle(false)}>
+                    Continue with Google
+                  </button>
+                  <button onClick={() => handleOAuth('github')} style={authButtonStyle(false)}>
+                    Continue with GitHub
+                  </button>
+                  {session ? (
+                    <button onClick={handleSignOut} style={authButtonStyle(false)}>
+                      Sign out
+                    </button>
+                  ) : null}
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="you@company.com"
+                    style={{
+                      flex: '1 1 220px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 10,
+                      padding: '11px 12px',
+                      color: '#fff',
+                      outline: 'none',
+                    }}
+                  />
+                  <button onClick={handleMagicLink} style={authButtonStyle(true)}>
+                    Email magic link
+                  </button>
+                </div>
+                {authStatus ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{authStatus}</div> : null}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
@@ -238,4 +360,15 @@ export default function HomePage({ onEnterApp }) {
       </div>
     </div>
   );
+}
+
+function authButtonStyle(primary) {
+  return {
+    background: primary ? GOLD : 'rgba(255,255,255,0.03)',
+    color: primary ? '#090a0d' : '#fff',
+    border: primary ? 'none' : '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    padding: '11px 14px',
+    fontWeight: 700,
+  };
 }

@@ -1,79 +1,109 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
+import { getConnectionPrefs } from './connectionPrefs.js';
 
-const supabaseUrl = import.meta.env.SUPABASE_URL
-const supabaseAnonKey = import.meta.env.SUPABASE_ANON_KEY
+const FALLBACK_SUPABASE_URL = 'https://placeholder.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'placeholder-anon-key';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] SUPABASE_URL or SUPABASE_ANON_KEY not set – auth/data disabled.')
+let cachedClient = null;
+let cachedSignature = '';
+let warnedMissingConfig = false;
+
+function getEnvVar(key) {
+  return import.meta.env[`VITE_${key}`] || import.meta.env[key] || '';
 }
 
-// createClient throws if the URL is an empty string, so fall back to placeholder
-// values that keep the client constructable while still failing gracefully on API calls.
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key'
-)
+export function getSupabaseConfig() {
+  const connectionPrefs = typeof window !== 'undefined' ? getConnectionPrefs() : {};
+  return {
+    url: getEnvVar('SUPABASE_URL') || connectionPrefs.supabaseUrl || '',
+    anonKey: getEnvVar('SUPABASE_ANON_KEY') || connectionPrefs.supabaseAnonKey || '',
+  };
+}
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────
+export function isSupabaseConfigured() {
+  const { url, anonKey } = getSupabaseConfig();
+  return !!(url && anonKey);
+}
+
+export function getSupabaseClient() {
+  const { url, anonKey } = getSupabaseConfig();
+  const signature = `${url}::${anonKey}`;
+
+  if (cachedClient && cachedSignature === signature) {
+    return cachedClient;
+  }
+
+  if (!url || !anonKey) {
+    if (!warnedMissingConfig) {
+      console.warn('[Supabase] SUPABASE_URL or SUPABASE_ANON_KEY not set – auth/data disabled.');
+      warnedMissingConfig = true;
+    }
+  }
+
+  cachedClient = createClient(
+    url || FALLBACK_SUPABASE_URL,
+    anonKey || FALLBACK_SUPABASE_ANON_KEY,
+  );
+  cachedSignature = signature;
+  return cachedClient;
+}
 
 export async function signUp(email, password) {
-  const { data, error } = await supabase.auth.signUp({ email, password })
-  if (error) throw error
-  return data
+  const { data, error } = await getSupabaseClient().auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
 }
 
 export async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) throw error
-  return data
+  const { data, error } = await getSupabaseClient().auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
 }
 
 export async function signInWithProvider(provider, redirectTo) {
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await getSupabaseClient().auth.signInWithOAuth({
     provider,
     options: redirectTo ? { redirectTo } : undefined,
-  })
-  if (error) throw error
-  return data
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function signInWithEmail(email, redirectTo) {
-  const { data, error } = await supabase.auth.signInWithOtp({
+  const { data, error } = await getSupabaseClient().auth.signInWithOtp({
     email,
     options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
-  })
-  if (error) throw error
-  return data
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut()
-  if (error) throw error
+  const { error } = await getSupabaseClient().auth.signOut();
+  if (error) throw error;
 }
 
 export async function getSession() {
-  const { data } = await supabase.auth.getSession()
-  return data.session
+  const { data } = await getSupabaseClient().auth.getSession();
+  return data.session;
 }
 
-// ── Sample CRUD (profiles table) ─────────────────────────────────────────────
-
 export async function getProfile(userId) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseClient()
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single()
-  if (error) throw error
-  return data
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export async function upsertProfile(profile) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseClient()
     .from('profiles')
     .upsert(profile)
     .select()
-    .single()
-  if (error) throw error
-  return data
+    .single();
+  if (error) throw error;
+  return data;
 }

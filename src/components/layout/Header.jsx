@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { House, PanelLeft, Search, Shield, MapPin } from 'lucide-react';
 import { userContext } from '../../data/synthetic.js';
-import { ORCHESTRATOR_MODE } from '../../lib/orchestrator.js';
+import { getConnectionPrefs, subscribeConnectionPrefs } from '../../lib/connectionPrefs.js';
+import { resolveClientProviderState } from '../../lib/providerState.js';
 
 const panelLabels = {
   dashboard: 'Dashboard',
@@ -32,6 +33,7 @@ const panelDescriptions = {
 };
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 
 function BrandLogo() {
   return (
@@ -56,10 +58,35 @@ function BrandLogo() {
 
 export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSidebar, sidebarVisible }) {
   const [search, setSearch] = useState('');
+  const [apiStatus, setApiStatus] = useState(null);
+  const [connectionPrefs, setConnectionPrefs] = useState(getConnectionPrefs());
   const label = panelLabels[activePanel] || 'XPS Intelligence';
   const description = panelDescriptions[activePanel] || 'Focused sales intelligence workspace.';
-  const modeColor = ORCHESTRATOR_MODE === 'live' ? '#22c55e' : '#eab308';
-  const modeLabel = ORCHESTRATOR_MODE === 'live' ? 'Live provider' : 'Synthetic fallback';
+  const runtimeState = resolveClientProviderState(apiStatus, connectionPrefs).llm;
+  const modeColor = runtimeState.active === 'none'
+    ? '#eab308'
+    : runtimeState.active === 'ollama'
+      ? '#60a5fa'
+      : '#22c55e';
+  const modeLabel = runtimeState.active === 'none'
+    ? 'Synthetic fallback'
+    : runtimeState.active === 'ollama'
+      ? 'Ollama local'
+      : `${String(runtimeState.active).toUpperCase()} live`;
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/status`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data) setApiStatus(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setConnectionPrefs(getConnectionPrefs());
+    return subscribeConnectionPrefs(setConnectionPrefs);
+  }, []);
 
   const placeholder = useMemo(() => {
     if (activePanel === 'connectors') return 'Search connectors, providers, or deployment targets…';

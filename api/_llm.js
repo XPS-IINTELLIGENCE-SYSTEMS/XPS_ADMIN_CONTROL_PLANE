@@ -1,5 +1,5 @@
 // Shared LLM caller for Vercel serverless functions
-// Priority: OpenAI → Groq → Gemini → Ollama
+// Priority: Groq → OpenAI → Gemini → Ollama
 
 function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
@@ -11,6 +11,8 @@ const SUGGESTED_MODELS = {
   gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
   ollama: ['llama3.1:8b', 'mistral:7b', 'qwen2.5:7b'],
 };
+
+const DEFAULT_PROVIDER_ORDER = ['groq', 'openai', 'gemini', 'ollama'];
 
 function getRuntimeCredentials(env = process.env, credentials = {}) {
   return {
@@ -65,7 +67,8 @@ export function getProviderCatalog(env = process.env, credentials = {}) {
 
 export function getLlmState(env = process.env, credentials = {}) {
   const providers = getProviderCatalog(env, credentials);
-  const activeEntry = Object.entries(providers).find(([, provider]) => provider.configured) || null;
+  const activeProviderKey = DEFAULT_PROVIDER_ORDER.find((provider) => providers[provider]?.configured) || null;
+  const activeEntry = activeProviderKey ? [activeProviderKey, providers[activeProviderKey]] : null;
   const active = activeEntry?.[0] || 'none';
   const activeProvider = activeEntry?.[1] || null;
 
@@ -73,7 +76,7 @@ export function getLlmState(env = process.env, credentials = {}) {
     active,
     model: activeProvider?.model || null,
     mode: activeProvider?.mode || 'synthetic',
-    reason: activeProvider?.reason || 'No LLM provider configured. Configure OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, GCP_GEMINI_KEY, or OLLAMA_BASE_URL.',
+    reason: activeProvider?.reason || 'No LLM provider configured. Configure GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, GCP_GEMINI_KEY, or OLLAMA_BASE_URL.',
     providers,
   };
 }
@@ -187,13 +190,13 @@ export async function callLLM(messages, { model, provider = 'auto', json = false
     }
   }
 
-  if (runtime.openaiApiKey) {
-    return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json, runtime.openaiApiKey);
-  }
   if (runtime.groqApiKey) {
     // Note: json=true (response_format: json_object) is an OpenAI-only feature;
     // Groq and Ollama ignore this parameter and return plain text.
     return callGroq(messages, model || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', runtime.groqApiKey);
+  }
+  if (runtime.openaiApiKey) {
+    return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json, runtime.openaiApiKey);
   }
   if (runtime.geminiApiKey) {
     return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json, runtime.geminiApiKey);
@@ -201,7 +204,7 @@ export async function callLLM(messages, { model, provider = 'auto', json = false
   if (runtime.ollamaBaseUrl) {
     return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3.1:8b', runtime.ollamaBaseUrl);
   }
-  throw new Error('No LLM provider configured. Set OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL.');
+  throw new Error('No LLM provider configured. Set GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL.');
 }
 
 export function llmMode(credentials = {}) {

@@ -106,7 +106,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), devApiRuntime({ proxyTarget: apiProxyUrl })],
     base,
     // Expose env vars that start with any of these service-name prefixes to the browser
-    envPrefix: ['SUPABASE_', 'OPENAI_', 'GITHUB_', 'VERCEL_', 'GROQ_', 'GCP_', 'GEMINI_', 'OLLAMA_', 'HUBSPOT_', 'AIRTABLE_', 'BROWSER_', 'TWILIO_', 'SENDGRID_', 'GPT_', 'API_', 'BASE_'],
+    envPrefix: ['VITE_', 'SUPABASE_', 'OPENAI_', 'GITHUB_', 'VERCEL_', 'GROQ_', 'GCP_', 'GEMINI_', 'OLLAMA_', 'HUBSPOT_', 'AIRTABLE_', 'BROWSER_', 'TWILIO_', 'SENDGRID_', 'GPT_', 'API_', 'BASE_'],
     build: {
       outDir: 'dist',
       sourcemap: false,
