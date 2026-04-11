@@ -33,7 +33,7 @@ async function handleRun(req, res) {
     title: `${action} ${url}`,
     status: 'queued',
     mode: workerUrl ? 'local' : 'blocked',
-    source: 'api/browser',
+    source: 'api/browser/run',
     target: workerUrl || null,
     detail: `Browser job queued for ${url} (${runtime_target}/${deployment_target})`,
   });
@@ -53,7 +53,7 @@ async function handleRun(req, res) {
         title: `${action} ${url}`,
         status: data.status || (upstream.ok ? 'running' : 'error'),
         mode: data.mode || 'local',
-        source: 'api/browser',
+        source: 'api/browser/run',
         target: workerUrl,
         detail: `Browser worker responded with ${data.status || upstream.status}`,
       });
@@ -81,7 +81,7 @@ async function handleRun(req, res) {
         title: `${action} ${url}`,
         status: 'error',
         mode: 'local',
-        source: 'api/browser',
+        source: 'api/browser/run',
         target: workerUrl,
         error: err.message,
         detail: `Worker proxy error: ${err.message}`,
@@ -108,7 +108,7 @@ async function handleRun(req, res) {
     title: `${action} ${url}`,
     status: 'blocked',
     mode: 'blocked',
-    source: 'api/browser',
+    source: 'api/browser/run',
     blockedReason: 'BROWSER_WORKER_URL not configured.',
     detail: 'Browser job blocked because no worker target exists.',
   });
@@ -168,7 +168,7 @@ async function handleStatus(req, res) {
         title: `browser ${job_id}`,
         status: data.status || (upstream.ok ? 'running' : 'error'),
         mode: data.mode || 'local',
-        source: 'api/browser',
+        source: 'api/browser/status',
         target: workerUrl,
         detail: `Browser status polled: ${data.status || upstream.status}`,
       });
@@ -180,7 +180,7 @@ async function handleStatus(req, res) {
         title: `browser ${job_id}`,
         status: 'error',
         mode: 'local',
-        source: 'api/browser',
+        source: 'api/browser/status',
         target: workerUrl,
         error: err.message,
         detail: `Browser status poll failed: ${err.message}`,
@@ -195,7 +195,7 @@ async function handleStatus(req, res) {
     title: `browser ${job_id}`,
     status: 'blocked',
     mode: 'blocked',
-    source: 'api/browser',
+    source: 'api/browser/status',
     blockedReason: 'No browser worker configured.',
     detail: 'Browser status requested without worker target.',
   });
@@ -233,7 +233,7 @@ async function handleCancel(req, res) {
         title: `browser ${job_id}`,
         status: data.status || 'cancelled',
         mode: data.mode || 'local',
-        source: 'api/browser',
+        source: 'api/browser/cancel',
         target: workerUrl,
         detail: `Browser job ${job_id} cancel requested.`,
       });
@@ -254,7 +254,7 @@ async function handleCancel(req, res) {
         title: `browser ${job_id}`,
         status: 'error',
         mode: 'local',
-        source: 'api/browser',
+        source: 'api/browser/cancel',
         target: workerUrl,
         error: err.message,
         detail: `Browser cancel failed: ${err.message}`,
@@ -269,7 +269,7 @@ async function handleCancel(req, res) {
     title: `browser ${job_id}`,
     status: 'cancelled',
     mode: 'blocked',
-    source: 'api/browser',
+    source: 'api/browser/cancel',
     detail: `Browser job ${job_id} cancelled without worker target.`,
   });
   return res.status(200).json({
