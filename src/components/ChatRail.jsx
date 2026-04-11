@@ -315,7 +315,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
   const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
-  const resolvedProviderState = mergeProviderState(providerState, connectionPrefs);
+  const resolvedProviderState = resolveClientProviderState(providerState, connectionPrefs);
   const providerOptions = buildProviderOptions(resolvedProviderState);
   const providerMap = Object.fromEntries(providerOptions.map(opt => [opt.id, opt]));
   const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
@@ -358,6 +358,23 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     onNavigate?.('workspace');
     persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
   }, [createObject, onNavigate]);
+
+  const pushRuntimeMessage = useCallback((content, mode = 'synthetic', meta = {}) => {
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content,
+      agent,
+      mode,
+      synthetic: mode === 'synthetic',
+      profileLabel: selectedModelProfile?.label,
+    }]);
+    commitToWorkspace({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: mode === 'blocked' ? 'Provider Blocked' : 'Runtime State',
+      content,
+      meta,
+    }, agent, content);
+  }, [agent, commitToWorkspace, selectedModelProfile?.label]);
 
   const ensureUiEditor = useCallback(() => {
     const existing = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor);
@@ -621,25 +638,19 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     }
 
     if (selectedProvider === 'synthetic') {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Provider set to synthetic — no live call executed.', agent, mode: 'synthetic' }]);
+      pushRuntimeMessage('Provider set to synthetic — no live call executed.', 'synthetic', { provider: 'synthetic', profileId: selectedModelProfile?.id || null });
       setLoading(false);
       return;
     }
 
     if (selectedProvider !== 'auto' && !selectedProviderOption?.available) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, agent, mode: 'synthetic' }]);
+      pushRuntimeMessage(`Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, 'blocked', { provider: selectedProvider, reason: selectedProviderOption?.note || 'Not configured' });
       setLoading(false);
       return;
     }
 
     if (selectedModelProfile && !selectedModelProfile.available) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Model profile blocked: ${selectedModelProfile.truth}`,
-        agent,
-        mode: 'synthetic',
-        profileLabel: selectedModelProfile.label,
-      }]);
+      pushRuntimeMessage(`Model profile blocked: ${selectedModelProfile.truth}`, 'blocked', { provider: selectedModelProfile.provider, profileId: selectedModelProfile.id, reason: selectedModelProfile.truth });
       setLoading(false);
       return;
     }
@@ -717,7 +728,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         }
         persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Research request failed: ${err.message}`, agent, synthetic: true }]);
+        pushRuntimeMessage(`Research request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
       }
       return;
     }
@@ -752,7 +763,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           persistScrapeJob({ url, prompt, status: 'complete', result: data.summary, rawContent: null, mode: data.mode || 'synthetic' }).catch(() => {});
         }
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Scrape request failed: ${err.message}`, agent, synthetic: true }]);
+        pushRuntimeMessage(`Scrape request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
       }
       return;
     }
@@ -798,14 +809,31 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       setMessages(prev => [...prev, {
         role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic', profileLabel: selectedModelProfile?.label,
       }]);
-      setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
+      patchObject(wsObjId, {
+        content: reply,
+        progress: 100,
+        steps: data.steps || [],
+        meta: {
+          provider: data.provider || effectiveProvider,
+          model: data.model || effectiveModel,
+          mode: evtMode,
+          eventType: evtType,
+          blockedReason: data.blocked_reason || null,
+        },
+      });
+      setStatus(wsObjId, evtType === 'run_failed' || evtType === 'run_blocked' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
 
       if (evtType !== 'run_failed' && wsObj) {
         commitToWorkspace(wsObj, agent, prompt);
       } else if (evtType !== 'run_failed') {
         commitToWorkspace({ type: detectObjectType(reply, agent), title: deriveTitle(reply, agent) || prompt.slice(0, 55), content: reply }, agent, prompt);
       }
-    } catch {
+    } catch (err) {
+      patchObject(wsObjId, {
+        content: `Request failed before a backend response was returned.\n\n${err.message}`,
+        progress: 100,
+        meta: { provider: effectiveProvider, model: effectiveModel, mode: 'synthetic', error: err.message },
+      });
       setStatus(wsObjId, RUN_STATUS.ERROR);
       const syntheticReplies = {
         orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
@@ -1378,8 +1406,18 @@ function ActiveJobsSummary({ jobs }) {
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   const agentInfo = AGENTS.find(a => a.id === msg.agent);
-  const modeColor = msg.mode === 'live' ? '#4ade80' : msg.mode === 'synthetic' || msg.synthetic ? '#fbbf24' : 'rgba(255,255,255,0.25)';
-  const modeLabel = msg.mode === 'live' ? 'live' : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
+  const modeColor = msg.mode === 'live'
+    ? '#4ade80'
+    : msg.mode === 'local'
+      ? '#60a5fa'
+      : msg.mode === 'blocked'
+        ? '#ef4444'
+        : msg.mode === 'synthetic' || msg.synthetic
+          ? '#fbbf24'
+          : 'rgba(255,255,255,0.25)';
+  const modeLabel = ['live', 'local', 'blocked'].includes(msg.mode)
+    ? msg.mode
+    : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
   const ModeInfo = msg.mode ? MODES.find(m => m.id === msg.mode) : null;
 
   if (isUser) {
