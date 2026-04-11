@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, RefreshCw, Shield, UserRoundCheck, Wand2 } from 'lucide-react';
 import Panel from '../components/ui/Panel.jsx';
-import { getSession, getSupabaseClient, signInWithProvider, signInWithEmail, signOut } from '../lib/supabaseClient.js';
+import { getSession, getSupabaseClient, isSupabaseConfigured, signInWithProvider, signInWithEmail, signOut } from '../lib/supabaseClient.js';
 import { getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
 
-const API_URL = import.meta.env.API_URL || '';
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 const GOLD = '#d4a843';
 
 function statusTone(mode) {
@@ -101,6 +101,7 @@ export default function AdminPage() {
   const [authStatus, setAuthStatus] = useState('');
   const [governance, setGovernanceState] = useState(getGovernance());
   const [connectionPrefs, setConnectionPrefsState] = useState(getConnectionPrefs());
+  const authConfigured = isSupabaseConfigured();
 
   const fetchStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -121,6 +122,10 @@ export default function AdminPage() {
   }, [fetchStatus]);
 
   useEffect(() => {
+    if (!authConfigured) {
+      setSession(null);
+      return undefined;
+    }
     let mounted = true;
     getSession().then((nextSession) => {
       if (mounted) setSession(nextSession);
@@ -132,7 +137,7 @@ export default function AdminPage() {
       mounted = false;
       authListener?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, [authConfigured]);
 
   useEffect(() => {
     setGovernanceState(getGovernance());
@@ -172,6 +177,10 @@ export default function AdminPage() {
   const accountEntries = useMemo(() => buildAccountEntries(liveStatus), [liveStatus]);
 
   const handleOAuth = async (provider) => {
+    if (!authConfigured) {
+      setAuthStatus('Supabase auth is not configured yet.');
+      return;
+    }
     setAuthStatus('');
     try {
       const redirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
@@ -183,6 +192,10 @@ export default function AdminPage() {
   };
 
   const handleEmailSignIn = async () => {
+    if (!authConfigured) {
+      setAuthStatus('Supabase auth is not configured yet.');
+      return;
+    }
     if (!authEmail) return;
     setAuthStatus('');
     try {
@@ -195,6 +208,10 @@ export default function AdminPage() {
   };
 
   const handleSignOut = async () => {
+    if (!authConfigured) {
+      setAuthStatus('Supabase auth is not configured yet.');
+      return;
+    }
     setAuthStatus('');
     try {
       await signOut();
@@ -246,14 +263,14 @@ export default function AdminPage() {
         ) : null}
       </Panel>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 18 }}>
         <SummaryCard label="Connected" value={connectedSystems.length} note={connectedSystems.join(' · ') || 'No live systems'} />
         <SummaryCard label="Blocked" value={blockedSystems.length} note={blockedSystems.slice(0, 4).join(' · ') || 'None'} />
         <SummaryCard label="Access" value={session?.user?.email || 'Signed out'} note="Supabase auth state" />
         <SummaryCard label="Approval mode" value={governance.requireApproval ? 'On' : 'Off'} note={`Autonomy: ${governance.autonomyLevel}`} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)', gap: 18, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Panel title="Core connectors" subtitle="Keep only the systems that support the intended app experience">
             <div>
@@ -279,22 +296,23 @@ export default function AdminPage() {
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 Workspace entry stays click-through. Connected auth here is optional and only used for linked admin actions.
+                {!authConfigured ? ' Configure Supabase URL and anon key to enable live sign-in.' : ''}
               </div>
-              <button data-testid="auth-google-btn" onClick={() => handleOAuth('google')} style={authButtonStyle()}>
+              <button data-testid="auth-google-btn" disabled={!authConfigured} onClick={() => handleOAuth('google')} style={authButtonStyle(false, !authConfigured)}>
                 <UserRoundCheck size={14} />
                 Continue with Google
               </button>
-              <button data-testid="auth-github-btn" onClick={() => handleOAuth('github')} style={authButtonStyle()}>
+              <button data-testid="auth-github-btn" disabled={!authConfigured} onClick={() => handleOAuth('github')} style={authButtonStyle(false, !authConfigured)}>
                 <Shield size={14} />
                 Continue with GitHub
               </button>
               <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
-                <input value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@company.com" style={{ background: 'var(--bg-card-alt)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 12px', color: 'var(--text-primary)', outline: 'none' }} />
-                <button data-testid="auth-email-btn" onClick={handleEmailSignIn} style={authButtonStyle(true)}>
+                <input disabled={!authConfigured} value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@company.com" style={{ background: 'var(--bg-card-alt)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 12px', color: 'var(--text-primary)', outline: 'none', opacity: authConfigured ? 1 : 0.55 }} />
+                <button data-testid="auth-email-btn" disabled={!authConfigured} onClick={handleEmailSignIn} style={authButtonStyle(true, !authConfigured)}>
                   <Wand2 size={14} />
                   Email magic link
                 </button>
-                <button onClick={handleSignOut} style={secondaryButtonStyle()}>
+                <button disabled={!authConfigured} onClick={handleSignOut} style={secondaryButtonStyle(!authConfigured)}>
                   Sign out
                 </button>
               </div>
@@ -359,7 +377,7 @@ function MetaRow({ label, value }) {
   );
 }
 
-function authButtonStyle(primary = false) {
+function authButtonStyle(primary = false, disabled = false) {
   return {
     display: 'inline-flex',
     alignItems: 'center',
@@ -372,10 +390,12 @@ function authButtonStyle(primary = false) {
     background: primary ? GOLD : 'var(--bg-card-alt)',
     color: primary ? '#090a0d' : 'var(--text-primary)',
     fontWeight: 700,
+    opacity: disabled ? 0.55 : 1,
+    cursor: disabled ? 'not-allowed' : 'pointer',
   };
 }
 
-function secondaryButtonStyle() {
+function secondaryButtonStyle(disabled = false) {
   return {
     display: 'inline-flex',
     alignItems: 'center',
@@ -388,5 +408,7 @@ function secondaryButtonStyle() {
     background: 'transparent',
     color: 'var(--text-secondary)',
     fontWeight: 600,
+    opacity: disabled ? 0.55 : 1,
+    cursor: disabled ? 'not-allowed' : 'pointer',
   };
 }

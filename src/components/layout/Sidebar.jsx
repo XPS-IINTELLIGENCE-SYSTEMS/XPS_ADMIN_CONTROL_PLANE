@@ -1,9 +1,10 @@
 import React from 'react';
 import {
+  BookOpen,
+  Bot,
   LayoutDashboard,
   Users,
   Target,
-  Bot,
   FlaskConical,
   Send,
   FileText,
@@ -12,6 +13,7 @@ import {
   Shield,
   Settings,
   ChevronRight,
+  Eye,
 } from 'lucide-react';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -36,6 +38,7 @@ const sections = [
   {
     label: 'OVERVIEW',
     items: [
+      { id: 'workspace', label: 'Workspace', icon: Bot },
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'crm', label: 'CRM', icon: Users },
       { id: 'leads', label: 'Leads', icon: Target },
@@ -44,17 +47,23 @@ const sections = [
   {
     label: 'WORKFLOW',
     items: [
-      { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
       { id: 'research', label: 'Research Lab', icon: FlaskConical },
       { id: 'outreach', label: 'Outreach', icon: Send },
       { id: 'proposals', label: 'Proposals', icon: FileText },
     ],
   },
   {
-    label: 'PLATFORM',
+    label: 'INTELLIGENCE',
     items: [
+      { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
+      { id: 'competition', label: 'Competition', icon: Eye },
       { id: 'analytics', label: 'Analytics', icon: BarChart2 },
       { id: 'connectors', label: 'Connectors', icon: Plug },
+    ],
+  },
+  {
+    label: 'CONTROL',
+    items: [
       { id: 'admin', label: 'Admin', icon: Shield },
       { id: 'settings', label: 'Settings', icon: Settings },
     ],
