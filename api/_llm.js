@@ -197,18 +197,39 @@ export function hasLLM(credentials = {}) {
   return getLlmState(process.env, credentials).active !== 'none';
 }
 
+function buildConnectorState(configured, {
+  modeWhenConfigured = 'live',
+  reason = null,
+  capabilityState = 'connected',
+} = {}) {
+  return {
+    status: configured ? 'connected' : 'not_connected',
+    mode: configured ? modeWhenConfigured : 'blocked',
+    capability_state: configured ? capabilityState : 'blocked',
+    reason: configured ? null : reason,
+  };
+}
+
 export function connectorState() {
   const llm = getLlmState();
+  const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+  const sendgridConfigured = !!process.env.SENDGRID_API_KEY;
+  const sendgridWriteEnabled = !!(sendgridConfigured && process.env.SENDGRID_FROM_EMAIL);
   return {
-    supabase: { status: !!process.env.SUPABASE_URL ? 'connected' : 'not_connected', mode: !!process.env.SUPABASE_URL ? 'live' : 'blocked' },
-    llm:      { status: hasLLM() ? 'connected' : 'not_connected', mode: llm.mode, active: llm.active, reason: llm.reason },
-    openai:   { status: llm.providers.openai.configured ? 'connected' : 'not_connected', mode: llm.providers.openai.mode, reason: llm.providers.openai.reason },
-    groq:     { status: llm.providers.groq.configured ? 'connected' : 'not_connected', mode: llm.providers.groq.mode, reason: llm.providers.groq.reason },
-    gemini:   { status: llm.providers.gemini.configured ? 'connected' : 'not_connected', mode: llm.providers.gemini.mode, reason: llm.providers.gemini.reason },
-    ollama:   { status: llm.providers.ollama.configured ? 'connected' : 'not_connected', mode: llm.providers.ollama.mode, reason: llm.providers.ollama.reason },
-    hubspot:  { status: !!process.env.HUBSPOT_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.HUBSPOT_API_KEY ? 'live' : 'blocked' },
-    airtable: { status: !!process.env.AIRTABLE_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.AIRTABLE_API_KEY ? 'live' : 'blocked' },
-    browser:  { status: !!process.env.BROWSER_WORKER_URL ? 'connected' : 'not_connected', mode: !!process.env.BROWSER_WORKER_URL ? 'local' : 'blocked' },
+    supabase: buildConnectorState(!!process.env.SUPABASE_URL, {
+      reason: 'SUPABASE_URL not set.',
+      capabilityState: 'connected',
+    }),
+    llm:      { status: hasLLM() ? 'connected' : 'not_connected', mode: llm.mode, active: llm.active, reason: llm.reason, capability_state: hasLLM() ? 'connected' : 'blocked' },
+    openai:   { ...buildConnectorState(llm.providers.openai.configured, { reason: llm.providers.openai.reason, capabilityState: 'connected' }), mode: llm.providers.openai.mode },
+    groq:     { ...buildConnectorState(llm.providers.groq.configured, { reason: llm.providers.groq.reason, capabilityState: 'connected' }), mode: llm.providers.groq.mode },
+    gemini:   { ...buildConnectorState(llm.providers.gemini.configured, { reason: llm.providers.gemini.reason, capabilityState: 'connected' }), mode: llm.providers.gemini.mode },
+    ollama:   { ...buildConnectorState(llm.providers.ollama.configured, { modeWhenConfigured: 'local', reason: llm.providers.ollama.reason, capabilityState: 'local-only' }), mode: llm.providers.ollama.mode },
+    hubspot:  buildConnectorState(!!process.env.HUBSPOT_API_KEY, { reason: 'HUBSPOT_API_KEY not set.', capabilityState: 'token-configured' }),
+    airtable: buildConnectorState(!!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID), { reason: 'AIRTABLE_API_KEY or AIRTABLE_BASE_ID not set.', capabilityState: 'token-configured' }),
+    browser:  buildConnectorState(!!process.env.BROWSER_WORKER_URL, { modeWhenConfigured: 'local', reason: 'BROWSER_WORKER_URL not set.', capabilityState: 'local-only' }),
+    twilio:   buildConnectorState(twilioConfigured, { reason: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set.', capabilityState: 'token-configured' }),
+    sendgrid: buildConnectorState(sendgridConfigured, { reason: 'SENDGRID_API_KEY not set.', capabilityState: sendgridWriteEnabled ? 'write-enabled' : 'token-configured' }),
   };
 }
 

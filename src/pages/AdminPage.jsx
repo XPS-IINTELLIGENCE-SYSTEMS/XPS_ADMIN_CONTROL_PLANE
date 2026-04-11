@@ -16,7 +16,7 @@ import {
   Key, Server, RefreshCw, Shield,
   BookOpen, Zap, Code, Package, GitPullRequest,
   Users, HardDrive, Brain, Cloud,
-  Ban, Info, GitCommit, Tag, Workflow, Eye,
+  Ban, Info, GitCommit, Tag, Workflow, Eye, PhoneCall, Clapperboard, LayoutPanelTop,
 } from 'lucide-react';
 import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
 import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
@@ -43,6 +43,8 @@ const GEMINI_CONFIGURED  = isSet('GEMINI_API_KEY') || isSet('GCP_GEMINI_KEY');
 const HUBSPOT_CONFIGURED = isSet('HUBSPOT_API_KEY');
 const AIRTABLE_CONFIGURED = isSet('AIRTABLE_API_KEY') && isSet('AIRTABLE_BASE_ID');
 const BROWSER_WORKER_CONFIGURED = isSet('BROWSER_WORKER_URL');
+const TWILIO_CONFIGURED = isSet('TWILIO_ACCOUNT_SID') && isSet('TWILIO_AUTH_TOKEN');
+const SENDGRID_CONFIGURED = isSet('SENDGRID_API_KEY');
 
 // Status types
 const STATUS = {
@@ -341,6 +343,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
     { id: 'supabase',     label: 'Supabase',         icon: Database },
     { id: 'vercel',       label: 'Vercel',           icon: Cloud },
     { id: 'google',       label: 'Google Workspace', icon: Mail },
+    { id: 'communications', label: 'Communications', icon: PhoneCall },
+    { id: 'builder',      label: 'Builder',          icon: LayoutPanelTop },
     { id: 'system',       label: 'System',           icon: Server },
     { id: 'governance',   label: 'Governance',       icon: Shield },
     { id: 'users',        label: 'Access',           icon: Users },
@@ -358,6 +362,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
   const hubspotConfigured = !!(live.hubspot?.configured || connectionPrefs.hubspotApiKey || HUBSPOT_CONFIGURED);
   const airtableConfigured = live.airtable?.configured ?? AIRTABLE_CONFIGURED;
   const browserWorkerConfigured = live.browser?.configured ?? BROWSER_WORKER_CONFIGURED;
+  const twilioConfigured = !!(live.twilio?.configured || (connectionPrefs.twilioAccountSid && connectionPrefs.twilioAuthToken) || TWILIO_CONFIGURED);
+  const sendgridConfigured = !!(live.sendgrid?.configured || connectionPrefs.sendgridApiKey || SENDGRID_CONFIGURED);
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -491,6 +497,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             hubspotConfigured={hubspotConfigured}
             airtableConfigured={airtableConfigured}
             browserWorkerConfigured={browserWorkerConfigured}
+            twilioConfigured={twilioConfigured}
+            sendgridConfigured={sendgridConfigured}
             connectionPrefs={connectionPrefs}
             onUpdateConnectionPrefs={updateSessionConnections}
             onResetConnectionPrefs={resetSessionConnections}
@@ -500,6 +508,22 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
         {activeSection === 'supabase'  && <SupabaseSection configured={sbConfigured} liveStatus={live} />}
         {activeSection === 'vercel'    && <VercelSection configured={vercelConfigured} liveStatus={live} />}
         {activeSection === 'google'    && <GoogleSection configured={googleConfigured} geminiConfigured={geminiConfigured} liveStatus={live} />}
+        {activeSection === 'communications' && (
+          <CommunicationsSection
+            twilioConfigured={twilioConfigured}
+            sendgridConfigured={sendgridConfigured}
+            liveStatus={live}
+          />
+        )}
+        {activeSection === 'builder' && (
+          <BuilderSection
+            browserWorkerConfigured={browserWorkerConfigured}
+            openaiConfigured={openaiConfigured}
+            geminiConfigured={geminiConfigured}
+            ghConfigured={ghConfigured}
+            liveStatus={live}
+          />
+        )}
         {activeSection === 'system'    && (
           <SystemSection
             openaiConfigured={openaiConfigured}
@@ -545,6 +569,8 @@ function IntegrationsSection({
   hubspotConfigured,
   airtableConfigured,
   browserWorkerConfigured,
+  twilioConfigured,
+  sendgridConfigured,
   connectionPrefs,
   onUpdateConnectionPrefs,
   onResetConnectionPrefs,
@@ -630,6 +656,10 @@ function IntegrationsSection({
           supabase: sbConfigured,
           vercel: vercelConfigured,
           hubspot: hubspotConfigured,
+          airtable: airtableConfigured,
+          browser: browserWorkerConfigured,
+          twilio: twilioConfigured,
+          sendgrid: sendgridConfigured,
         }}
       />
 
@@ -789,6 +819,30 @@ function IntegrationsSection({
         <CapRow icon={Globe}    label="Browser job execution"                    status={browserStatus} note="BROWSER_WORKER_URL" />
         <CapRow icon={Activity} label="Screenshots / evidence"                   status={browserStatus} />
         <CapRow icon={Eye}      label="DOM extraction + summaries"               status={browserStatus} />
+      </CapPanel>
+
+      <CapPanel
+        icon={PhoneCall}
+        title="Twilio"
+        subtitle="Inbound/outbound calling control surface"
+        status={deriveStatus(twilioConfigured)}
+        defaultOpen={false}
+      >
+        <CapRow icon={PhoneCall} label="Outbound call staging"                   status={deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID" />
+        <CapRow icon={Mail}      label="Inbound webhook readiness"               status={deriveStatus(twilioConfigured)} />
+        <CapRow icon={Ban}       label="AI autonomous calling"                   status={STATUS.BLOCKED} note="Execution endpoint not yet wired" />
+      </CapPanel>
+
+      <CapPanel
+        icon={Mail}
+        title="SendGrid"
+        subtitle="Outbound email orchestration surface"
+        status={deriveStatus(sendgridConfigured)}
+        defaultOpen={false}
+      >
+        <CapRow icon={Mail}      label="Outbound email staging"                  status={deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
+        <CapRow icon={Workflow}  label="Template + workflow handoff"             status={deriveStatus(sendgridConfigured)} />
+        <CapRow icon={Ban}       label="Autonomous send execution"               status={STATUS.BLOCKED} note="Execution endpoint not yet wired" />
       </CapPanel>
     </div>
   );
@@ -956,6 +1010,48 @@ function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onR
       fields: [{ key: 'hubspotApiKey', label: 'Session token', placeholder: 'pat-…', secret: true }],
       status: statuses.hubspot || !!connectionPrefs.hubspotApiKey ? STATUS.LIVE : STATUS.BLOCKED,
       note: statuses.hubspot ? 'Backend token configured.' : connectionPrefs.hubspotApiKey ? 'Browser session token configured.' : 'Requires HUBSPOT_API_KEY or a session token.',
+    },
+    {
+      key: 'airtable',
+      title: 'Airtable',
+      description: 'Session-scoped base and token for staging mirrors.',
+      fields: [
+        { key: 'airtableApiKey', label: 'Session token', placeholder: 'pat…', secret: true },
+        { key: 'airtableBaseId', label: 'Base ID', placeholder: 'app…' },
+      ],
+      status: statuses.airtable || (!!connectionPrefs.airtableApiKey && !!connectionPrefs.airtableBaseId) ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.airtable ? 'Backend Airtable credentials configured.' : connectionPrefs.airtableApiKey ? 'Browser session Airtable credentials configured.' : 'Requires AIRTABLE_API_KEY + AIRTABLE_BASE_ID.',
+    },
+    {
+      key: 'browser',
+      title: 'Browser Worker',
+      description: 'Optional session worker URL for local/browser automation substitute path.',
+      fields: [{ key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'http://localhost:3001' }],
+      status: statuses.browser || !!connectionPrefs.browserWorkerUrl ? STATUS.LOCAL : STATUS.BLOCKED,
+      note: statuses.browser ? 'Backend browser worker configured.' : connectionPrefs.browserWorkerUrl ? 'Browser session worker configured.' : 'Requires BROWSER_WORKER_URL or a session worker URL.',
+    },
+    {
+      key: 'twilio',
+      title: 'Twilio',
+      description: 'Calling control surface for truthful inbound/outbound orchestration state.',
+      fields: [
+        { key: 'twilioAccountSid', label: 'Account SID', placeholder: 'AC…' },
+        { key: 'twilioAuthToken', label: 'Auth token', placeholder: '••••', secret: true },
+        { key: 'twilioPhoneNumber', label: 'Phone number', placeholder: '+15555555555' },
+      ],
+      status: statuses.twilio || (!!connectionPrefs.twilioAccountSid && !!connectionPrefs.twilioAuthToken) ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.twilio ? 'Backend Twilio credentials configured.' : connectionPrefs.twilioAccountSid ? 'Browser session Twilio credentials configured.' : 'Requires TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN.',
+    },
+    {
+      key: 'sendgrid',
+      title: 'SendGrid',
+      description: 'Outbound email control surface with truthful staging state.',
+      fields: [
+        { key: 'sendgridApiKey', label: 'API key', placeholder: 'SG.…', secret: true },
+        { key: 'sendgridFromEmail', label: 'From email', placeholder: 'ops@example.com' },
+      ],
+      status: statuses.sendgrid || !!connectionPrefs.sendgridApiKey ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.sendgrid ? 'Backend SendGrid credentials configured.' : connectionPrefs.sendgridApiKey ? 'Browser session SendGrid credentials configured.' : 'Requires SENDGRID_API_KEY.',
     },
   ];
 
@@ -1504,6 +1600,85 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
   );
 }
 
+function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatus }) {
+  const twilio = liveStatus?.twilio || {};
+  const sendgrid = liveStatus?.sendgrid || {};
+
+  return (
+    <div data-testid="admin-communications-panel">
+      <div style={{ marginBottom: 20 }}>
+        <h2 className="xps-gold-text" style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3, marginBottom: 4 }}>
+          Communications Orchestration
+        </h2>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+          Token-driven control surfaces for calling and email. Execution remains truthful: staged where supported, blocked where not yet wired.
+        </p>
+      </div>
+
+      <CapPanel icon={PhoneCall} title="Twilio Calling" subtitle="Inbound/outbound telephony surfaces" status={deriveStatus(twilioConfigured)} defaultOpen>
+        <CapRow icon={PhoneCall} label="Outbound call staging" status={deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN" />
+        <CapRow icon={Activity}  label="Inbound webhook readiness" status={deriveStatus(twilioConfigured)} />
+        <CapRow icon={Workflow}  label="AI call workflow handoff" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+      </CapPanel>
+
+      <CapPanel icon={Mail} title="SendGrid Email" subtitle="Outbound email orchestration" status={deriveStatus(sendgridConfigured)} defaultOpen={false}>
+        <CapRow icon={Mail}     label="Outbound email staging" status={deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
+        <CapRow icon={Workflow} label="Template + runbook handoff" status={deriveStatus(sendgridConfigured)} />
+        <CapRow icon={Ban}      label="Autonomous send execution" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+      </CapPanel>
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
+          CAPABILITY TRUTH
+        </div>
+        <InfoRow label="Twilio state" value={twilio.capabilityState || (twilioConfigured ? 'token-configured' : 'blocked')} />
+        <InfoRow label="Twilio number" value={twilio.phoneNumber || 'Not configured'} />
+        <InfoRow label="SendGrid state" value={sendgrid.capabilityState || (sendgridConfigured ? 'token-configured' : 'blocked')} />
+        <InfoRow label="From email" value={sendgrid.fromEmail || 'Not configured'} />
+      </div>
+    </div>
+  );
+}
+
+function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfigured, ghConfigured, liveStatus }) {
+  const media = liveStatus?.operatorModules?.media || {};
+  const siteMutation = liveStatus?.operatorModules?.siteMutation || {};
+  const orchestration = liveStatus?.operatorModules?.orchestration || {};
+
+  return (
+    <div data-testid="admin-builder-panel">
+      <div style={{ marginBottom: 20 }}>
+        <h2 className="xps-gold-text" style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3, marginBottom: 4 }}>
+          Builder / Mutation Runtime
+        </h2>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+          Governs site editing, media surfaces, workflow orchestration, and repo-linked mutation truth.
+        </p>
+      </div>
+
+      <CapPanel icon={LayoutPanelTop} title="Site Mutation" subtitle="Preview, apply, rollback, governed mutation" status={STATUS.LIVE} defaultOpen>
+        <CapRow icon={LayoutPanelTop} label="UI preview + apply flow" status={STATUS.LIVE} note={siteMutation.ui_preview || 'write-enabled'} />
+        <CapRow icon={RefreshCw}      label="Rollback flow"           status={STATUS.LIVE} note={siteMutation.rollback_flow || 'write-enabled'} />
+        <CapRow icon={GitBranch}      label="Repo-linked mutation path" status={deriveStatus(ghConfigured)} note={siteMutation.repo_mutation || 'blocked'} />
+      </CapPanel>
+
+      <CapPanel icon={Clapperboard} title="Media Surfaces" subtitle="Image/video generation and editing truth" status={openaiConfigured || geminiConfigured ? STATUS.SYNTHETIC : STATUS.BLOCKED} defaultOpen={false}>
+        <CapRow icon={Sparkles} label="Image generation" status={openaiConfigured || geminiConfigured ? STATUS.SYNTHETIC : STATUS.BLOCKED} note={media.image_generation || 'blocked'} />
+        <CapRow icon={Sparkles} label="Image editing"    status={openaiConfigured ? STATUS.SYNTHETIC : STATUS.BLOCKED} note={media.image_editing || 'blocked'} />
+        <CapRow icon={Clapperboard} label="Video generation" status={STATUS.BLOCKED} note={media.video_generation || 'unimplemented'} />
+        <CapRow icon={Clapperboard} label="Video editing"    status={STATUS.BLOCKED} note={media.video_editing || 'unimplemented'} />
+      </CapPanel>
+
+      <CapPanel icon={Workflow} title="Orchestration Runtime" subtitle="Async queues, parallel groups, browser jobs" status={browserWorkerConfigured ? STATUS.LOCAL : STATUS.SYNTHETIC} defaultOpen={false}>
+        <CapRow icon={Workflow} label="Async runs"        status={STATUS.LIVE} note={orchestration.async_runs || 'write-enabled'} />
+        <CapRow icon={Activity} label="Parallel groups"   status={STATUS.LIVE} note={orchestration.parallel_groups || 'write-enabled'} />
+        <CapRow icon={Package}  label="Staged exports"    status={liveStatus?.supabase?.configured ? STATUS.LIVE : STATUS.LOCAL} note={orchestration.staged_exports || 'local-only'} />
+        <CapRow icon={Globe}    label="Browser jobs"      status={browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED} note={orchestration.browser_jobs || 'blocked'} />
+      </CapPanel>
+    </div>
+  );
+}
+
 // ── Utility components ─────────────────────────────────────────────────────
 function InfoRow({ label, value }) {
   return (
@@ -1663,6 +1838,7 @@ function GovernanceSection({ governance, onChange, sbConfigured }) {
   const config = governance || DEFAULT_GOVERNANCE;
   const toggles = [
     { key: 'allowUiEdits', label: 'Allow UI edits', note: 'Enable center-surface editing controls.' },
+    { key: 'allowSiteMutations', label: 'Allow site mutations', note: 'Permit governed page, navigation, and feature-flag changes.' },
     { key: 'allowGitHubWrites', label: 'Allow GitHub writes', note: 'Permit GitHub write actions when token is configured.' },
     { key: 'requireApproval', label: 'Require approval', note: 'Gate apply actions until approval is granted.' },
     { key: 'previewOnly', label: 'Preview-only mode', note: 'Block apply/commit; allow preview generation only.' },
@@ -1670,6 +1846,8 @@ function GovernanceSection({ governance, onChange, sbConfigured }) {
     { key: 'connectorPermissions', label: 'Connector permissions', note: 'Allow connector read/write actions.' },
     { key: 'browserExecution', label: 'Browser execution', note: 'Allow Playwright worker execution.' },
     { key: 'exportStaging', label: 'Export staging', note: 'Enable staging queues for HubSpot/Airtable.' },
+    { key: 'communicationActions', label: 'Communication actions', note: 'Allow Twilio and SendGrid staging surfaces.' },
+    { key: 'mediaActions', label: 'Media actions', note: 'Allow image/video workflow staging surfaces.' },
   ];
 
   return (

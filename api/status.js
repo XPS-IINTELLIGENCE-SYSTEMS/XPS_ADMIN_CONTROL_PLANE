@@ -21,6 +21,10 @@ export default async function handler(req, res) {
   const hasHubSpot = !!(env.HUBSPOT_API_KEY);
   const hasAirtable = !!(env.AIRTABLE_API_KEY && env.AIRTABLE_BASE_ID);
   const hasBrowserWorker = !!(env.BROWSER_WORKER_URL);
+  const hasTwilio = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN);
+  const hasTwilioNumber = !!env.TWILIO_PHONE_NUMBER;
+  const hasSendGrid = !!env.SENDGRID_API_KEY;
+  const hasSendGridFrom = !!env.SENDGRID_FROM_EMAIL;
 
   // ── GitHub ─────────────────────────────────────────────────────────────
   const hasGitHub = !!(env.GITHUB_TOKEN || env.GITHUB_API_TOKEN);
@@ -187,6 +191,7 @@ export default async function handler(req, res) {
     browser: {
       configured: hasBrowserWorker,
       mode:       hasBrowserWorker ? 'local' : 'blocked',
+      capabilityState: hasBrowserWorker ? 'local-only' : 'blocked',
       workerUrl:  hasBrowserWorker ? env.BROWSER_WORKER_URL : null,
       reason:     hasBrowserWorker ? null : 'BROWSER_WORKER_URL not set.',
       capabilities: {
@@ -197,11 +202,73 @@ export default async function handler(req, res) {
       envKey: 'BROWSER_WORKER_URL',
     },
 
+    twilio: {
+      configured: hasTwilio,
+      mode:       hasTwilio ? 'live' : 'blocked',
+      capabilityState: hasTwilio
+        ? (hasTwilioNumber ? 'write-enabled' : 'token-configured')
+        : 'blocked',
+      accountSid: hasTwilio ? `${env.TWILIO_ACCOUNT_SID.slice(0, 6)}…` : null,
+      phoneNumber: hasTwilioNumber ? env.TWILIO_PHONE_NUMBER : null,
+      reason: hasTwilio
+        ? (hasTwilioNumber ? null : 'TWILIO_PHONE_NUMBER not set. Calls can be staged but outbound execution is incomplete.')
+        : 'TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set.',
+      capabilities: {
+        outbound_calls: hasTwilio && hasTwilioNumber,
+        inbound_webhooks: hasTwilio,
+        ai_call_orchestration: false,
+      },
+      envKey: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN',
+    },
+
+    sendgrid: {
+      configured: hasSendGrid,
+      mode:       hasSendGrid ? 'live' : 'blocked',
+      capabilityState: hasSendGrid
+        ? (hasSendGridFrom ? 'write-enabled' : 'token-configured')
+        : 'blocked',
+      fromEmail: hasSendGridFrom ? env.SENDGRID_FROM_EMAIL : null,
+      reason: hasSendGrid
+        ? (hasSendGridFrom ? null : 'SENDGRID_FROM_EMAIL not set. Outbound email can be staged but not sent from a verified address.')
+        : 'SENDGRID_API_KEY not set.',
+      capabilities: {
+        outbound_email: hasSendGrid && hasSendGridFrom,
+        templated_email: hasSendGrid,
+        inbound_parse: false,
+      },
+      envKey: 'SENDGRID_API_KEY',
+    },
+
+    operatorModules: {
+      communications: {
+        twilio_calls: hasTwilio ? (hasTwilioNumber ? 'write-enabled' : 'token-configured') : 'blocked',
+        sendgrid_email: hasSendGrid ? (hasSendGridFrom ? 'write-enabled' : 'token-configured') : 'blocked',
+      },
+      media: {
+        image_generation: hasOpenAI || hasGemini ? 'substitute-path' : 'blocked',
+        image_editing: hasOpenAI ? 'substitute-path' : 'blocked',
+        video_generation: 'unimplemented',
+        video_editing: 'unimplemented',
+      },
+      siteMutation: {
+        ui_preview: 'write-enabled',
+        apply_flow: 'write-enabled',
+        rollback_flow: 'write-enabled',
+        repo_mutation: hasGitHub ? 'token-configured' : 'blocked',
+      },
+      orchestration: {
+        async_runs: 'write-enabled',
+        parallel_groups: 'write-enabled',
+        staged_exports: hasSupabase ? 'connected' : 'local-only',
+        browser_jobs: hasBrowserWorker ? 'local-only' : 'blocked',
+      },
+    },
+
     blockedPassthrough: BLOCKED_PASSTHROUGH,
 
     summary: {
-      connectedSystems:  [hasOpenAI && 'openai', hasGroq && 'groq', hasGemini && 'gemini', hasOllama && 'ollama', hasGitHub && 'github', hasSupabase && 'supabase', hasVercel && 'vercel', hasGCP && 'google', hasHubSpot && 'hubspot', hasAirtable && 'airtable', hasBrowserWorker && 'browser_worker'].filter(Boolean),
-      blockedSystems:    [!hasOpenAI && 'openai', !hasGroq && 'groq', !hasGemini && 'gemini', !hasGitHub && 'github', !hasSupabase && 'supabase', !hasVercel && 'vercel', !hasHubSpot && 'hubspot', !hasAirtable && 'airtable', !hasBrowserWorker && 'browser_worker'].filter(Boolean),
+      connectedSystems:  [hasOpenAI && 'openai', hasGroq && 'groq', hasGemini && 'gemini', hasOllama && 'ollama', hasGitHub && 'github', hasSupabase && 'supabase', hasVercel && 'vercel', hasGCP && 'google', hasHubSpot && 'hubspot', hasAirtable && 'airtable', hasBrowserWorker && 'browser_worker', hasTwilio && 'twilio', hasSendGrid && 'sendgrid'].filter(Boolean),
+      blockedSystems:    [!hasOpenAI && 'openai', !hasGroq && 'groq', !hasGemini && 'gemini', !hasGitHub && 'github', !hasSupabase && 'supabase', !hasVercel && 'vercel', !hasHubSpot && 'hubspot', !hasAirtable && 'airtable', !hasBrowserWorker && 'browser_worker', !hasTwilio && 'twilio', !hasSendGrid && 'sendgrid'].filter(Boolean),
       chatPassthrough:   'blocked — use OpenAI API, Groq API, Gemini API, or Ollama instead',
       copilotPassthrough:'blocked — use GitHub REST API instead',
     },

@@ -1,6 +1,19 @@
 import { genId } from './workspaceEngine.jsx';
 
 export const DEFAULT_UI_STATE = {
+  site: {
+    pageTitle: 'XPS Operator Workspace',
+    route: '/workspace',
+    description: 'Governed operator workspace for orchestration, research, and site control.',
+    navItems: ['Overview', 'Workspace', 'Connectors', 'Deploy'],
+    effectPreset: 'operator-grid',
+    featureFlags: {
+      liveChat: true,
+      browserResearch: true,
+      mediaWorkbench: false,
+      outboundComms: false,
+    },
+  },
   theme: {
     primaryColor: '#d4a843',
     accentColor: '#3b82f6',
@@ -26,6 +39,7 @@ export const DEFAULT_UI_STATE = {
 
 export function normalizeUiState(state) {
   return {
+    site: { ...DEFAULT_UI_STATE.site, ...(state?.site || {}), featureFlags: { ...DEFAULT_UI_STATE.site.featureFlags, ...(state?.site?.featureFlags || {}) } },
     theme: { ...DEFAULT_UI_STATE.theme, ...(state?.theme || {}) },
     components: Array.isArray(state?.components) ? state.components : DEFAULT_UI_STATE.components,
   };
@@ -52,6 +66,16 @@ export function createComponent(type) {
 
 export function applyUiPatch(state, patch) {
   const next = cloneUiState(state);
+  if (patch.site) {
+    next.site = {
+      ...next.site,
+      ...patch.site,
+      featureFlags: {
+        ...next.site.featureFlags,
+        ...(patch.site.featureFlags || {}),
+      },
+    };
+  }
   if (patch.theme) {
     next.theme = { ...next.theme, ...patch.theme };
   }
@@ -79,6 +103,15 @@ export function applyUiPatch(state, patch) {
       next.components = reordered;
     }
   }
+  if (patch.toggleFeatureFlag) {
+    next.site = {
+      ...next.site,
+      featureFlags: {
+        ...next.site.featureFlags,
+        [patch.toggleFeatureFlag]: !next.site.featureFlags?.[patch.toggleFeatureFlag],
+      },
+    };
+  }
   return next;
 }
 
@@ -87,6 +120,11 @@ export function summarizeUiPatch(patch) {
   if (patch.removeComponentId) return 'Remove component';
   if (patch.moveComponent) return patch.moveComponent.direction < 0 ? 'Move component up' : 'Move component down';
   if (patch.updateComponent) return 'Update component';
+  if (patch.toggleFeatureFlag) return `Toggle feature flag: ${patch.toggleFeatureFlag}`;
+  if (patch.site) {
+    const keys = Object.keys(patch.site);
+    return `Update site: ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}`;
+  }
   if (patch.theme) {
     const keys = Object.keys(patch.theme);
     return `Update theme: ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}`;

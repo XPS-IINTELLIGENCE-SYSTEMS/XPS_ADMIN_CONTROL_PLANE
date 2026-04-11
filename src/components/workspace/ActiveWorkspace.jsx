@@ -180,6 +180,7 @@ function ObjectBody({ obj }) {
     case 'video':            return <VideoBody obj={obj} />;
     case 'artifact_bundle':  return <ArtifactBundleBody obj={obj} />;
     case 'workflow':         return <WorkflowBody obj={obj} />;
+    case 'site_mutation':    return <WorkflowBody obj={obj} />;
     case 'connector_action': return <ConnectorActionBody obj={obj} />;
     case 'agent_run':        return <AgentRunBody obj={obj} />;
     case 'runtime_state':    return <RuntimeStateBody obj={obj} />;
@@ -656,6 +657,7 @@ function EmptyState({ createObject, setActive }) {
     { label: 'New Report',       type: OBJ_TYPE.REPORT,  title: 'Untitled Report', content: '# Report\n\nStart writing...' },
     { label: 'New Data Object',  type: OBJ_TYPE.DATA,    title: 'Untitled Data',   content: '' },
     { label: 'New Log',          type: OBJ_TYPE.LOG,     title: 'Run Log',         content: '' },
+    { label: 'New Workflow',     type: OBJ_TYPE.WORKFLOW, title: 'Workflow Runbook', content: '1. Define objective\n2. Stage connectors\n3. Execute\n4. Validate\n5. Roll back if needed' },
     { label: 'New UI Canvas',    type: OBJ_TYPE.UI,      title: 'UI Editor Canvas', content: 'Editable UI canvas', buildMeta: () => {
       const initial = createDefaultUiState();
       return { uiEditor: true, uiState: initial, history: [createHistoryEntry(initial, 'Initial UI state', 'seed')] };
@@ -812,6 +814,16 @@ function UIBody({ obj }) {
 
   const updateTheme = (patch) => {
     setDraftState(prev => applyUiPatch(prev, { theme: patch }));
+    setNotice(null);
+  };
+
+  const updateSite = (patch) => {
+    setDraftState(prev => applyUiPatch(prev, { site: patch }));
+    setNotice(null);
+  };
+
+  const toggleFeatureFlag = (flag) => {
+    setDraftState(prev => applyUiPatch(prev, { toggleFeatureFlag: flag }));
     setNotice(null);
   };
 
@@ -1072,6 +1084,56 @@ function UIBody({ obj }) {
           ) : (
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Site Mutation</div>
+                <input
+                  value={draftState.site.pageTitle || ''}
+                  onChange={e => updateSite({ pageTitle: e.target.value })}
+                  placeholder="Page title"
+                  style={editorInputStyle}
+                />
+                <input
+                  value={draftState.site.route || ''}
+                  onChange={e => updateSite({ route: e.target.value })}
+                  placeholder="/route"
+                  style={editorInputStyle}
+                />
+                <textarea
+                  value={draftState.site.description || ''}
+                  onChange={e => updateSite({ description: e.target.value })}
+                  placeholder="Page description"
+                  style={{ ...editorInputStyle, minHeight: 56 }}
+                />
+                <input
+                  value={draftState.site.effectPreset || ''}
+                  onChange={e => updateSite({ effectPreset: e.target.value })}
+                  placeholder="Effect preset"
+                  style={editorInputStyle}
+                />
+                <input
+                  value={(draftState.site.navItems || []).join(', ')}
+                  onChange={e => updateSite({ navItems: e.target.value.split(',').map(item => item.trim()).filter(Boolean) })}
+                  placeholder="Navigation items"
+                  style={editorInputStyle}
+                />
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {Object.entries(draftState.site.featureFlags || {}).map(([flag, enabled]) => (
+                    <label key={flag} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!enabled}
+                        onChange={() => toggleFeatureFlag(flag)}
+                        style={{ accentColor: GOLD }}
+                      />
+                      <span>{flag}</span>
+                      <span style={{ marginLeft: 'auto', color: enabled ? GREEN : 'rgba(255,255,255,0.3)' }}>
+                        {enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Theme</div>
                 <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Primary</label>
                 <input type="color" value={draftState.theme.primaryColor} onChange={e => updateTheme({ primaryColor: e.target.value })} style={{ width: '100%', height: 32, marginBottom: 8 }} />
@@ -1263,6 +1325,7 @@ const secondaryActionStyle = {
 
 function UiCanvas({ state, selectedId, onSelect, previewMode }) {
   const theme = state.theme;
+  const site = state.site || {};
   return (
     <div style={{
       background: theme.surface,
@@ -1282,6 +1345,34 @@ function UiCanvas({ state, selectedId, onSelect, previewMode }) {
           Preview Mode
         </div>
       )}
+      <div style={{
+        borderRadius: theme.borderRadius - 2,
+        border: `1px solid ${theme.borderColor}`,
+        padding: 12,
+        background: 'rgba(255,255,255,0.02)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.primaryColor }}>{site.pageTitle}</div>
+          <code style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{site.route}</code>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: theme.accentColor, textTransform: 'uppercase', letterSpacing: 0.7 }}>
+            {site.effectPreset}
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 6 }}>{site.description}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {(site.navItems || []).map((item) => (
+            <span key={item} style={{
+              padding: '4px 8px',
+              borderRadius: 999,
+              border: `1px solid ${theme.borderColor}`,
+              fontSize: 10,
+              color: 'rgba(255,255,255,0.72)',
+            }}>
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
       {state.components.map(component => {
         const isSelected = component.id === selectedId;
         const baseStyle = {

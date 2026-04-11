@@ -177,6 +177,34 @@ function buildModelProfiles(providerMap) {
   ];
 }
 
+function buildOperatorState(apiState, connectionPrefs = {}) {
+  const browserConfigured = !!(apiState?.browser?.configured || connectionPrefs.browserWorkerUrl || import.meta.env.BROWSER_WORKER_URL);
+  const twilioConfigured = !!(apiState?.twilio?.configured || (connectionPrefs.twilioAccountSid && connectionPrefs.twilioAuthToken) || (import.meta.env.TWILIO_ACCOUNT_SID && import.meta.env.TWILIO_AUTH_TOKEN));
+  const sendgridConfigured = !!(apiState?.sendgrid?.configured || connectionPrefs.sendgridApiKey || import.meta.env.SENDGRID_API_KEY);
+  const sendgridWriteEnabled = !!(
+    apiState?.sendgrid?.capabilityState === 'write-enabled'
+    || (connectionPrefs.sendgridApiKey && connectionPrefs.sendgridFromEmail)
+    || (import.meta.env.SENDGRID_API_KEY && import.meta.env.SENDGRID_FROM_EMAIL)
+  );
+
+  return {
+    github: apiState?.github || null,
+    browser: {
+      configured: browserConfigured,
+      reason: apiState?.browser?.reason || 'Configure BROWSER_WORKER_URL or a session worker URL.',
+    },
+    twilio: {
+      configured: twilioConfigured,
+      reason: apiState?.twilio?.reason || 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.',
+    },
+    sendgrid: {
+      configured: sendgridConfigured,
+      reason: apiState?.sendgrid?.reason || 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.',
+      capabilityState: sendgridWriteEnabled ? 'write-enabled' : sendgridConfigured ? 'token-configured' : 'blocked',
+    },
+  };
+}
+
 // ── Agent registry (no emoji) ─────────────────────────────────────────────
 const AGENTS = [
   { id: 'orchestrator', label: 'XPS Orchestrator', icon: Shield },
@@ -321,6 +349,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
   const modelProfiles = buildModelProfiles(providerMap);
   const selectedModelProfile = modelProfiles.find((profile) => profile.id === selectedProfileId) || modelProfiles[0];
+  const operatorState = buildOperatorState(providerState, connectionPrefs);
+  const operatorModules = providerState?.operatorModules || {
+    media: {
+      image_generation: resolvedProviderState?.llm?.active !== 'none' ? 'substitute-path' : 'blocked',
+      video_generation: 'unimplemented',
+    },
+  };
 
   useEffect(() => {
     if (selectedProviderOption?.model) {
@@ -476,6 +511,36 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (/apply|confirm/.test(lower) && /preview|changes|mutation/.test(lower)) return { intent: 'apply' };
     if (/cancel.*preview|discard.*preview|reject/.test(lower)) return { intent: 'cancel' };
 
+    const titleMatch = prompt.match(/page title(?: to)? ["“]?([^"\n”]+)["”]?/i);
+    if (titleMatch) {
+      return { intent: 'preview', patch: { site: { pageTitle: titleMatch[1].trim() } }, summary: 'Update page title' };
+    }
+
+    const routeMatch = prompt.match(/route(?: to)? (\/[^\s]+)/i);
+    if (routeMatch) {
+      return { intent: 'preview', patch: { site: { route: routeMatch[1].trim() } }, summary: 'Update route' };
+    }
+
+    const effectMatch = prompt.match(/effect(?: preset)?(?: to)? ([\w-]+)/i);
+    if (effectMatch) {
+      return { intent: 'preview', patch: { site: { effectPreset: effectMatch[1].trim() } }, summary: 'Update effect preset' };
+    }
+
+    const navMatch = prompt.match(/nav(?:igation)?(?: items?)?(?: to)? ([\w\s,-]+)/i);
+    if (navMatch) {
+      const navItems = navMatch[1].split(',').map(item => item.trim()).filter(Boolean);
+      if (navItems.length) return { intent: 'preview', patch: { site: { navItems } }, summary: 'Update navigation' };
+    }
+
+    const featureMatch = prompt.match(/(enable|disable) feature ([\w-]+)/i);
+    if (featureMatch) {
+      return {
+        intent: 'preview',
+        patch: { site: { featureFlags: { [featureMatch[2]]: featureMatch[1].toLowerCase() === 'enable' } } },
+        summary: `${featureMatch[1][0].toUpperCase()}${featureMatch[1].slice(1).toLowerCase()} feature ${featureMatch[2]}`,
+      };
+    }
+
     const colorMatch = prompt.match(/(primary|accent|background|text) color to ([#\w]+)/i);
     if (colorMatch) {
       const key = colorMatch[1].toLowerCase();
@@ -509,6 +574,20 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (/pull request|create pr|open pr/.test(lower)) return { intent: 'pr' };
     if (/commit|patch|diff/.test(lower)) return { intent: 'patch' };
     if (/github.*(status|repo|branch|write|commit|patch|pr)/.test(lower)) return { intent: 'status' };
+    return null;
+  };
+
+  const parseCommunicationCommand = (prompt) => {
+    const lower = prompt.toLowerCase();
+    if (/email|sendgrid|outreach/.test(lower)) return { intent: 'email', channel: 'sendgrid' };
+    if (/call|phone|twilio/.test(lower)) return { intent: 'call', channel: 'twilio' };
+    return null;
+  };
+
+  const parseMediaCommand = (prompt) => {
+    const lower = prompt.toLowerCase();
+    if (/image|thumbnail|hero visual/.test(lower)) return { intent: 'image' };
+    if (/video|motion|clip/.test(lower)) return { intent: 'video' };
     return null;
   };
 
@@ -546,6 +625,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       if (uiCommand) {
         if (!governance.allowUiEdits) {
           setMessages(prev => [...prev, { role: 'assistant', content: 'UI edits are blocked by governance settings.', agent, mode: 'synthetic' }]);
+          setLoading(false);
+          return;
+        }
+        if (uiCommand.patch?.site && !governance.allowSiteMutations) {
+          setMessages(prev => [...prev, { role: 'assistant', content: 'Site mutation commands are blocked by governance settings.', agent, mode: 'blocked' }]);
           setLoading(false);
           return;
         }
@@ -637,6 +721,70 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       }
     }
 
+    if (agent === 'orchestrator' || agent === 'builder' || agent === 'vision') {
+      const commsCommand = parseCommunicationCommand(prompt);
+      if (commsCommand) {
+        const governanceAllowed = governance.communicationActions && governance.connectorPermissions;
+        const ready = commsCommand.channel === 'sendgrid'
+          ? operatorState.sendgrid?.configured
+          : operatorState.twilio?.configured;
+        const reason = !governanceAllowed
+          ? 'Communications actions are blocked by governance.'
+          : commsCommand.channel === 'sendgrid'
+            ? operatorState.sendgrid?.reason || 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
+            : operatorState.twilio?.reason || 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.';
+
+        createObject({
+          type: OBJ_TYPE.CONNECTOR_ACTION,
+          title: commsCommand.intent === 'email' ? 'SendGrid Email Surface' : 'Twilio Call Surface',
+          content: ready && governanceAllowed
+            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} runbook staged.\n\nPrompt: ${prompt}\n\nState: substitute-path\nNext action: review content in workspace and hand off to a dedicated execution endpoint when server-side send/call is wired.`
+            : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked.\n\nPrompt: ${prompt}\n\nReason: ${reason}`,
+          agent,
+          status: RUN_STATUS.DONE,
+          meta: { connector: commsCommand.channel, mode: ready && governanceAllowed ? 'substitute-path' : 'blocked' },
+        });
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: ready && governanceAllowed
+            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} runbook staged in the workspace with truthful substitute-path status.`
+            : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked: ${reason}`,
+          agent,
+          mode: ready && governanceAllowed ? 'synthetic' : 'blocked',
+        }]);
+        setLoading(false);
+        return;
+      }
+
+      const mediaCommand = parseMediaCommand(prompt);
+      if (mediaCommand) {
+        const governanceAllowed = governance.mediaActions;
+        const mediaState = operatorModules.media?.[mediaCommand.intent === 'video' ? 'video_generation' : 'image_generation'] || 'blocked';
+        const ready = governanceAllowed && ['substitute-path', 'write-enabled', 'connected'].includes(mediaState);
+        const type = mediaCommand.intent === 'video' ? OBJ_TYPE.VIDEO : OBJ_TYPE.IMAGE;
+        createObject({
+          type,
+          title: mediaCommand.intent === 'video' ? 'Video Workflow Brief' : 'Image Workflow Brief',
+          content: ready
+            ? `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow created.\n\nPrompt: ${prompt}\n\nState: ${mediaState}\nThis workspace object is a truthful staging surface until a dedicated generation endpoint is connected.`
+            : `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow blocked.\n\nPrompt: ${prompt}\n\nReason: ${!governanceAllowed ? 'Media actions are blocked by governance.' : `Capability state: ${mediaState}`}`,
+          agent,
+          status: RUN_STATUS.DONE,
+          meta: { mode: ready ? mediaState : 'blocked' },
+        });
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: ready
+            ? `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow staged in the workspace.`
+            : `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow blocked: ${!governanceAllowed ? 'media actions disabled in governance' : mediaState}.`,
+          agent,
+          mode: ready ? 'synthetic' : 'blocked',
+        }]);
+        setLoading(false);
+        return;
+      }
+    }
+
     if (selectedProvider === 'synthetic') {
       pushRuntimeMessage('Provider set to synthetic — no live call executed.', 'synthetic', { provider: 'synthetic', profileId: selectedModelProfile?.id || null });
       setLoading(false);
@@ -663,7 +811,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile } },
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -681,7 +829,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, operatorState, operatorModules } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {

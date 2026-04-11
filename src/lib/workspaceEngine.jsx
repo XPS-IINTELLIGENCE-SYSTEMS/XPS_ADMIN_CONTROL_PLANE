@@ -37,6 +37,7 @@ export const OBJ_TYPE = {
   AIRTABLE_EXPORT:  'airtable_export',
   RUNTIME_LEDGER:   'runtime_ledger',
   RECOVERY_QUEUE:   'recovery_queue',
+  SITE_MUTATION:    'site_mutation',
   // Phase 4 — browser automation + parallel execution
   BROWSER_SESSION:   'browser_session',
   BROWSER_RESULT:    'browser_result',
@@ -70,6 +71,7 @@ export const OBJ_TYPE_META = {
   airtable_export:  { label: 'Airtable Export',  icon: '[A]' },
   runtime_ledger:   { label: 'Runtime Ledger',   icon: '[L]' },
   recovery_queue:   { label: 'Recovery Queue',   icon: '[R]' },
+  site_mutation:    { label: 'Site Mutation',    icon: '[M]' },
   // Phase 4
   browser_session:    { label: 'Browser Session',    icon: '[N]' },
   browser_result:     { label: 'Browser Result',     icon: '[N]' },

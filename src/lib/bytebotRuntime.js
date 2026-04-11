@@ -531,6 +531,78 @@ async function executeStepAction(step, runId, task, context, workspaceCtx) {
     return null;
   }
 
+  if (action.includes('email') || action.includes('sendgrid')) {
+    const sendgridReady = isConnectorReady(context, 'sendgrid');
+    createWorkspaceObject(workspaceCtx, {
+      type: OBJ_TYPE.CONNECTOR_ACTION,
+      title: sendgridReady ? 'SendGrid Email Runbook' : 'SendGrid Blocked',
+      content: sendgridReady
+        ? `Email orchestration staged.\n\nTask: ${stepTask}\n\nCapability state: substitute-path\nNext action: route through a verified SendGrid execution endpoint when server-side send is implemented.`
+        : `Email orchestration blocked.\n\nTask: ${stepTask}\n\nReason: ${getConnectorReason(context, 'sendgrid', 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.')}`,
+      agent: stepAgent,
+      status: RUN_STATUS.DONE,
+      meta: { connector: 'sendgrid', mode: sendgridReady ? 'substitute-path' : 'blocked', runId },
+    }, runId);
+    return null;
+  }
+
+  if (action.includes('call') || action.includes('twilio') || action.includes('phone')) {
+    const twilioReady = isConnectorReady(context, 'twilio');
+    createWorkspaceObject(workspaceCtx, {
+      type: OBJ_TYPE.CONNECTOR_ACTION,
+      title: twilioReady ? 'Twilio Call Runbook' : 'Twilio Blocked',
+      content: twilioReady
+        ? `Call orchestration staged.\n\nTask: ${stepTask}\n\nCapability state: substitute-path\nNext action: wire the staged runbook to a Twilio execution endpoint for outbound or inbound call control.`
+        : `Call orchestration blocked.\n\nTask: ${stepTask}\n\nReason: ${getConnectorReason(context, 'twilio', 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.')}`,
+      agent: stepAgent,
+      status: RUN_STATUS.DONE,
+      meta: { connector: 'twilio', mode: twilioReady ? 'substitute-path' : 'blocked', runId },
+    }, runId);
+    return null;
+  }
+
+  if (action.includes('image')) {
+    const mediaReady = isMediaReady(context, 'image');
+    createWorkspaceObject(workspaceCtx, {
+      type: OBJ_TYPE.IMAGE,
+      title: mediaReady ? 'Image Workflow Brief' : 'Image Generation Blocked',
+      content: mediaReady
+        ? `Image generation substitute path prepared.\n\nPrompt: ${stepTask}\n\nStatus: substitute-path — use the active LLM/media runtime to refine prompt and hand off to a dedicated generator when connected.`
+        : `Image generation blocked.\n\nPrompt: ${stepTask}\n\nReason: ${getMediaReason(context, 'image', 'Configure an LLM/media runtime to prepare image workflows.')}`,
+      agent: stepAgent,
+      status: RUN_STATUS.DONE,
+      meta: { mode: mediaReady ? 'substitute-path' : 'blocked', runId },
+    }, runId);
+    return null;
+  }
+
+  if (action.includes('video')) {
+    const mediaReady = isMediaReady(context, 'video');
+    createWorkspaceObject(workspaceCtx, {
+      type: OBJ_TYPE.VIDEO,
+      title: mediaReady ? 'Video Workflow Brief' : 'Video Generation Blocked',
+      content: mediaReady
+        ? `Video workflow substitute path prepared.\n\nPrompt: ${stepTask}\n\nStatus: substitute-path — capture brief, storyboard, and prompts now; direct video generation runtime remains pending.`
+        : `Video generation blocked.\n\nPrompt: ${stepTask}\n\nReason: ${getMediaReason(context, 'video', 'Video generation is not wired in the current runtime.')}`,
+      agent: stepAgent,
+      status: RUN_STATUS.DONE,
+      meta: { mode: mediaReady ? 'substitute-path' : 'blocked', runId },
+    }, runId);
+    return null;
+  }
+
+  if (action.includes('build') || action.includes('mutat') || action.includes('layout') || action.includes('ui')) {
+    createWorkspaceObject(workspaceCtx, {
+      type: OBJ_TYPE.SITE_MUTATION || OBJ_TYPE.UI,
+      title: 'Site Mutation Runbook',
+      content: `Governed site mutation staged.\n\nTask: ${stepTask}\n\nNext action: open the UI editor in the workspace, preview the change, then apply or rollback through governed controls.`,
+      agent: stepAgent,
+      status: RUN_STATUS.DONE,
+      meta: { mode: 'write-enabled', runId },
+    }, runId);
+    return null;
+  }
+
   _emitLog(runId, workspaceCtx, `[${stepAgent}] Step "${step.label}" marked complete without tool execution.`);
   return null;
 }
@@ -607,6 +679,26 @@ async function runScrape(url, prompt, runId, workspaceCtx) {
 function extractUrl(text) {
   const match = (text || '').match(/https?:\/\/[^\s)]+/i);
   return match ? match[0] : null;
+}
+
+function isConnectorReady(context, name) {
+  const connector = context?.operatorState?.[name];
+  return !!(connector?.configured || connector?.status === 'connected');
+}
+
+function getConnectorReason(context, name, fallback) {
+  return context?.operatorState?.[name]?.reason || fallback;
+}
+
+function isMediaReady(context, type) {
+  const moduleState = context?.operatorModules?.media?.[type === 'video' ? 'video_generation' : 'image_generation'];
+  return ['substitute-path', 'write-enabled', 'connected'].includes(moduleState);
+}
+
+function getMediaReason(context, type, fallback) {
+  const moduleState = context?.operatorModules?.media?.[type === 'video' ? 'video_generation' : 'image_generation'];
+  if (moduleState) return `Capability state: ${moduleState}`;
+  return fallback;
 }
 
 function recordStaging(runId, staging, workspaceCtx, agent) {

@@ -5,6 +5,7 @@ const STORAGE_KEY = 'governance_settings';
 
 export const DEFAULT_GOVERNANCE = {
   allowUiEdits: true,
+  allowSiteMutations: true,
   allowGitHubWrites: false,
   requireApproval: false,
   previewOnly: false,
@@ -12,6 +13,8 @@ export const DEFAULT_GOVERNANCE = {
   connectorPermissions: true,
   browserExecution: false,
   exportStaging: true,
+  communicationActions: false,
+  mediaActions: false,
   rollbackRetention: '30 days',
   autonomyLevel: 'assisted',
 };
