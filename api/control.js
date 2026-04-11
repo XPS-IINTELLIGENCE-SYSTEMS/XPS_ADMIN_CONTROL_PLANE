@@ -2,6 +2,10 @@
 // Control plane actions — connector state, agent dispatch, workspace actions
 import { llmMode, hasLLM, connectorState } from './_llm.js';
 
+const MAX_TWILIO_MESSAGE_LENGTH = 800;
+const MAX_EMAIL_SUBJECT_LENGTH = 160;
+const MAX_EMAIL_PREVIEW_LENGTH = 500;
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -149,7 +153,8 @@ function resolveRuntimeConfig(payload = {}) {
 async function executeTwilioCall(payload = {}) {
   const cfg = resolveRuntimeConfig(payload);
   const to = `${payload.to || ''}`.trim();
-  const message = `${payload.message || payload.body || 'This is an automated call from the XPS control plane.'}`.trim().slice(0, 800);
+  const message = `${payload.message || payload.body || 'This is an automated call from the XPS control plane.'}`.trim().slice(0, MAX_TWILIO_MESSAGE_LENGTH);
+  const voice = `${payload.voice || process.env.TWILIO_SAY_VOICE || 'alice'}`.trim();
 
   if (!cfg.twilioAccountSid || !cfg.twilioAuthToken) {
     return buildBlockedConnectorResponse('twilio', 'Twilio credentials are not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN or provide session-scoped credentials.', {
@@ -175,7 +180,7 @@ async function executeTwilioCall(payload = {}) {
     });
   }
 
-  const twiml = `<Response><Say voice="alice">${escapeXml(message)}</Say></Response>`;
+  const twiml = `<Response><Say voice="${escapeXml(voice)}">${escapeXml(message)}</Say></Response>`;
   const form = new URLSearchParams({
     To: to,
     From: cfg.twilioPhoneNumber,
@@ -234,7 +239,7 @@ async function executeTwilioCall(payload = {}) {
 async function executeSendGridEmail(payload = {}) {
   const cfg = resolveRuntimeConfig(payload);
   const to = `${payload.to || ''}`.trim();
-  const subject = `${payload.subject || 'XPS control plane message'}`.trim().slice(0, 160);
+  const subject = `${payload.subject || 'XPS control plane message'}`.trim().slice(0, MAX_EMAIL_SUBJECT_LENGTH);
   const text = `${payload.text || payload.body || ''}`.trim();
   const html = `${payload.html || ''}`.trim();
 
@@ -305,7 +310,7 @@ async function executeSendGridEmail(payload = {}) {
       workspace_object: {
         type: 'connector_action',
         title: 'SendGrid Email Send',
-        content: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\n\nPreview:\n${text || html.replace(/<[^>]+>/g, ' ')}`,
+        content: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\n\nPreview:\n${buildEmailPreview(text, html)}`,
         meta: {
           connector: 'sendgrid',
           mode: 'live',
@@ -376,4 +381,9 @@ function escapeXml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function buildEmailPreview(text, html) {
+  if (text) return text.slice(0, MAX_EMAIL_PREVIEW_LENGTH);
+  return `${html || ''}`.replace(/\s+/g, ' ').slice(0, MAX_EMAIL_PREVIEW_LENGTH);
 }

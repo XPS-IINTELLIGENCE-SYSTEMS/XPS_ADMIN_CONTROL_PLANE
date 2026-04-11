@@ -456,18 +456,18 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       },
     });
     createObject({
-      type: OBJ_TYPE.PREVIEW,
-      title: `UI Preview — ${summary}`,
-      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
-      status: RUN_STATUS.IDLE,
-      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source, validation },
-    });
-    createObject({
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Preview — ${summary}`,
       content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
       meta: { stage: 'preview', summary, source, validation, targetId: target.id, previewId },
+    });
+    createObject({
+      type: OBJ_TYPE.PREVIEW,
+      title: `UI Preview — ${summary}`,
+      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: RUN_STATUS.IDLE,
+      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source, validation },
     });
     persistUiPreview({ previewId, targetId: target.id, state: nextState, summary, source }).catch(() => {});
     return { target, previewMeta };

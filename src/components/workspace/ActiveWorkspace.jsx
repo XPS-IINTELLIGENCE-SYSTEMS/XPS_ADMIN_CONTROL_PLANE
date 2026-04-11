@@ -874,18 +874,18 @@ function UIBody({ obj }) {
       },
     });
     createObject({
-      type: OBJ_TYPE.PREVIEW,
-      title: `UI Preview — ${summary}`,
-      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
-      status: RUN_STATUS.IDLE,
-      meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source, validation },
-    });
-    createObject({
       type: OBJ_TYPE.SITE_MUTATION,
       title: `Site Mutation Preview — ${summary}`,
       content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
       status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
       meta: { stage: 'preview', summary, source, validation, targetId: obj.id, previewId },
+    });
+    createObject({
+      type: OBJ_TYPE.PREVIEW,
+      title: `UI Preview — ${summary}`,
+      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: RUN_STATUS.IDLE,
+      meta: { previewType: 'ui', targetId: obj.id, previewId, summary, state, source, validation },
     });
     persistUiPreview({ previewId, targetId: obj.id, state, summary, source }).catch(() => {});
     setEditorView('preview');

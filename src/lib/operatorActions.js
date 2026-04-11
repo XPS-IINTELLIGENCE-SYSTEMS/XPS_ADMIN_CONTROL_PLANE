@@ -12,16 +12,20 @@ export function buildConnectorCredentials(connectionPrefs = {}) {
 }
 
 export async function executeControlAction(action, payload = {}) {
-  const res = await fetch(`${API_URL}/api/control`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, payload }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data?.error || `Control plane returned ${res.status}`);
+  try {
+    const res = await fetch(`${API_URL}/api/control`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `Control plane returned ${res.status}`);
+    }
+    return data;
+  } catch (err) {
+    throw new Error(`Failed to connect to control API: ${err.message}`);
   }
-  return data;
 }
 
 export function normalizeConnectorResult(data, fallbackConnector) {

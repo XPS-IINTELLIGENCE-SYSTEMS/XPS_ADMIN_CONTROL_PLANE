@@ -14,6 +14,8 @@ import { genId, OBJ_TYPE, RUN_STATUS } from './workspaceEngine.jsx';
 import { persistBrowserJob } from './supabasePersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
+const BROWSER_POLL_INTERVAL_MS = 1000;
+const BROWSER_MAX_POLL_ATTEMPTS = 20;
 
 // ── Job state ─────────────────────────────────────────────────────────────────
 
@@ -211,10 +213,19 @@ function _emitLog(jobId, workspaceCtx, line) {
 }
 
 async function pollBrowserStatus(jobId, workerUrl, workspaceCtx, wsObjId, url, action) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const res = await fetch(`${API_URL}/api/browser/status?job_id=${encodeURIComponent(jobId)}${workerUrl ? `&worker_url=${encodeURIComponent(workerUrl)}` : ''}`);
-    const data = await res.json();
+  for (let attempt = 0; attempt < BROWSER_MAX_POLL_ATTEMPTS; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, BROWSER_POLL_INTERVAL_MS));
+    let data;
+    try {
+      const res = await fetch(`${API_URL}/api/browser/status?job_id=${encodeURIComponent(jobId)}${workerUrl ? `&worker_url=${encodeURIComponent(workerUrl)}` : ''}`);
+      data = await res.json();
+    } catch (err) {
+      return {
+        status: 'error',
+        mode: workerUrl ? 'local' : 'blocked',
+        error: `Browser worker status check failed: ${err.message}`,
+      };
+    }
     const nextStatus = data.status || 'running';
     _emitLog(jobId, workspaceCtx, `[browser] Poll ${attempt + 1}: ${nextStatus}`);
     if (nextStatus === 'queued' || nextStatus === 'running') {

@@ -1804,7 +1804,7 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
       return;
     }
     if (preview.validation && !preview.validation.valid) {
-      setBuilderNotice(`Apply is blocked by validation. ${preview.validation.issues.join(' ')}`);
+      setBuilderNotice(`Apply is blocked by validation. ${preview.validation.issues.join(', ')}`);
       return;
     }
     const nextState = normalizeUiState(preview.state);
