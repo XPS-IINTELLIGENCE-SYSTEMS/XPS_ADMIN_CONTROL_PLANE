@@ -29,6 +29,7 @@ import {
   persistRuntimeLedger,
   persistRecoveryQueue,
 } from './supabasePersistence.js';
+import { loadRunSnapshot, saveRunSnapshot } from './orchestrationPersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const RETRY_DELAY_BASE_MS = 600;
@@ -42,12 +43,17 @@ const MAX_ACTIVE_RUNS = 2;
 const _runs    = new Map();          // runId → RunState
 const _subs    = new Set();          // () => void callbacks
 
+loadRunSnapshot().forEach((run) => {
+  _runs.set(run.runId, run);
+});
+
 export function subscribeRuns(cb) {
   _subs.add(cb);
   return () => _subs.delete(cb);
 }
 
 function notify() {
+  saveRunSnapshot([..._runs.values()]);
   for (const cb of _subs) cb([..._runs.values()]);
 }
 

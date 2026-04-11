@@ -12,6 +12,7 @@
 
 import { genId, OBJ_TYPE, RUN_STATUS } from './workspaceEngine.jsx';
 import { persistBrowserJob } from './supabasePersistence.js';
+import { loadBrowserJobSnapshot, saveBrowserJobSnapshot } from './orchestrationPersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BROWSER_POLL_INTERVAL_MS = 1000;
@@ -26,12 +27,17 @@ const MAX_ACTIVE_BROWSER_JOBS = 2;
 const _jobs = new Map();   // jobId → JobState
 const _subs = new Set();   // () => void
 
+loadBrowserJobSnapshot().forEach((job) => {
+  _jobs.set(job.jobId, job);
+});
+
 export function subscribeJobs(cb) {
   _subs.add(cb);
   return () => _subs.delete(cb);
 }
 
 function notify() {
+  saveBrowserJobSnapshot([..._jobs.values()]);
   for (const cb of _subs) cb([..._jobs.values()]);
 }
 

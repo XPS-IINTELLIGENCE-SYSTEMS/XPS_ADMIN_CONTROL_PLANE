@@ -8,9 +8,14 @@
 
 import { genId, OBJ_TYPE, RUN_STATUS } from './workspaceEngine.jsx';
 import { persistParallelGroup } from './supabasePersistence.js';
+import { loadGroupSnapshot, saveGroupSnapshot } from './orchestrationPersistence.js';
 
 const _groups = new Map();  // groupId → GroupState
 const _subs   = new Set();
+
+loadGroupSnapshot().forEach((group) => {
+  _groups.set(group.groupId, group);
+});
 
 function createHistory(status, detail) {
   return { ts: new Date().toISOString(), status, detail };
@@ -22,6 +27,7 @@ export function subscribeGroups(cb) {
 }
 
 function notify() {
+  saveGroupSnapshot([..._groups.values()]);
   for (const cb of _subs) cb([..._groups.values()]);
 }
 
