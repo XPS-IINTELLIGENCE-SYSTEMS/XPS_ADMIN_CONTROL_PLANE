@@ -4,12 +4,7 @@ import { Shield } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
-const competitors = [
-  { name: 'FloorGuard Pro',    share: '28%', trend: 'up',   verticals: 'Warehouse, Retail' },
-  { name: 'SealMaster',       share: '22%', trend: 'down', verticals: 'Automotive, Healthcare' },
-  { name: 'CoatRight Systems',share: '15%', trend: 'flat', verticals: 'Industrial, Education' },
-  { name: 'ArmorFloor',       share: '11%', trend: 'up',   verticals: 'Fitness, Food & Bev' },
-];
+const competitors = [];
 
 export default function Competition() {
   return (
@@ -38,6 +33,11 @@ export default function Competition() {
               </div>
             </div>
           ))}
+          {competitors.length === 0 && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+              No competitor records loaded yet. Connect a live source to enable market tracking.
+            </div>
+          )}
         </div>
       </Panel>
 

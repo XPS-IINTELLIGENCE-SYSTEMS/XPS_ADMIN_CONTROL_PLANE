@@ -1,17 +1,19 @@
 import React from 'react';
-import { ArrowRight, BarChart2, Bot, FileText, FlaskConical, LayoutDashboard, Plug, Send, Settings, Shield, Target, Users } from 'lucide-react';
+import { ArrowRight, BarChart2, Blocks, FileText, FlaskConical, LayoutDashboard, Plug, Send, Settings, Shield, Target, Users, BookOpen, Eye } from 'lucide-react';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4af52';
 
 const featureCards = [
+  { panel: 'workspace', title: 'Workspace', note: 'Interactive editor canvas with live artifacts and generated UI.', icon: Blocks },
   { panel: 'dashboard', title: 'Dashboard', note: 'Daily revenue, pipeline, and territory priorities.', icon: LayoutDashboard },
   { panel: 'crm', title: 'CRM', note: 'Customer relationship activity and open opportunities.', icon: Users },
   { panel: 'leads', title: 'Leads', note: 'Qualification, scoring, and lead routing.', icon: Target },
-  { panel: 'ai-assistant', title: 'AI Assistant', note: 'Live drafting, coaching, and next-step support.', icon: Bot },
   { panel: 'research', title: 'Research Lab', note: 'Account research and competitive intelligence.', icon: FlaskConical },
   { panel: 'outreach', title: 'Outreach', note: 'Sequences, replies, and follow-up timing.', icon: Send },
   { panel: 'proposals', title: 'Proposals', note: 'Proposal progress, approvals, and close support.', icon: FileText },
+  { panel: 'knowledge', title: 'Knowledge Base', note: 'Documentation, product notes, and internal references.', icon: BookOpen },
+  { panel: 'competition', title: 'Competition', note: 'Competitive signals and market watch placeholders.', icon: Eye },
   { panel: 'analytics', title: 'Analytics', note: 'Revenue performance and activity trends.', icon: BarChart2 },
   { panel: 'connectors', title: 'Connectors', note: 'Provider status and routing defaults.', icon: Plug },
   { panel: 'admin', title: 'Admin', note: 'Focused runtime, access, and governance controls.', icon: Shield },
@@ -19,10 +21,10 @@ const featureCards = [
 ];
 
 const highlights = [
-  { value: '60+', label: 'LOCATIONS' },
-  { value: '200+', label: 'SALES STAFF' },
-  { value: '50K+', label: 'LEADS' },
-  { value: '24/7', label: 'AI SUPPORT' },
+  { value: '0', label: 'LOCATIONS' },
+  { value: '0', label: 'SALES STAFF' },
+  { value: '0', label: 'LEADS' },
+  { value: '0', label: 'AI SUPPORT' },
 ];
 
 export default function HomePage({ onEnterApp, onBackToLogin }) {
@@ -61,7 +63,7 @@ export default function HomePage({ onEnterApp, onBackToLogin }) {
               Back to Login
             </button>
             <button
-              onClick={() => onEnterApp('dashboard')}
+              onClick={() => onEnterApp('workspace')}
               style={{
                 border: 'none',
                 background: GOLD,
@@ -134,7 +136,7 @@ export default function HomePage({ onEnterApp, onBackToLogin }) {
               </div>
 
               <button
-                onClick={() => onEnterApp('ai-assistant')}
+                onClick={() => onEnterApp('workspace')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -147,7 +149,7 @@ export default function HomePage({ onEnterApp, onBackToLogin }) {
                   fontWeight: 800,
                 }}
               >
-                Launch Assistant
+                  Launch Workspace
                 <ArrowRight size={16} />
               </button>
             </div>

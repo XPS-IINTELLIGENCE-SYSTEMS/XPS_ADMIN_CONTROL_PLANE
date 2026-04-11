@@ -1,36 +1,48 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { House, PanelLeft, Search, Shield, MapPin } from 'lucide-react';
+import { Blocks, House, LayoutDashboard, PanelLeft, Plug, Search, Settings, Shield } from 'lucide-react';
 import { userContext } from '../../data/synthetic.js';
 import { getConnectionPrefs, subscribeConnectionPrefs } from '../../lib/connectionPrefs.js';
 import { resolveClientProviderState } from '../../lib/providerState.js';
 
 const panelLabels = {
+  workspace: 'Workspace',
   dashboard: 'Dashboard',
   crm: 'CRM',
   leads: 'Leads',
-  'ai-assistant': 'AI Assistant',
   research: 'Research Lab',
   outreach: 'Outreach',
   proposals: 'Proposals',
   analytics: 'Analytics',
+  knowledge: 'Knowledge Base',
+  competition: 'Competition',
   connectors: 'Connectors',
   admin: 'Admin',
   settings: 'Settings',
 };
 
 const panelDescriptions = {
+  workspace: 'Interactive editor canvas with live workspace objects.',
   dashboard: 'Daily revenue, pipeline, and account priorities.',
   crm: 'Pipeline visibility and customer relationship activity.',
   leads: 'Lead scoring, qualification, and territory coverage.',
-  'ai-assistant': 'Live sales drafting, research, and next-step support.',
   research: 'Market intelligence and company research workspace.',
   outreach: 'Sequencing, cadence performance, and follow-up prep.',
   proposals: 'Proposal progress, approvals, and active opportunities.',
   analytics: 'Performance metrics and revenue intelligence.',
+  knowledge: 'Indexed documentation and internal reference material.',
+  competition: 'Competitive monitoring and signal review.',
   connectors: 'Live system status and routing preferences.',
   admin: 'Focused controls for runtime, access, and governance.',
   settings: 'Workspace defaults and credential readiness.',
 };
+
+const topNavItems = [
+  { id: 'workspace', label: 'Workspace', icon: Blocks },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'connectors', label: 'Connectors', icon: Plug },
+  { id: 'admin', label: 'Admin', icon: Shield },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
@@ -56,7 +68,7 @@ function BrandLogo() {
   );
 }
 
-export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSidebar, sidebarVisible }) {
+export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate, onToggleSidebar, sidebarVisible }) {
   const [search, setSearch] = useState('');
   const [apiStatus, setApiStatus] = useState(null);
   const [connectionPrefs, setConnectionPrefs] = useState(getConnectionPrefs());
@@ -89,6 +101,7 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSid
   }, []);
 
   const placeholder = useMemo(() => {
+    if (activePanel === 'workspace') return 'Search workspace tabs, outputs, or editor objects…';
     if (activePanel === 'connectors') return 'Search connectors, providers, or deployment targets…';
     if (activePanel === 'admin') return 'Search controls, governance, or access settings…';
     return 'Search accounts, leads, proposals, or territories…';
@@ -144,7 +157,7 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSid
         </button>
       )}
 
-      <div style={{ minWidth: 0 }}>
+      <div style={{ flexShrink: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{label}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }} className="truncate">
           {description}
@@ -189,6 +202,38 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSid
         {modeLabel}
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflowX: 'auto' }}>
+        {topNavItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activePanel === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => (item.id === 'admin' ? onOpenAdmin() : onNavigate?.(item.id))}
+              className="xps-electric-hover"
+              data-active={isActive ? 'true' : undefined}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: isActive ? 'var(--bg-active)' : 'var(--bg-card)',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontSize: 12,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              <Icon size={13} className="xps-icon" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
       <button
         onClick={onGoHome}
         className="xps-electric-hover"
@@ -230,13 +275,6 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onToggleSid
         <Shield size={14} className="xps-icon" />
         Admin
       </button>
-
-      {typeof userContext.location === 'string' && userContext.location.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)', fontSize: 13, whiteSpace: 'nowrap' }}>
-          <MapPin size={12} className="xps-icon" />
-          {userContext.location}
-        </div>
-      )}
 
       <div
         style={{

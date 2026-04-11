@@ -5,11 +5,7 @@ import { Plus, Send } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
-const sequences = [
-  { id: 1, name: 'Warehouse Cold Outreach', status: 'active',  leads: 14, opens: '62%', replies: '18%' },
-  { id: 2, name: 'Healthcare Intro Sequence', status: 'draft', leads: 0,  opens: '—',   replies: '—' },
-  { id: 3, name: 'Follow-Up: Stale Leads',   status: 'active', leads: 8,  opens: '74%', replies: '22%' },
-];
+const sequences = [];
 
 export default function Outreach() {
   const [items, setItems] = useState(sequences);
@@ -22,7 +18,7 @@ export default function Outreach() {
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>AI-drafted email sequences and cadences</p>
         </div>
         <button
-          onClick={() => setItems(prev => [{ id: Date.now(), name: 'New Operator Sequence', status: 'draft', leads: 0, opens: '—', replies: '—' }, ...prev])}
+           onClick={() => setItems(prev => [{ id: Date.now(), name: 'New Operator Sequence', status: 'draft', leads: 0, opens: '0%', replies: '0%' }, ...prev])}
           className="xps-electric-hover"
           style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}
         >
@@ -54,6 +50,11 @@ export default function Outreach() {
               <StatusBadge status={seq.status} />
             </div>
           ))}
+          {items.length === 0 && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+              No live outreach sequences yet. Create a draft after connecting your email provider.
+            </div>
+          )}
         </div>
       </Panel>
 

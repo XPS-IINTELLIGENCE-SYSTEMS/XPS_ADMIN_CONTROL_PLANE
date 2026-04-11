@@ -5,17 +5,17 @@ const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4af52';
 
 const highlights = [
-  { value: '60+', label: 'LOCATIONS' },
-  { value: '200+', label: 'SALES STAFF' },
-  { value: '50K+', label: 'LEADS' },
-  { value: '24/7', label: 'AI SUPPORT' },
+  { value: '0', label: 'LOCATIONS' },
+  { value: '0', label: 'SALES STAFF' },
+  { value: '0', label: 'LEADS' },
+  { value: '0', label: 'AI SUPPORT' },
 ];
 
 export default function LoginPage({ onContinue }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState('This screen is visual only and does not require authentication.');
+  const [message, setMessage] = useState('Use Sign In to enter the workspace shell. Connected authentication remains optional until configured.');
 
   const handleSubmit = (event) => {
     event.preventDefault();

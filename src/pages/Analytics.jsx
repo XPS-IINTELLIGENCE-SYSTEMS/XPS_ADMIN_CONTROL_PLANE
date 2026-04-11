@@ -40,10 +40,10 @@ export default function Analytics() {
       <Panel title="Performance Summary">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
           {[
-            { label: 'Avg Deal Size',     value: '$36,400' },
-            { label: 'Sales Cycle',       value: '18 days' },
-            { label: 'Win Rate',          value: '34.2%' },
-            { label: 'Leads / Rep / Mo.', value: '47' },
+            { label: 'Avg Deal Size',     value: '$0' },
+            { label: 'Sales Cycle',       value: '0 days' },
+            { label: 'Win Rate',          value: '0%' },
+            { label: 'Leads / Rep / Mo.', value: '0' },
           ].map(m => (
             <div key={m.label} style={{ textAlign: 'center', padding: '12px 0' }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: GOLD }}>{m.value}</div>

@@ -2,20 +2,23 @@ import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 import CenterWorkspace from '../CenterWorkspace.jsx';
+import ChatRail from '../ChatRail.jsx';
 import HomePage from '../HomePage.jsx';
 import LoginPage from '../LoginPage.jsx';
 import { WorkspaceProvider } from '../../lib/workspaceEngine.jsx';
 import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
 const APP_PANELS = new Set([
+  'workspace',
   'dashboard',
   'crm',
   'leads',
-  'ai-assistant',
   'research',
   'outreach',
   'proposals',
   'analytics',
+  'knowledge',
+  'competition',
   'connectors',
   'admin',
   'settings',
@@ -23,12 +26,12 @@ const APP_PANELS = new Set([
 
 export default function Shell() {
   const [page, setPage] = useState('login');
-  const [activePanel, setActivePanel] = useState('dashboard');
+  const [activePanel, setActivePanel] = useState('workspace');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const enterApp = useCallback((panel = 'dashboard') => {
+  const enterApp = useCallback((panel = 'workspace') => {
     setPage('app');
-    setActivePanel(APP_PANELS.has(panel) ? panel : 'dashboard');
+    setActivePanel(APP_PANELS.has(panel) ? panel : 'workspace');
   }, []);
 
   const openHome = useCallback(() => {
@@ -68,7 +71,7 @@ export default function Shell() {
   return (
     <WorkspaceProvider>
       {page === 'login' ? (
-        <LoginPage onContinue={openHome} />
+        <LoginPage onContinue={() => enterApp('workspace')} />
       ) : page === 'home' ? (
         <HomePage onEnterApp={enterApp} onBackToLogin={openLogin} />
       ) : (
@@ -100,12 +103,28 @@ export default function Shell() {
               activePanel={activePanel}
               onGoHome={openHome}
               onOpenAdmin={() => setActivePanel('admin')}
+              onNavigate={setActivePanel}
               onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
               sidebarVisible
             />
-            <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <CenterWorkspace activePanel={activePanel} />
-            </main>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+              <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <CenterWorkspace activePanel={activePanel} />
+              </main>
+              <aside
+                style={{
+                  width: 'var(--rail-w)',
+                  minWidth: 360,
+                  maxWidth: 460,
+                  borderLeft: '1px solid var(--border)',
+                  background: 'var(--bg-sidebar)',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                <ChatRail onNavigate={setActivePanel} />
+              </aside>
+            </div>
           </div>
         </div>
       )}
