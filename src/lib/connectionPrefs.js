@@ -1,70 +1,161 @@
-const STORAGE_KEY = 'xps.connectionPrefs.v1';
+const LOCAL_STORAGE_KEY = 'xps.connectionPrefs.persisted.v2';
+const SESSION_STORAGE_KEY = 'xps.connectionPrefs.session.v2';
 const listeners = new Set();
 
 const DEFAULTS = {
   openaiApiKey: '',
+  openaiOrgId: '',
+  openaiBaseUrl: '',
   openaiModel: 'gpt-4o-mini',
   groqApiKey: '',
+  groqBaseUrl: '',
   groqModel: 'llama-3.3-70b-versatile',
   geminiApiKey: '',
+  geminiProjectId: '',
   geminiModel: 'gemini-1.5-flash',
   ollamaBaseUrl: '',
   ollamaModel: 'llama3.1:8b',
   githubToken: '',
+  githubRepoOwner: '',
+  githubRepoName: '',
+  githubRepoBranch: 'main',
+  githubWorkflowFile: '',
   supabaseUrl: '',
   supabaseAnonKey: '',
   vercelToken: '',
+  vercelProjectId: '',
+  vercelTeamId: '',
+  vercelDeployHookUrl: '',
   hubspotApiKey: '',
   airtableApiKey: '',
   airtableBaseId: '',
+  googleWorkspaceCustomerId: '',
+  googleWorkspaceAdminEmail: '',
+  googleCloudProjectId: '',
+  googleCloudRegion: '',
   browserWorkerUrl: '',
+  localRuntimeUrl: '',
+  cloudRuntimeUrl: '',
+  runtimeTarget: 'local',
   twilioAccountSid: '',
   twilioAuthToken: '',
   twilioPhoneNumber: '',
+  twilioWebhookUrl: '',
   sendgridApiKey: '',
   sendgridFromEmail: '',
+  sendgridWebhookUrl: '',
+  genericWebhookUrl: '',
+  repoTarget: '',
+  deploymentTarget: 'preview',
+  providerPreference: 'auto',
+  bytebotProvider: 'auto',
 };
 
-function readStorage() {
-  if (typeof window === 'undefined') return { ...DEFAULTS };
+function getStorage(scope) {
+  if (typeof window === 'undefined') return null;
+  return scope === 'session' ? window.sessionStorage : window.localStorage;
+}
+
+function sanitizePatch(patch = {}) {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([key]) => Object.prototype.hasOwnProperty.call(DEFAULTS, key)),
+  );
+}
+
+function readScopedStorage(scope) {
+  const storage = getStorage(scope);
+  if (!storage) return {};
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const raw = storage.getItem(scope === 'session' ? SESSION_STORAGE_KEY : LOCAL_STORAGE_KEY);
+    if (!raw) return {};
+    return sanitizePatch(JSON.parse(raw));
   } catch {
-    return { ...DEFAULTS };
+    return {};
   }
 }
 
-function writeStorage(next) {
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+function writeScopedStorage(scope, next) {
+  const storage = getStorage(scope);
+  if (storage) {
+    storage.setItem(scope === 'session' ? SESSION_STORAGE_KEY : LOCAL_STORAGE_KEY, JSON.stringify(sanitizePatch(next)));
   }
+}
+
+function removeScopedKeys(scope, keys = null) {
+  const current = readScopedStorage(scope);
+  if (!keys) {
+    writeScopedStorage(scope, {});
+    return;
+  }
+  const next = { ...current };
+  keys.forEach((key) => {
+    delete next[key];
+  });
+  writeScopedStorage(scope, next);
+}
+
+function buildMergedPrefs() {
+  const persisted = readScopedStorage('persisted');
+  const session = readScopedStorage('session');
+  return {
+    ...DEFAULTS,
+    ...persisted,
+    ...session,
+  };
+}
+
+function buildMeta() {
+  const persisted = readScopedStorage('persisted');
+  const session = readScopedStorage('session');
+  return Object.fromEntries(
+    Object.keys(DEFAULTS).map((key) => [
+      key,
+      session[key]
+        ? 'session'
+        : persisted[key]
+          ? 'persisted'
+          : 'default',
+    ]),
+  );
+}
+
+function notify() {
+  const next = buildMergedPrefs();
   listeners.forEach((listener) => listener(next));
 }
 
 export function getConnectionPrefs() {
-  return readStorage();
+  return buildMergedPrefs();
 }
 
-export function updateConnectionPrefs(patch) {
-  const next = { ...readStorage(), ...patch };
-  writeStorage(next);
-  return next;
+export function getConnectionPrefMeta() {
+  return buildMeta();
 }
 
-export function resetConnectionPrefs(keys = null) {
-  if (!keys) {
-    writeStorage({ ...DEFAULTS });
-    return { ...DEFAULTS };
+export function getConnectionPrefSource(key) {
+  return buildMeta()[key] || 'default';
+}
+
+export function updateConnectionPrefs(patch, options = {}) {
+  const scope = options.scope === 'session' ? 'session' : 'persisted';
+  const current = readScopedStorage(scope);
+  const next = { ...current, ...sanitizePatch(patch) };
+  writeScopedStorage(scope, next);
+  notify();
+  return buildMergedPrefs();
+}
+
+export function resetConnectionPrefs(keys = null, options = {}) {
+  const scope = options.scope || 'all';
+  if (scope === 'session' || scope === 'persisted') {
+    removeScopedKeys(scope, keys);
+    notify();
+    return buildMergedPrefs();
   }
-  const current = readStorage();
-  const next = { ...current };
-  keys.forEach((key) => {
-    next[key] = DEFAULTS[key] ?? '';
-  });
-  writeStorage(next);
-  return next;
+  removeScopedKeys('session', keys);
+  removeScopedKeys('persisted', keys);
+  notify();
+  return buildMergedPrefs();
 }
 
 export function subscribeConnectionPrefs(listener) {

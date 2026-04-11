@@ -2082,6 +2082,10 @@ function ConnectorActionBody({ obj }) {
   const connector  = obj.meta?.connector || null;
   const history    = Array.isArray(obj.meta?.history) ? obj.meta.history : [];
   const direction  = obj.meta?.direction || 'outbound';
+  const runtimeTarget = obj.meta?.runtimeTarget || null;
+  const repoTarget = obj.meta?.repoTarget || null;
+  const deploymentTarget = obj.meta?.deploymentTarget || null;
+  const webhookTarget = obj.meta?.webhookTarget || null;
   const [executing, setExecuting] = useState(false);
 
   const executeDraft = async () => {
@@ -2131,6 +2135,17 @@ function ConnectorActionBody({ obj }) {
           Direction: <span style={{ color: '#e2e8f0' }}>{direction}</span>
           {obj.meta?.status && <> · Status: <span style={{ color: '#e2e8f0' }}>{obj.meta.status}</span></>}
         </div>
+        {(runtimeTarget || repoTarget || deploymentTarget || webhookTarget) && (
+          <div style={{ marginBottom: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>
+              Execution Targets
+            </div>
+            {runtimeTarget && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginBottom: 4 }}>Runtime: <span style={{ color: '#e2e8f0' }}>{runtimeTarget}</span></div>}
+            {deploymentTarget && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginBottom: 4 }}>Deployment: <span style={{ color: '#e2e8f0' }}>{deploymentTarget}</span></div>}
+            {repoTarget && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginBottom: 4 }}>Repo: <span style={{ color: '#e2e8f0' }}>{repoTarget}</span></div>}
+            {webhookTarget && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>Webhook: <span style={{ color: '#e2e8f0', wordBreak: 'break-all' }}>{webhookTarget}</span></div>}
+          </div>
+        )}
 
         {Object.entries(connectors).length > 0 && (
           <div style={{ marginBottom: 14 }}>
@@ -2477,6 +2492,12 @@ function buildRuntimeConnectorCredentials(connectionPrefs = {}) {
     twilioPhoneNumber: connectionPrefs.twilioPhoneNumber,
     sendgridApiKey: connectionPrefs.sendgridApiKey,
     sendgridFromEmail: connectionPrefs.sendgridFromEmail,
+    runtimeTarget: connectionPrefs.runtimeTarget,
+    repoTarget: connectionPrefs.repoTarget,
+    deploymentTarget: connectionPrefs.deploymentTarget,
+    twilioWebhookUrl: connectionPrefs.twilioWebhookUrl,
+    sendgridWebhookUrl: connectionPrefs.sendgridWebhookUrl,
+    genericWebhookUrl: connectionPrefs.genericWebhookUrl,
   };
 }
 
@@ -2513,6 +2534,13 @@ function BrowserSessionBody({ obj }) {
         {meta.action && (
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
             Action: <span style={{ color: GOLD }}>{meta.action}</span>
+          </div>
+        )}
+        {(meta.runtimeTarget || meta.deploymentTarget || meta.repoTarget) && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+            Runtime: <span style={{ color: '#e2e8f0' }}>{meta.runtimeTarget || 'local'}</span>
+            {meta.deploymentTarget && <> · Deploy: <span style={{ color: '#e2e8f0' }}>{meta.deploymentTarget}</span></>}
+            {meta.repoTarget && <> · Repo: <span style={{ color: '#e2e8f0' }}>{meta.repoTarget}</span></>}
           </div>
         )}
         {jobId && (

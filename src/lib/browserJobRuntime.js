@@ -63,7 +63,7 @@ export function getJob(jobId) {
  * @returns {string} jobId
  */
 export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
-  const { url, action = 'scrape', prompt = '', workerUrl = '' } = opts;
+  const { url, action = 'scrape', prompt = '', workerUrl = '', runtimeTarget = 'local', repoTarget = null, deploymentTarget = 'preview' } = opts;
   const jobId = genId();
   const now   = Date.now();
   const history = [{ ts: new Date().toISOString(), status: 'queued', detail: `Browser job queued for ${url}` }];
@@ -85,7 +85,7 @@ export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
     wsObjId:   null,
     attempt:   Number(opts.attempt || 1),
     history,
-    runtime:   { workspaceCtx, onNavigate, opts: { url, action, prompt, workerUrl } },
+    runtime:   { workspaceCtx, onNavigate, opts: { url, action, prompt, workerUrl, runtimeTarget, repoTarget, deploymentTarget } },
   };
   _jobs.set(jobId, jobState);
   notify();
@@ -100,7 +100,7 @@ export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
     title:   `Browser: ${url.slice(0, 50)}`,
     content: `URL: ${url}\nAction: ${action}\nStatus: queued…`,
     status:  RUN_STATUS.QUEUED,
-    meta:    { url, action, job_id: jobId, mode: workerUrl ? 'local' : 'queued', workerUrl: workerUrl || null, history, attempt: jobState.attempt },
+    meta:    { url, action, job_id: jobId, mode: workerUrl ? 'local' : 'queued', workerUrl: workerUrl || null, runtimeTarget, repoTarget, deploymentTarget, history, attempt: jobState.attempt },
   });
   onNavigate?.('workspace');
 
@@ -124,7 +124,7 @@ export async function cancelBrowserJob(jobId) {
     job.runtime?.workspaceCtx?.patchObject(job.wsObjId, {
       progress: 100,
       content: `URL: ${job.url}\nAction: ${job.action}\nStatus: cancelled\n\nCancelled by operator.`,
-      meta: { url: job.url, action: job.action, job_id: jobId, mode: job.mode, workerUrl: job.runtime?.opts?.workerUrl || null, history: job.history, attempt: job.attempt },
+      meta: { url: job.url, action: job.action, job_id: jobId, mode: job.mode, workerUrl: job.runtime?.opts?.workerUrl || null, runtimeTarget: job.runtime?.opts?.runtimeTarget || 'local', repoTarget: job.runtime?.opts?.repoTarget || null, deploymentTarget: job.runtime?.opts?.deploymentTarget || 'preview', history: job.history, attempt: job.attempt },
     });
   }
 
@@ -145,7 +145,7 @@ export async function retryBrowserJob(jobId, workspaceCtx, onNavigate, overrides
   const runtime = job.runtime || {};
   return startBrowserJob(
     {
-      ...(runtime.opts || { url: job.url, action: job.action, prompt: job.prompt, workerUrl: job.mode === 'local' ? runtime.opts?.workerUrl : '' }),
+        ...(runtime.opts || { url: job.url, action: job.action, prompt: job.prompt, workerUrl: job.mode === 'local' ? runtime.opts?.workerUrl : '' }),
       ...overrides,
       attempt: (job.attempt || 1) + 1,
     },
@@ -172,7 +172,16 @@ async function _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx) 
     const res = await fetch(`${API_URL}/api/browser/run`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ url, action, prompt, job_id: jobId, worker_url: workerUrl || undefined }),
+      body:    JSON.stringify({
+        url,
+        action,
+        prompt,
+        job_id: jobId,
+        worker_url: workerUrl || undefined,
+        runtime_target: job.runtime?.opts?.runtimeTarget || 'local',
+        repo_target: job.runtime?.opts?.repoTarget || undefined,
+        deployment_target: job.runtime?.opts?.deploymentTarget || 'preview',
+      }),
     });
 
     if (job.cancelled) return;
@@ -256,6 +265,9 @@ function _recordHistory(jobId, status, detail) {
         job_id: jobId,
         mode: job.mode,
         workerUrl: job.runtime?.opts?.workerUrl || null,
+        runtimeTarget: job.runtime?.opts?.runtimeTarget || 'local',
+        repoTarget: job.runtime?.opts?.repoTarget || null,
+        deploymentTarget: job.runtime?.opts?.deploymentTarget || 'preview',
         history: job.history,
         attempt: job.attempt,
       },
@@ -293,7 +305,7 @@ async function pollBrowserStatus(jobId, workerUrl, workspaceCtx, wsObjId, url, a
       workspaceCtx.patchObject(wsObjId, {
         progress: Math.min(90, 40 + attempt * 3),
         content: `URL: ${url}\nAction: ${action}\nStatus: ${nextStatus}\n\nWorker poll ${attempt + 1}…`,
-        meta: { url, action, job_id: jobId, mode: data.mode || 'local', workerUrl: workerUrl || null, lastPollStatus: nextStatus, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
+        meta: { url, action, job_id: jobId, mode: data.mode || 'local', workerUrl: workerUrl || null, runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local', repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null, deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview', lastPollStatus: nextStatus, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
       });
       continue;
     }
@@ -317,7 +329,7 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content: `URL: ${url}\nAction: ${action}\nStatus: blocked\n\n${data.reason || 'Browser automation requires a worker.'}`,
-      meta: { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, reason: data.reason, instructions: data.instructions, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
+      meta: { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local', repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null, deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview', reason: data.reason, instructions: data.instructions, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
     });
     persistBrowserJob({ jobId, url, action, status: 'blocked', mode: 'blocked', result: data.reason }).catch(() => {});
     _processQueue();
@@ -332,7 +344,7 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content: `URL: ${url}\nAction: ${action}\nStatus: error\n\n${error}`,
-      meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, error, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
+      meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local', repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null, deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview', error, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
     });
     _emitLog(jobId, workspaceCtx, `[browser] Error — ${error}`);
     persistBrowserJob({ jobId, url, action, status: 'error', mode, result: error }).catch(() => {});
@@ -350,7 +362,7 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
   workspaceCtx.patchObject(wsObjId, {
     progress: 100,
     content: `URL: ${url}\nAction: ${action}\nStatus: complete\n\n${data.summary || resultText || 'Browser execution finished.'}`,
-    meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, screenshot_url: screenshotUrl, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
+    meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local', repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null, deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview', screenshot_url: screenshotUrl, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
   });
 
   workspaceCtx.createObject({
@@ -364,6 +376,9 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
       job_id: jobId,
       mode,
       workerUrl: workerUrl || null,
+      runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local',
+      repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null,
+      deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview',
       screenshot_url: screenshotUrl,
       extracted_text: resultText,
       evidence,
@@ -376,7 +391,7 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
       title: `Snapshot: ${url.slice(0, 40)}`,
       content: screenshotUrl,
       status: RUN_STATUS.DONE,
-      meta: { url, action, job_id: jobId, mode, screenshot_url: screenshotUrl },
+      meta: { url, action, job_id: jobId, mode, runtimeTarget: getJob(jobId)?.runtime?.opts?.runtimeTarget || 'local', repoTarget: getJob(jobId)?.runtime?.opts?.repoTarget || null, deploymentTarget: getJob(jobId)?.runtime?.opts?.deploymentTarget || 'preview', screenshot_url: screenshotUrl },
     });
   }
 

@@ -1,6 +1,6 @@
 // Vercel serverless function: POST /api/agents/run
 // Autonomous agent task execution — emits structured run contracts
-import { callLLM, llmMode, hasLLM, connectorState } from '../_llm.js';
+import { callLLM, llmMode, hasLLM, connectorState, resolveProviderRequest } from '../_llm.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,9 +17,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'task is required' });
   }
 
-  const mode       = llmMode(credentials);
+  const routing    = resolveProviderRequest({ provider: context?.provider || credentials?.providerPreference || 'auto', model: context?.model || null, credentials });
+  const mode       = routing.mode || llmMode(credentials);
   const ts         = new Date().toISOString();
-  const connectors = connectorState();
+  const connectors = connectorState(credentials);
 
   const connectorSummary = Object.entries(connectors)
     .map(([k, v]) => `${k}: ${v.status} (${v.mode})`)
@@ -174,6 +175,28 @@ Break the task into independent parallel subtasks. Return JSON:
 
   const systemPrompt = (agentSystemPrompts[agent] || agentSystemPrompts.default);
 
+  if (!routing.ok) {
+    return res.status(200).json({
+      event_type: 'run_blocked',
+      run_id: runId || null,
+      task,
+      agent,
+      mode: 'blocked',
+      provider: routing.provider,
+      model: routing.model,
+      error: routing.reason,
+      blocked_capabilities: deriveBlockedCapabilities(),
+      connector_state: connectors,
+      workspace_object: {
+        type: 'runtime_state',
+        title: 'Agent Provider Blocked',
+        content: `Agent execution blocked.\n\nReason: ${routing.reason}`,
+        meta: { provider: routing.provider, model: routing.model, reason: routing.reason, mode: 'blocked' },
+      },
+      timestamp: ts,
+    });
+  }
+
   try {
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -181,7 +204,12 @@ Break the task into independent parallel subtasks. Return JSON:
       { role: 'user', content: buildUserPrompt(task, context) },
     ];
 
-    const raw    = await callLLM(messages, { model: process.env.OPENAI_MODEL || 'gpt-4o', json: !!(credentials.openaiApiKey || process.env.OPENAI_API_KEY), credentials });
+    const raw    = await callLLM(messages, {
+      model: routing.model || context?.model || process.env.OPENAI_MODEL || 'gpt-4o',
+      provider: routing.provider,
+      json: routing.provider === 'openai' && !!(credentials.openaiApiKey || process.env.OPENAI_API_KEY),
+      credentials,
+    });
     const parsed = safeParseJSON(raw);
 
     const plan = Array.isArray(parsed?.plan) ? parsed.plan : [];
@@ -217,6 +245,8 @@ Break the task into independent parallel subtasks. Return JSON:
       task,
       agent,
       mode,
+      provider: routing.provider,
+      model: routing.model,
       plan,
       result,
       summary,
