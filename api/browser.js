@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 }
 
 function getBrowserAction(req) {
-  const action = req?.query?.action || req?.body?.action || '';
+  const action = req?.query?.action || '';
   return `${action}`.trim().toLowerCase();
 }
 

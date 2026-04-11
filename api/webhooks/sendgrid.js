@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const event = `${req?.query?.event || req?.body?.event || ''}`.trim().toLowerCase();
+  const event = `${req?.query?.event || ''}`.trim().toLowerCase();
   if (event === 'inbound') return handleInbound(req, res);
   if (event === 'events') return handleEvents(req, res);
   return res.status(400).json({ error: 'Unknown SendGrid webhook event' });
