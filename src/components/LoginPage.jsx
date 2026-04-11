@@ -12,8 +12,8 @@ const highlights = [
 ];
 
 export default function LoginPage({ onContinue }) {
-  const [email, setEmail] = useState('you@xpsxpress.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('This screen is visual only and does not require authentication.');
 

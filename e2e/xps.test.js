@@ -19,7 +19,7 @@ test.describe('XPS Intelligence site restore', () => {
     await expect(page.getByText('Welcome back')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
     await expect(page.getByText('This screen is visual only and does not require authentication.')).toBeVisible();
-    await screenshot(page, 'landing-front-door');
+    await screenshot(page, 'login-front-door');
   });
 
   test('login opens the new home page before the app shell', async ({ page }) => {
