@@ -843,14 +843,26 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   const credentialOverrides = {
     openaiApiKey: connectionPrefs.openaiApiKey,
+    openaiModel: connectionPrefs.openaiModel,
     groqApiKey: connectionPrefs.groqApiKey,
+    groqModel: connectionPrefs.groqModel,
     geminiApiKey: connectionPrefs.geminiApiKey,
+    geminiModel: connectionPrefs.geminiModel,
     ollamaBaseUrl: connectionPrefs.ollamaBaseUrl,
+    ollamaModel: connectionPrefs.ollamaModel,
     twilioAccountSid: connectionPrefs.twilioAccountSid,
     twilioAuthToken: connectionPrefs.twilioAuthToken,
     twilioPhoneNumber: connectionPrefs.twilioPhoneNumber,
     sendgridApiKey: connectionPrefs.sendgridApiKey,
     sendgridFromEmail: connectionPrefs.sendgridFromEmail,
+    runtimeTarget: connectionPrefs.runtimeTarget,
+    repoTarget: connectionPrefs.repoTarget,
+    deploymentTarget: connectionPrefs.deploymentTarget,
+    twilioWebhookUrl: connectionPrefs.twilioWebhookUrl,
+    sendgridWebhookUrl: connectionPrefs.sendgridWebhookUrl,
+    genericWebhookUrl: connectionPrefs.genericWebhookUrl,
+    providerPreference: connectionPrefs.providerPreference,
+    bytebotProvider: connectionPrefs.bytebotProvider,
   };
 
   const send = async (e) => {
@@ -1096,8 +1108,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
+      const bytebotProvider = connectionPrefs.bytebotProvider && connectionPrefs.bytebotProvider !== 'auto'
+        ? connectionPrefs.bytebotProvider
+        : effectiveProvider;
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: effectiveProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: bytebotProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -1114,8 +1129,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     if (agent === 'bytebot') {
       setLoading(false);
+      const bytebotProvider = connectionPrefs.bytebotProvider && connectionPrefs.bytebotProvider !== 'auto'
+        ? connectionPrefs.bytebotProvider
+        : effectiveProvider;
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: effectiveProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: bytebotProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {

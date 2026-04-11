@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { url, action = 'scrape', prompt, job_id, worker_url } = req.body || {};
+  const { url, action = 'scrape', prompt, job_id, worker_url, runtime_target = 'local', repo_target = null, deployment_target = 'preview' } = req.body || {};
   if (!url) return res.status(400).json({ error: 'url is required' });
 
   const ts     = new Date().toISOString();
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     mode: workerUrl ? 'local' : 'blocked',
     source: 'api/browser/run',
     target: workerUrl || null,
-    detail: `Browser job queued for ${url}`,
+    detail: `Browser job queued for ${url} (${runtime_target}/${deployment_target})`,
   });
 
   // ── Local worker proxy ─────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
       const upstream = await fetch(`${workerUrl}/run`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ url, action, prompt, job_id: jobId }),
+        body:    JSON.stringify({ url, action, prompt, job_id: jobId, runtime_target, repo_target, deployment_target }),
         signal:  AbortSignal.timeout(55000),
       });
       const data = await upstream.json();
@@ -56,9 +56,16 @@ export default async function handler(req, res) {
         mode: data.mode || 'local',
         provider: 'browser_worker',
         detail: `Browser job ${jobId} dispatched to worker.`,
-        meta: { jobId, url, action, target: workerUrl },
+        meta: { jobId, url, action, target: workerUrl, runtimeTarget: runtime_target, repoTarget: repo_target, deploymentTarget: deployment_target },
       });
-      return res.status(upstream.ok ? 200 : 502).json({ ...data, job_id: jobId, worker_mode: worker_url ? 'session' : 'backend' });
+      return res.status(upstream.ok ? 200 : 502).json({
+        ...data,
+        job_id: jobId,
+        worker_mode: worker_url ? 'session' : 'backend',
+        runtime_target,
+        repo_target,
+        deployment_target,
+      });
     } catch (err) {
       upsertJobRecord({
         jobId,
@@ -69,7 +76,7 @@ export default async function handler(req, res) {
         source: 'api/browser/run',
         target: workerUrl,
         error: err.message,
-        detail: `Worker proxy error: ${err.message}`,
+      detail: `Worker proxy error: ${err.message}`,
       });
       return res.status(502).json({
         event_type: 'browser_job_failed',
@@ -79,6 +86,9 @@ export default async function handler(req, res) {
         status:     'error',
         mode:       'local',
         error:      `Worker proxy error: ${err.message}`,
+        runtime_target,
+        repo_target,
+        deployment_target,
         timestamp:  ts,
       });
     }
@@ -102,7 +112,7 @@ export default async function handler(req, res) {
     mode: 'blocked',
     provider: 'browser_worker',
     detail: 'Browser job blocked because BROWSER_WORKER_URL is not configured.',
-    meta: { jobId, url, action },
+    meta: { jobId, url, action, runtimeTarget: runtime_target, repoTarget: repo_target, deploymentTarget: deployment_target },
   });
   return res.status(200).json({
     event_type: 'browser_job_queued',
@@ -112,6 +122,9 @@ export default async function handler(req, res) {
     status:     'blocked',
     mode:       'blocked',
     reason:     'Playwright browser automation requires a persistent worker process. Vercel serverless functions have no filesystem and cannot run Chromium. To enable live browser jobs: set BROWSER_WORKER_URL or provide a session worker URL that runs Playwright.',
+    runtime_target,
+    repo_target,
+    deployment_target,
     instructions: [
       'Run: npx playwright install chromium',
       'Start local worker: node scripts/browser-worker.js',
@@ -120,8 +133,8 @@ export default async function handler(req, res) {
     workspace_object: {
       type:    'browser_session',
       title:   `Browser: ${url.slice(0, 50)}`,
-      content: `Action: ${action}\nURL: ${url}\nStatus: blocked\n\nBrowser automation is blocked in serverless production. Set BROWSER_WORKER_URL to a Playwright worker to enable.`,
-      meta:    { url, action, job_id: jobId, mode: 'blocked' },
+      content: `Action: ${action}\nURL: ${url}\nRuntime target: ${runtime_target}\nDeployment target: ${deployment_target}\nRepo target: ${repo_target || 'not set'}\nStatus: blocked\n\nBrowser automation is blocked in serverless production. Set BROWSER_WORKER_URL to a Playwright worker to enable.`,
+      meta:    { url, action, job_id: jobId, mode: 'blocked', runtimeTarget: runtime_target, repoTarget: repo_target, deploymentTarget: deployment_target },
     },
     timestamp: ts,
   });

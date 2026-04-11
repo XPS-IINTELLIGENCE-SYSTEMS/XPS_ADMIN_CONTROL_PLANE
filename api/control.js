@@ -130,7 +130,7 @@ export default async function handler(req, res) {
           direction: 'outbound',
           provider: 'twilio',
           detail: result.message || result.reason || 'Twilio action recorded.',
-          meta: { externalId: result.external_id || null, to: payload?.to || null },
+          meta: { externalId: result.external_id || null, to: payload?.to || null, runtimeTarget: payload?.credentials?.runtimeTarget || 'local', repoTarget: payload?.credentials?.repoTarget || null, deploymentTarget: payload?.credentials?.deploymentTarget || 'preview' },
         });
         return res.status(result.status === 'error' ? 502 : 200).json({
           event_type: 'connector_action',
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
           direction: 'outbound',
           provider: 'sendgrid',
           detail: result.message || result.reason || 'SendGrid action recorded.',
-          meta: { externalId: result.external_id || null, to: payload?.to || null, subject: payload?.subject || null },
+          meta: { externalId: result.external_id || null, to: payload?.to || null, subject: payload?.subject || null, runtimeTarget: payload?.credentials?.runtimeTarget || 'local', repoTarget: payload?.credentials?.repoTarget || null, deploymentTarget: payload?.credentials?.deploymentTarget || 'preview' },
         });
         return res.status(result.status === 'error' ? 502 : 200).json({
           event_type: 'connector_action',
@@ -207,6 +207,14 @@ function resolveRuntimeConfig(payload = {}) {
     twilioPhoneNumber: credentials.twilioPhoneNumber || process.env.TWILIO_PHONE_NUMBER || '',
     sendgridApiKey: credentials.sendgridApiKey || process.env.SENDGRID_API_KEY || '',
     sendgridFromEmail: credentials.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL || '',
+    runtimeTarget: credentials.runtimeTarget || 'local',
+    localRuntimeUrl: credentials.localRuntimeUrl || '',
+    cloudRuntimeUrl: credentials.cloudRuntimeUrl || '',
+    repoTarget: credentials.repoTarget || '',
+    deploymentTarget: credentials.deploymentTarget || 'preview',
+    twilioWebhookUrl: credentials.twilioWebhookUrl || '',
+    sendgridWebhookUrl: credentials.sendgridWebhookUrl || '',
+    genericWebhookUrl: credentials.genericWebhookUrl || '',
   };
 }
 
@@ -221,6 +229,9 @@ async function executeTwilioCall(payload = {}) {
       to,
       message,
       capabilityState: 'blocked',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -229,6 +240,9 @@ async function executeTwilioCall(payload = {}) {
       to,
       message,
       capabilityState: 'token-configured',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -237,6 +251,9 @@ async function executeTwilioCall(payload = {}) {
       to,
       message,
       capabilityState: 'write-enabled',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -270,12 +287,12 @@ async function executeTwilioCall(payload = {}) {
     return {
       status: 'complete',
       mode: 'live',
-      message: `Twilio outbound call queued.\n\nTo: ${to}\nFrom: ${cfg.twilioPhoneNumber}\nCall SID: ${sid || 'pending'}\nExecution path: live Twilio REST API`,
+      message: `Twilio outbound call queued.\n\nTo: ${to}\nFrom: ${cfg.twilioPhoneNumber}\nCall SID: ${sid || 'pending'}\nRuntime target: ${cfg.runtimeTarget}\nDeployment target: ${cfg.deploymentTarget}\nRepo target: ${cfg.repoTarget || 'not set'}\nExecution path: live Twilio REST API`,
       external_id: sid,
       workspace_object: {
         type: 'connector_action',
         title: 'Twilio Outbound Call',
-        content: `Twilio outbound call queued.\n\nTo: ${to}\nFrom: ${cfg.twilioPhoneNumber}\nCall SID: ${sid || 'pending'}\nMessage: ${message}`,
+        content: `Twilio outbound call queued.\n\nTo: ${to}\nFrom: ${cfg.twilioPhoneNumber}\nCall SID: ${sid || 'pending'}\nRuntime target: ${cfg.runtimeTarget}\nDeployment target: ${cfg.deploymentTarget}\nRepo target: ${cfg.repoTarget || 'not set'}\nWebhook target: ${cfg.twilioWebhookUrl || cfg.genericWebhookUrl || 'not set'}\nMessage: ${message}`,
         meta: {
           connector: 'twilio',
           mode: 'live',
@@ -285,14 +302,21 @@ async function executeTwilioCall(payload = {}) {
           from: cfg.twilioPhoneNumber,
           message,
           externalId: sid,
+          runtimeTarget: cfg.runtimeTarget,
+          repoTarget: cfg.repoTarget || null,
+          deploymentTarget: cfg.deploymentTarget,
+          webhookTarget: cfg.twilioWebhookUrl || cfg.genericWebhookUrl || null,
         },
       },
     };
   } catch (err) {
     return buildErrorConnectorResponse('twilio', `Twilio call request failed: ${err.message}`, {
       to,
-      from: cfg.twilioPhoneNumber,
-    });
+        from: cfg.twilioPhoneNumber,
+        runtimeTarget: cfg.runtimeTarget,
+        repoTarget: cfg.repoTarget || null,
+        deploymentTarget: cfg.deploymentTarget,
+      });
   }
 }
 
@@ -308,6 +332,9 @@ async function executeSendGridEmail(payload = {}) {
       to,
       subject,
       capabilityState: 'blocked',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -316,6 +343,9 @@ async function executeSendGridEmail(payload = {}) {
       to,
       subject,
       capabilityState: 'token-configured',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -324,6 +354,9 @@ async function executeSendGridEmail(payload = {}) {
       to,
       subject,
       capabilityState: 'write-enabled',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -332,6 +365,9 @@ async function executeSendGridEmail(payload = {}) {
       to,
       subject,
       capabilityState: 'write-enabled',
+      runtimeTarget: cfg.runtimeTarget,
+      repoTarget: cfg.repoTarget || null,
+      deploymentTarget: cfg.deploymentTarget,
     });
   }
 
@@ -365,12 +401,12 @@ async function executeSendGridEmail(payload = {}) {
     return {
       status: 'complete',
       mode: 'live',
-      message: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\nExecution path: live SendGrid REST API`,
+      message: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\nRuntime target: ${cfg.runtimeTarget}\nDeployment target: ${cfg.deploymentTarget}\nRepo target: ${cfg.repoTarget || 'not set'}\nExecution path: live SendGrid REST API`,
       external_id: response.headers.get('x-message-id') || null,
       workspace_object: {
         type: 'connector_action',
         title: 'SendGrid Email Send',
-        content: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\n\nPreview:\n${buildEmailPreview(text, html)}`,
+        content: `SendGrid email accepted.\n\nTo: ${to}\nFrom: ${cfg.sendgridFromEmail}\nSubject: ${subject}\nRuntime target: ${cfg.runtimeTarget}\nDeployment target: ${cfg.deploymentTarget}\nRepo target: ${cfg.repoTarget || 'not set'}\nWebhook target: ${cfg.sendgridWebhookUrl || cfg.genericWebhookUrl || 'not set'}\n\nPreview:\n${buildEmailPreview(text, html)}`,
         meta: {
           connector: 'sendgrid',
           mode: 'live',
@@ -380,6 +416,10 @@ async function executeSendGridEmail(payload = {}) {
           from: cfg.sendgridFromEmail,
           subject,
           externalId: response.headers.get('x-message-id') || null,
+          runtimeTarget: cfg.runtimeTarget,
+          repoTarget: cfg.repoTarget || null,
+          deploymentTarget: cfg.deploymentTarget,
+          webhookTarget: cfg.sendgridWebhookUrl || cfg.genericWebhookUrl || null,
         },
       },
     };
@@ -387,8 +427,11 @@ async function executeSendGridEmail(payload = {}) {
     return buildErrorConnectorResponse('sendgrid', `SendGrid send failed: ${err.message}`, {
       to,
       from: cfg.sendgridFromEmail,
-      subject,
-    });
+        subject,
+        runtimeTarget: cfg.runtimeTarget,
+        repoTarget: cfg.repoTarget || null,
+        deploymentTarget: cfg.deploymentTarget,
+      });
   }
 }
 

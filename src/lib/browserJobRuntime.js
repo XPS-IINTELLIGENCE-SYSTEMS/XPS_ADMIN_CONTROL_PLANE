@@ -172,7 +172,16 @@ async function _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx) 
     const res = await fetch(`${API_URL}/api/browser/run`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ url, action, prompt, job_id: jobId, worker_url: workerUrl || undefined }),
+      body:    JSON.stringify({
+        url,
+        action,
+        prompt,
+        job_id: jobId,
+        worker_url: workerUrl || undefined,
+        runtime_target: job.runtime?.opts?.runtimeTarget || 'local',
+        repo_target: job.runtime?.opts?.repoTarget || undefined,
+        deployment_target: job.runtime?.opts?.deploymentTarget || 'preview',
+      }),
     });
 
     if (job.cancelled) return;
