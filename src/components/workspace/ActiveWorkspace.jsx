@@ -592,6 +592,9 @@ function StatusBar({ obj }) {
   const updAgo = Math.round((Date.now() - obj.updatedAt) / 1000);
   const updStr = updAgo < 5 ? 'just now' : updAgo < 60 ? `${updAgo}s ago` : `${Math.round(updAgo / 60)}m ago`;
   const meta   = OBJ_TYPE_META[obj.type] ?? { label: obj.type, icon: '' };
+  const persistence = obj.meta?.persistence || null;
+  const recoveredFromStatus = persistence?.recoveredFromStatus || null;
+  const restored = !!persistence?.recoveredAt;
 
   return (
     <div style={{
@@ -641,6 +644,15 @@ function StatusBar({ obj }) {
             </div>
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{obj.progress}%</span>
           </div>
+        </>
+      )}
+
+      {restored && (
+        <>
+          <Divider />
+          <span style={{ fontSize: 10, color: '#fbbf24', fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            restored{recoveredFromStatus ? ` · was ${recoveredFromStatus}` : ''}
+          </span>
         </>
       )}
 

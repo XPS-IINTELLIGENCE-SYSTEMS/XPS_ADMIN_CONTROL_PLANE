@@ -7,7 +7,8 @@
  * to create, update, and drive the lifecycle of these objects.
  */
 
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import { loadWorkspaceSnapshot, saveWorkspaceSnapshot } from './orchestrationPersistence.js';
 
 // ── Object types ──────────────────────────────────────────────────────────────
 
@@ -210,7 +211,11 @@ function reducer(state, action) {
 const WorkspaceContext = createContext(null);
 
 export function WorkspaceProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, { objects: [], activeId: null });
+  const [state, dispatch] = useReducer(
+    reducer,
+    null,
+    () => loadWorkspaceSnapshot() || { objects: [], activeId: null },
+  );
 
   const createObject = useCallback((payload) => {
     dispatch({ type: WS_CREATE, payload });
@@ -251,6 +256,13 @@ export function WorkspaceProvider({ children }) {
     setActive,
     closeObject,
   };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveWorkspaceSnapshot(state);
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [state]);
 
   return (
     <WorkspaceContext.Provider value={value}>

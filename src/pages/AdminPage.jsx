@@ -8,7 +8,7 @@
  * build-time env var detection. No faked data. Blocked passthrough is
  * explicitly surfaced with truthful reasons.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   GitBranch, Database, Cpu, Globe, Mail, Sparkles,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
@@ -28,6 +28,7 @@ import { executeSendGridEmail, executeTwilioCall, buildConnectorCredentials } fr
 import { subscribeRuns, getRunList, retryRun, recoverRun, cancelRun } from '../lib/bytebotRuntime.js';
 import { subscribeJobs, getJobList, retryBrowserJob, recoverBrowserJob, cancelBrowserJob } from '../lib/browserJobRuntime.js';
 import { subscribeGroups, getGroupList } from '../lib/parallelRunGroup.js';
+import { loadAdminStatusSnapshot, saveAdminStatusSnapshot } from '../lib/orchestrationPersistence.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -246,6 +247,16 @@ function SectionHeading({ children }) {
   );
 }
 
+function getRuntimeSourceMeta(statusSource) {
+  if (statusSource === 'live') {
+    return { label: 'live /api/status', color: '#4ade80' };
+  }
+  if (statusSource === 'recovered') {
+    return { label: 'last browser-local continuity snapshot', color: '#fbbf24' };
+  }
+  return { label: 'unavailable', color: 'rgba(255,255,255,0.35)' };
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
 export default function AdminPage({ activeSection: requestedSection = 'integrations', onSectionChange }) {
   const workspace = useWorkspace();
@@ -253,6 +264,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
+  const [savedStatus, setSavedStatus] = useState(() => loadAdminStatusSnapshot());
   const [session, setSession] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authStatus, setAuthStatus] = useState(null);
@@ -267,8 +279,11 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setLiveStatus(data);
+      saveAdminStatusSnapshot(data);
+      setSavedStatus(loadAdminStatusSnapshot());
     } catch (err) {
       setStatusError(err.message);
+      setSavedStatus(loadAdminStatusSnapshot());
     } finally {
       setStatusLoading(false);
     }
@@ -373,6 +388,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
   const browserWorkerConfigured = live.browser?.configured ?? BROWSER_WORKER_CONFIGURED;
   const twilioConfigured = !!(live.twilio?.configured || (connectionPrefs.twilioAccountSid && connectionPrefs.twilioAuthToken) || TWILIO_CONFIGURED);
   const sendgridConfigured = !!(live.sendgrid?.configured || connectionPrefs.sendgridApiKey || SENDGRID_CONFIGURED);
+  const runtimeStatusSource = liveStatus ? 'live' : savedStatus ? 'recovered' : 'unavailable';
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -463,7 +479,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
           </button>
           {statusError && (
             <div style={{ marginTop: 6, fontSize: 10, color: '#ef4444', textAlign: 'center' }}>
-              API error — using build-time state
+              {savedStatus ? 'API error — runtime/system panels using last saved continuity snapshot' : 'API error — using build-time state'}
             </div>
           )}
           {liveStatus && (
@@ -529,7 +545,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
         )}
         {activeSection === 'runtime' && (
           <RuntimeSection
-            liveStatus={live}
+            statusSnapshot={liveStatus || savedStatus}
+            statusSource={runtimeStatusSource}
             workspace={workspace}
           />
         )}
@@ -550,6 +567,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             groqConfigured={groqConfigured}
             sbConfigured={sbConfigured}
             browserWorkerConfigured={browserWorkerConfigured}
+            runtimeStatusSource={runtimeStatusSource}
+            savedStatus={savedStatus}
           />
         )}
         {activeSection === 'governance' && (
@@ -1776,11 +1795,20 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
   );
 }
 
-function RuntimeSection({ liveStatus, workspace }) {
-  const runtimeOps = liveStatus?.runtimeOps || {};
+function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
+  const runtimeOps = statusSnapshot?.runtimeOps || {};
+  const continuitySnapshot = statusSnapshot?.persistence || null;
+  const runtimeSourceMeta = getRuntimeSourceMeta(statusSource);
   const [runs, setRuns] = useState(getRunList());
   const [jobs, setJobs] = useState(getJobList());
   const [groups, setGroups] = useState(getGroupList());
+  const recoveredWorkspaceObjects = useMemo(
+    () => workspace.objects.filter((item) => item.meta?.persistence?.recoveredAt).length,
+    [workspace.objects],
+  );
+  const recoveredRuns = useMemo(() => runs.filter((item) => item.recoveryPending).length, [runs]);
+  const recoveredJobs = useMemo(() => jobs.filter((item) => item.recoveryPending).length, [jobs]);
+  const recoveredGroups = useMemo(() => groups.filter((item) => item.recoveryPending).length, [groups]);
   const workspaceCtx = {
     createObject: workspace.createObject,
     patchObject: workspace.patchObject,
@@ -1831,6 +1859,30 @@ function RuntimeSection({ liveStatus, workspace }) {
     });
     openWorkspace();
   };
+  const pushRecoverySnapshot = () => {
+    workspace.createObject({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: 'Recovery Continuity Snapshot',
+      content: [
+        `Snapshot source: ${statusSource}`,
+        `Workspace objects restored: ${recoveredWorkspaceObjects}`,
+        `Runs requiring recover/retry: ${recoveredRuns}`,
+        `Browser jobs requiring recover/retry: ${recoveredJobs}`,
+        `Parallel groups recovered: ${recoveredGroups}`,
+        `Runtime snapshot saved: ${continuitySnapshot?.savedAt || 'not yet saved'}`,
+      ].join('\n'),
+      status: RUN_STATUS.DONE,
+      meta: {
+        source: statusSource,
+        continuitySnapshot,
+        recoveredWorkspaceObjects,
+        recoveredRuns,
+        recoveredJobs,
+        recoveredGroups,
+      },
+    });
+    openWorkspace();
+  };
 
   return (
     <div data-testid="admin-runtime-panel">
@@ -1841,11 +1893,16 @@ function RuntimeSection({ liveStatus, workspace }) {
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
           Truthful inbound events, job orchestration, parallel groups, runtime targets, and execution history.
         </p>
+        <div style={{ marginTop: 8, fontSize: 11, color: runtimeSourceMeta.color }}>
+          Runtime source: {runtimeSourceMeta.label}
+        </div>
       </div>
 
       <CapPanel icon={Workflow} title="Runtime Targets" subtitle="Local vs cloud routing, workers, and webhook targets" status={runtimeOps.environment?.runtime === 'cloud' ? STATUS.LIVE : STATUS.LOCAL} defaultOpen>
         <InfoRow label="Runtime mode" value={runtimeOps.environment?.runtime || 'unknown'} />
         <InfoRow label="History store" value={runtimeOps.environment?.historyStore || 'unknown'} />
+        <InfoRow label="Snapshot source" value={runtimeSourceMeta.label} />
+        <InfoRow label="Continuity save" value={continuitySnapshot?.savedAt || 'No browser-local runtime snapshot saved yet'} />
         <InfoRow label="Browser worker target" value={runtimeOps.targets?.browserWorker?.target || 'Blocked — no worker target configured'} />
         <InfoRow label="Twilio inbound target" value={runtimeOps.targets?.webhookTargets?.twilioInbound || '/api/webhooks/twilio/inbound'} />
         <InfoRow label="SendGrid event target" value={runtimeOps.targets?.webhookTargets?.sendgridEvents || '/api/webhooks/sendgrid/events'} />
@@ -1854,12 +1911,26 @@ function RuntimeSection({ liveStatus, workspace }) {
         ))}
       </CapPanel>
 
+      <CapPanel icon={Shield} title="Continuity Recovery" subtitle="Browser-local reload recovery for workspace + orchestration state" status={recoveredWorkspaceObjects || recoveredRuns || recoveredJobs || recoveredGroups || statusSource === 'recovered' ? STATUS.LOCAL : STATUS.LIVE} defaultOpen={false}>
+        <InfoRow label="Recovered workspace objects" value={`${recoveredWorkspaceObjects}`} />
+        <InfoRow label="Runs pending recovery" value={`${recoveredRuns}`} />
+        <InfoRow label="Browser jobs pending recovery" value={`${recoveredJobs}`} />
+        <InfoRow label="Parallel groups recovered" value={`${recoveredGroups}`} />
+        <div style={{ padding: '0 16px 12px', fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>
+          Browser-local continuity keeps the operator view, builder state, and last-known runtime snapshots across reloads. Durable backend history still depends on Supabase/runtime persistence and is never claimed when unavailable.
+        </div>
+        <div style={{ padding: '0 16px 14px' }}>
+          <button onClick={pushRecoverySnapshot} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Render recovery snapshot</button>
+        </div>
+      </CapPanel>
+
       <CapPanel icon={PhoneCall} title="Inbound Communication Events" subtitle="Twilio + SendGrid webhook/event visibility" status={STATUS.LIVE} defaultOpen>
         <CapRow icon={PhoneCall} label="Twilio inbound ingestion" status={runtimeOps.inbound?.twilio?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeOps.inbound?.twilio?.verification || 'unverified'} />
         <CapRow icon={Mail} label="SendGrid inbound/event ingestion" status={runtimeOps.inbound?.sendgrid?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeOps.inbound?.sendgrid?.verification || 'unverified'} />
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={pushInboundEvents} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Render inbound events in workspace</button>
           <button onClick={pushRuntimeSnapshot} className="xps-electric-hover" style={actionBtnStyle(false, '#22c55e')}>Render runtime snapshot</button>
+          <button onClick={pushRecoverySnapshot} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Render recovery snapshot</button>
         </div>
         <RuntimeRecordList
           emptyLabel="No inbound events recorded in the active runtime yet."
@@ -1873,7 +1944,7 @@ function RuntimeSection({ liveStatus, workspace }) {
           emptyLabel="No runtime jobs recorded yet."
           records={[...runs, ...jobs].sort((a, b) => b.updatedAt - a.updatedAt)}
           renderTitle={(record) => record.title || record.task || record.jobId || record.runId}
-          renderMeta={(record) => `${record.agent || record.action || record.kind || 'job'} · attempt ${record.attempt || 1}`}
+          renderMeta={(record) => `${record.agent || record.action || record.kind || 'job'} · attempt ${record.attempt || 1}${record.recoveryPending ? ' · recovery pending' : ''}`}
           renderActions={(record) => record.runId ? (
             <>
               <button onClick={() => retryRun(record.runId, workspaceCtx, openWorkspace)} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Retry</button>
@@ -1899,7 +1970,7 @@ function RuntimeSection({ liveStatus, workspace }) {
           emptyLabel="No parallel groups recorded yet."
           records={groups}
           renderTitle={(group) => group.title}
-          renderMeta={(group) => `${group.jobs?.length || 0} job(s)`}
+          renderMeta={(group) => `${group.jobs?.length || 0} job(s)${group.recoveryPending ? ' · recovery pending' : ''}`}
         />
       </CapPanel>
 
@@ -2085,6 +2156,11 @@ function RuntimeRecordList({ records = [], emptyLabel, renderTitle, renderMeta, 
             {record.blockedReason && (
               <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 6 }}>{record.blockedReason}</div>
             )}
+            {(record.recoveryPending || record.persistence?.recoveredAt) && (
+              <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 6 }}>
+                Restored from browser-local continuity snapshot{record.recoveredFromStatus ? ` · previously ${record.recoveredFromStatus}` : ''}.
+              </div>
+            )}
             {history.length > 0 && (
               <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
                 {history.slice(0, 3).map((entry) => (
@@ -2163,7 +2239,8 @@ const actionInputStyle = {
   outline: 'none',
 };
 // ── System section ─────────────────────────────────────────────────────────
-function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured }) {
+function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured, runtimeStatusSource = 'live', savedStatus = null }) {
+  const runtimeSourceMeta = getRuntimeSourceMeta(runtimeStatusSource);
   const services = [
     { label: 'API Routes (/api/*)',      ok: true,                         note: 'Vercel serverless' },
     { label: 'LLM Adapter',             ok: openaiConfigured || groqConfigured, note: 'api/_llm.js' },
@@ -2175,6 +2252,7 @@ function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browser
     { label: 'Recovery Queue',          ok: sbConfigured,                 note: 'recovery_queue' },
     { label: 'ByteBot Runtime',         ok: true,                         note: 'src/lib/bytebotRuntime.js' },
     { label: 'Browser Job Runtime',     ok: true,                         note: 'src/lib/browserJobRuntime.js' },
+    { label: 'Client Continuity Cache', ok: true,                         note: 'browser-local orchestration snapshot' },
     { label: 'Browser Worker',          ok: browserWorkerConfigured,      note: 'BROWSER_WORKER_URL' },
     { label: 'Workspace Engine',        ok: true,                         note: 'src/lib/workspaceEngine.jsx' },
     { label: 'Orchestrator',            ok: openaiConfigured,             note: 'src/lib/orchestrator.js' },
@@ -2256,6 +2334,21 @@ function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browser
         ))}
         <div style={{ padding: '10px 16px', fontSize: 11, color: 'rgba(255,255,255,0.25)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
           Set variables in <code style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 3 }}>.env.local</code> for local dev or in Vercel project settings for production.
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 20,
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 12, overflow: 'hidden',
+      }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
+          CONTINUITY / RECOVERY TRUTH
+        </div>
+        <InfoRow label="Runtime source" value={runtimeSourceMeta.label} />
+        <InfoRow label="Last continuity save" value={savedStatus?.persistence?.savedAt || 'No runtime snapshot saved yet'} />
+        <div style={{ padding: '0 16px 14px', fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>
+          Browser-local continuity restores operator state after reloads and exposes the last saved runtime/admin snapshot. Durable backend mutation and orchestration history still require configured runtime persistence such as Supabase.
         </div>
       </div>
     </div>
