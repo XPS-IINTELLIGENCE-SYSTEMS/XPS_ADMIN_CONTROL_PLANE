@@ -1,21 +1,156 @@
 // Shared LLM caller for Vercel serverless functions
-// Priority: OpenAI → Groq → Ollama
+// Priority: OpenAI → Groq → Gemini → Ollama
 
 function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
 }
 
-function getRuntimeCredentials(credentials = {}) {
+function getRuntimeCredentials(env = process.env, credentials = {}) {
   return {
-    openaiApiKey: credentials.openaiApiKey || process.env.OPENAI_API_KEY,
-    groqApiKey: credentials.groqApiKey || process.env.GROQ_API_KEY,
-    geminiApiKey: credentials.geminiApiKey || getGeminiApiKey(),
-    ollamaBaseUrl: credentials.ollamaBaseUrl || process.env.OLLAMA_BASE_URL,
+    openaiApiKey: credentials.openaiApiKey || env.OPENAI_API_KEY,
+    groqApiKey: credentials.groqApiKey || env.GROQ_API_KEY,
+    geminiApiKey: credentials.geminiApiKey || env.GEMINI_API_KEY || env.GCP_GEMINI_KEY,
+    ollamaBaseUrl: credentials.ollamaBaseUrl || env.OLLAMA_BASE_URL,
+  };
+}
+
+export function getProviderCatalog(env = process.env, credentials = {}) {
+  const runtime = getRuntimeCredentials(env, credentials);
+  return {
+    openai: {
+      configured: !!runtime.openaiApiKey,
+      mode: runtime.openaiApiKey ? 'live' : 'blocked',
+      model: credentials.openaiModel || env.OPENAI_MODEL || 'gpt-4o-mini',
+      envKey: 'OPENAI_API_KEY',
+      reason: runtime.openaiApiKey ? null : 'OPENAI_API_KEY not set.',
+    },
+    groq: {
+      configured: !!runtime.groqApiKey,
+      mode: runtime.groqApiKey ? 'live' : 'blocked',
+      model: credentials.groqModel || env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      envKey: 'GROQ_API_KEY',
+      reason: runtime.groqApiKey ? null : 'GROQ_API_KEY not set.',
+    },
+    gemini: {
+      configured: !!runtime.geminiApiKey,
+      mode: runtime.geminiApiKey ? 'live' : 'blocked',
+      model: credentials.geminiModel || env.GEMINI_MODEL || 'gemini-1.5-flash',
+      envKey: 'GEMINI_API_KEY or GCP_GEMINI_KEY',
+      reason: runtime.geminiApiKey ? null : 'GEMINI_API_KEY or GCP_GEMINI_KEY not set.',
+    },
+    ollama: {
+      configured: !!runtime.ollamaBaseUrl,
+      mode: runtime.ollamaBaseUrl ? 'local' : 'blocked',
+      model: credentials.ollamaModel || env.OLLAMA_MODEL || 'llama3.1:8b',
+      envKey: 'OLLAMA_BASE_URL',
+      reason: runtime.ollamaBaseUrl ? null : 'OLLAMA_BASE_URL not set.',
+    },
+  };
+}
+
+export function getLlmState(env = process.env, credentials = {}) {
+  const providers = getProviderCatalog(env, credentials);
+  const activeEntry = Object.entries(providers).find(([, provider]) => provider.configured) || null;
+  const active = activeEntry?.[0] || 'none';
+  const activeProvider = activeEntry?.[1] || null;
+
+  return {
+    active,
+    model: activeProvider?.model || null,
+    mode: activeProvider?.mode || 'synthetic',
+    reason: activeProvider?.reason || 'No LLM provider configured. Configure OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, GCP_GEMINI_KEY, or OLLAMA_BASE_URL.',
+    providers,
+  };
+}
+
+export function resolveProviderRequest({ provider = 'auto', model, credentials = {} } = {}, env = process.env) {
+  const requestedProvider = typeof provider === 'string' ? provider.toLowerCase() : 'auto';
+  const llm = getLlmState(env, credentials);
+
+  if (requestedProvider === 'synthetic') {
+    return {
+      ok: true,
+      provider: 'synthetic',
+      requestedProvider,
+      model: model || 'fallback',
+      mode: 'synthetic',
+      explicitSynthetic: true,
+      fallbackSynthetic: false,
+      reason: 'Provider explicitly set to synthetic.',
+      llm,
+    };
+  }
+
+  if (requestedProvider !== 'auto') {
+    const requested = llm.providers[requestedProvider];
+    if (!requested) {
+      return {
+        ok: false,
+        provider: requestedProvider,
+        requestedProvider,
+        model: model || null,
+        mode: 'blocked',
+        explicitSynthetic: false,
+        fallbackSynthetic: false,
+        reason: `Unknown provider: ${provider}`,
+        llm,
+      };
+    }
+    if (!requested.configured) {
+      return {
+        ok: false,
+        provider: requestedProvider,
+        requestedProvider,
+        model: model || requested.model,
+        mode: 'blocked',
+        explicitSynthetic: false,
+        fallbackSynthetic: false,
+        reason: requested.reason,
+        llm,
+      };
+    }
+    return {
+      ok: true,
+      provider: requestedProvider,
+      requestedProvider,
+      model: model || requested.model,
+      mode: requested.mode,
+      explicitSynthetic: false,
+      fallbackSynthetic: false,
+      reason: null,
+      llm,
+    };
+  }
+
+  if (llm.active === 'none') {
+    return {
+      ok: false,
+      provider: 'none',
+      requestedProvider,
+      model: model || null,
+      mode: 'synthetic',
+      explicitSynthetic: false,
+      fallbackSynthetic: true,
+      reason: llm.reason,
+      llm,
+    };
+  }
+
+  return {
+    ok: true,
+    provider: llm.active,
+    requestedProvider,
+    model: model || llm.model,
+    mode: llm.mode,
+    explicitSynthetic: false,
+    fallbackSynthetic: false,
+    reason: null,
+    llm,
   };
 }
 
 export async function callLLM(messages, { model, provider = 'auto', json = false, credentials = {} } = {}) {
-  const runtime = getRuntimeCredentials(credentials);
+  const runtime = getRuntimeCredentials(process.env, credentials);
   const resolved = typeof provider === 'string' ? provider.toLowerCase() : 'auto';
   if (resolved !== 'auto') {
     switch (resolved) {
@@ -55,27 +190,22 @@ export async function callLLM(messages, { model, provider = 'auto', json = false
 }
 
 export function llmMode(credentials = {}) {
-  const runtime = getRuntimeCredentials(credentials);
-  if (runtime.openaiApiKey) return 'live';
-  if (runtime.groqApiKey)   return 'live';
-  if (runtime.geminiApiKey) return 'live';
-  if (runtime.ollamaBaseUrl) return 'local';
-  return 'synthetic';
+  return getLlmState(process.env, credentials).mode;
 }
 
 export function hasLLM(credentials = {}) {
-  const runtime = getRuntimeCredentials(credentials);
-  return !!(runtime.openaiApiKey || runtime.groqApiKey || runtime.geminiApiKey || runtime.ollamaBaseUrl);
+  return getLlmState(process.env, credentials).active !== 'none';
 }
 
 export function connectorState() {
+  const llm = getLlmState();
   return {
     supabase: { status: !!process.env.SUPABASE_URL ? 'connected' : 'not_connected', mode: !!process.env.SUPABASE_URL ? 'live' : 'blocked' },
-    llm:      { status: hasLLM() ? 'connected' : 'not_connected', mode: llmMode() },
-    openai:   { status: !!process.env.OPENAI_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.OPENAI_API_KEY ? 'live' : 'blocked' },
-    groq:     { status: !!process.env.GROQ_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.GROQ_API_KEY ? 'live' : 'blocked' },
-    gemini:   { status: !!(process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY) ? 'connected' : 'not_connected', mode: !!(process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY) ? 'live' : 'blocked' },
-    ollama:   { status: !!process.env.OLLAMA_BASE_URL ? 'connected' : 'not_connected', mode: !!process.env.OLLAMA_BASE_URL ? 'local' : 'blocked' },
+    llm:      { status: hasLLM() ? 'connected' : 'not_connected', mode: llm.mode, active: llm.active, reason: llm.reason },
+    openai:   { status: llm.providers.openai.configured ? 'connected' : 'not_connected', mode: llm.providers.openai.mode, reason: llm.providers.openai.reason },
+    groq:     { status: llm.providers.groq.configured ? 'connected' : 'not_connected', mode: llm.providers.groq.mode, reason: llm.providers.groq.reason },
+    gemini:   { status: llm.providers.gemini.configured ? 'connected' : 'not_connected', mode: llm.providers.gemini.mode, reason: llm.providers.gemini.reason },
+    ollama:   { status: llm.providers.ollama.configured ? 'connected' : 'not_connected', mode: llm.providers.ollama.mode, reason: llm.providers.ollama.reason },
     hubspot:  { status: !!process.env.HUBSPOT_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.HUBSPOT_API_KEY ? 'live' : 'blocked' },
     airtable: { status: !!process.env.AIRTABLE_API_KEY ? 'connected' : 'not_connected', mode: !!process.env.AIRTABLE_API_KEY ? 'live' : 'blocked' },
     browser:  { status: !!process.env.BROWSER_WORKER_URL ? 'connected' : 'not_connected', mode: !!process.env.BROWSER_WORKER_URL ? 'local' : 'blocked' },
