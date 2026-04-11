@@ -5,57 +5,67 @@ function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
 }
 
-export async function callLLM(messages, { model, provider = 'auto', json = false } = {}) {
+function getRuntimeCredentials(credentials = {}) {
+  return {
+    openaiApiKey: credentials.openaiApiKey || process.env.OPENAI_API_KEY,
+    groqApiKey: credentials.groqApiKey || process.env.GROQ_API_KEY,
+    geminiApiKey: credentials.geminiApiKey || getGeminiApiKey(),
+    ollamaBaseUrl: credentials.ollamaBaseUrl || process.env.OLLAMA_BASE_URL,
+  };
+}
+
+export async function callLLM(messages, { model, provider = 'auto', json = false, credentials = {} } = {}) {
+  const runtime = getRuntimeCredentials(credentials);
   const resolved = typeof provider === 'string' ? provider.toLowerCase() : 'auto';
   if (resolved !== 'auto') {
     switch (resolved) {
       case 'openai':
-        if (!process.env.OPENAI_API_KEY) throw new Error('OpenAI provider not configured.');
-        return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json);
+        if (!runtime.openaiApiKey) throw new Error('OpenAI provider not configured.');
+        return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json, runtime.openaiApiKey);
       case 'groq':
-        if (!process.env.GROQ_API_KEY) throw new Error('Groq provider not configured.');
-        return callGroq(messages, model || process.env.GROQ_MODEL || 'llama3-8b-8192');
+        if (!runtime.groqApiKey) throw new Error('Groq provider not configured.');
+        return callGroq(messages, model || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', runtime.groqApiKey);
       case 'gemini': {
-        const geminiKey = getGeminiApiKey();
-        if (!geminiKey) throw new Error('Gemini provider not configured.');
-        return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json);
+        if (!runtime.geminiApiKey) throw new Error('Gemini provider not configured.');
+        return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json, runtime.geminiApiKey);
       }
       case 'ollama':
-        if (!process.env.OLLAMA_BASE_URL) throw new Error('Ollama provider not configured.');
-        return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3');
+        if (!runtime.ollamaBaseUrl) throw new Error('Ollama provider not configured.');
+        return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3.1:8b', runtime.ollamaBaseUrl);
       default:
         throw new Error(`Unknown provider: ${provider}`);
     }
   }
 
-  if (process.env.OPENAI_API_KEY) {
-    return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json);
+  if (runtime.openaiApiKey) {
+    return callOpenAI(messages, model || process.env.OPENAI_MODEL || 'gpt-4o-mini', json, runtime.openaiApiKey);
   }
-  if (process.env.GROQ_API_KEY) {
+  if (runtime.groqApiKey) {
     // Note: json=true (response_format: json_object) is an OpenAI-only feature;
     // Groq and Ollama ignore this parameter and return plain text.
-    return callGroq(messages, model || process.env.GROQ_MODEL || 'llama3-8b-8192');
+    return callGroq(messages, model || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', runtime.groqApiKey);
   }
-  const geminiKey = getGeminiApiKey();
-  if (geminiKey) {
-    return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json);
+  if (runtime.geminiApiKey) {
+    return callGemini(messages, model || process.env.GEMINI_MODEL || 'gemini-1.5-flash', json, runtime.geminiApiKey);
   }
-  if (process.env.OLLAMA_BASE_URL) {
-    return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3');
+  if (runtime.ollamaBaseUrl) {
+    return callOllama(messages, model || process.env.OLLAMA_MODEL || 'llama3.1:8b', runtime.ollamaBaseUrl);
   }
   throw new Error('No LLM provider configured. Set OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL.');
 }
 
-export function llmMode() {
-  if (process.env.OPENAI_API_KEY) return 'live';
-  if (process.env.GROQ_API_KEY)   return 'live';
-  if (process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY) return 'live';
-  if (process.env.OLLAMA_BASE_URL) return 'local';
+export function llmMode(credentials = {}) {
+  const runtime = getRuntimeCredentials(credentials);
+  if (runtime.openaiApiKey) return 'live';
+  if (runtime.groqApiKey)   return 'live';
+  if (runtime.geminiApiKey) return 'live';
+  if (runtime.ollamaBaseUrl) return 'local';
   return 'synthetic';
 }
 
-export function hasLLM() {
-  return !!(process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY || process.env.OLLAMA_BASE_URL);
+export function hasLLM(credentials = {}) {
+  const runtime = getRuntimeCredentials(credentials);
+  return !!(runtime.openaiApiKey || runtime.groqApiKey || runtime.geminiApiKey || runtime.ollamaBaseUrl);
 }
 
 export function connectorState() {
@@ -72,12 +82,12 @@ export function connectorState() {
   };
 }
 
-async function callOpenAI(messages, model, json = false) {
+async function callOpenAI(messages, model, json = false, apiKey) {
   const body = { model, messages };
   if (json) body.response_format = { type: 'json_object' };
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -88,10 +98,10 @@ async function callOpenAI(messages, model, json = false) {
   return data.choices[0].message.content;
 }
 
-async function callGroq(messages, model) {
+async function callGroq(messages, model, apiKey) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, messages }),
   });
   if (!response.ok) {
@@ -102,8 +112,8 @@ async function callGroq(messages, model) {
   return data.choices[0].message.content;
 }
 
-async function callOllama(messages, model) {
-  const base = process.env.OLLAMA_BASE_URL.replace(/\/$/, '');
+async function callOllama(messages, model, baseUrl) {
+  const base = baseUrl.replace(/\/$/, '');
   const response = await fetch(`${base}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -114,8 +124,7 @@ async function callOllama(messages, model) {
   return data.message?.content || data.response;
 }
 
-async function callGemini(messages, model, json = false) {
-  const key = getGeminiApiKey();
+async function callGemini(messages, model, json = false, key) {
   const systemPreamble = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
   const filtered = messages.filter(m => m.role !== 'system');
   if (systemPreamble) {

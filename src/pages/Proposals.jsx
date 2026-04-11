@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Panel from '../components/ui/Panel.jsx';
 import StatusBadge from '../components/ui/StatusBadge.jsx';
 import { Plus, FileText } from 'lucide-react';
@@ -13,6 +13,8 @@ const proposals = [
 ];
 
 export default function Proposals() {
+  const [items, setItems] = useState(proposals);
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
@@ -20,15 +22,19 @@ export default function Proposals() {
           <h1 style={{ fontSize: 24, fontWeight: 700 }}>Proposals</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>Track, create, and manage sales proposals</p>
         </div>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}>
+        <button
+          onClick={() => setItems(prev => [{ id: Date.now(), company: 'New Proposal Draft', contact: 'Operator Added', value: '$18,500', status: 'Proposal', sent: 'just now' }, ...prev])}
+          className="xps-electric-hover"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}
+        >
           <Plus size={14} /> New Proposal
         </button>
       </div>
 
       <Panel title="Active Proposals">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {proposals.map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: i < proposals.length - 1 ? '1px solid var(--border)' : 'none' }}>
+          {items.map((p, i) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ width: 32, height: 32, borderRadius: 6, background: 'rgba(196,158,60,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <FileText size={14} color={GOLD} />
               </div>

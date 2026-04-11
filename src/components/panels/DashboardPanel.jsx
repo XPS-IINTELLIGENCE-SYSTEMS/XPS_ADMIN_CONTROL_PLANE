@@ -1,12 +1,17 @@
 import React from 'react';
 import { Users, DollarSign, FileText, Target, ClipboardList, Zap } from 'lucide-react';
+import { useWorkspace, OBJ_TYPE, RUN_STATUS } from '../../lib/workspaceEngine.jsx';
+import { requestAppShellNavigation } from '../../lib/appShellEvents.js';
 
 const gold = '#d4a843';
 
 // Zero-state metric card
-function MetricCard({ icon: Icon, label, note }) {
+function MetricCard({ icon: Icon, label, note, onClick }) {
   return (
-    <div style={{
+    <button
+      onClick={onClick}
+      className="xps-electric-hover"
+      style={{
       background: '#161616',
       border: '1px solid rgba(255,255,255,0.07)',
       borderRadius: 12,
@@ -15,6 +20,8 @@ function MetricCard({ icon: Icon, label, note }) {
       flexDirection: 'column',
       gap: 8,
       minWidth: 0,
+      textAlign: 'left',
+      cursor: 'pointer',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Icon size={22} className="xps-icon" style={{ opacity: 0.7 }} />
@@ -23,14 +30,17 @@ function MetricCard({ icon: Icon, label, note }) {
       <div style={{ fontSize: 28, fontWeight: 700, color: 'rgba(255,255,255,0.2)', letterSpacing: -0.5 }}>—</div>
       <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>{label}</div>
       {note && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 2 }}>{note}</div>}
-    </div>
+    </button>
   );
 }
 
 // Empty chart placeholder
-function ChartPlaceholder({ title, subtitle, height = 200 }) {
+function ChartPlaceholder({ title, subtitle, height = 200, onClick }) {
   return (
-    <div style={{
+    <button
+      onClick={onClick}
+      className="xps-electric-hover"
+      style={{
       background: '#161616',
       border: '1px solid rgba(255,255,255,0.07)',
       borderRadius: 12,
@@ -38,6 +48,9 @@ function ChartPlaceholder({ title, subtitle, height = 200 }) {
       height,
       display: 'flex',
       flexDirection: 'column',
+      textAlign: 'left',
+      cursor: 'pointer',
+      width: '100%',
     }}>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{title}</div>
@@ -59,11 +72,18 @@ function ChartPlaceholder({ title, subtitle, height = 200 }) {
         </svg>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: 0.6 }}>AWAITING DATA SYNC</span>
       </div>
-    </div>
+    </button>
   );
 }
 
 export default function DashboardPanel() {
+  const { createObject } = useWorkspace();
+
+  const openWorkspaceObject = (type, title, content) => {
+    createObject({ type, title, content, status: RUN_STATUS.DONE });
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+  };
+
   return (
     <div style={{ padding: '28px 28px', overflowY: 'auto', height: '100%' }}>
       {/* Header */}
@@ -81,16 +101,22 @@ export default function DashboardPanel() {
         gap: 14,
         marginBottom: 20,
       }}>
-        <MetricCard icon={Users} label="Active Leads" note="awaiting sync" />
-        <MetricCard icon={DollarSign} label="Pipeline Value" note="awaiting sync" />
-        <MetricCard icon={FileText} label="Proposals Sent" note="awaiting sync" />
-        <MetricCard icon={Target} label="Close Rate" note="awaiting sync" />
+        <MetricCard icon={Users} label="Active Leads" note="Open lead briefing" onClick={() => openWorkspaceObject(OBJ_TYPE.REPORT, 'Lead Briefing', 'Lead pipeline is awaiting CRM sync. Open Admin → GitHub/Supabase/HubSpot to configure live inputs.')} />
+        <MetricCard icon={DollarSign} label="Pipeline Value" note="Open revenue summary" onClick={() => openWorkspaceObject(OBJ_TYPE.DATA, 'Pipeline Summary', '{\n  \"status\": \"awaiting_sync\",\n  \"source\": \"crm\"\n}')} />
+        <MetricCard icon={FileText} label="Proposals Sent" note="Open proposal workspace" onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'proposals' })} />
+        <MetricCard icon={Target} label="Close Rate" note="Open analytics workspace" onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'analytics' })} />
       </div>
 
       {/* Charts row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 14, marginBottom: 20 }}>
-        <ChartPlaceholder title="Revenue Pipeline" subtitle="Monthly pipeline value trend" height={260} />
-        <ChartPlaceholder title="Pipeline Stages" subtitle="Lead distribution by stage" height={260} />
+        <ChartPlaceholder title="Revenue Pipeline" subtitle="Open pipeline data panel" height={260} onClick={() => openWorkspaceObject(OBJ_TYPE.DATA, 'Revenue Pipeline Snapshot', '{\n  \"state\": \"awaiting_live_data\",\n  \"next_action\": \"connect_crm\"\n}')} />
+        <ChartPlaceholder title="Pipeline Stages" subtitle="Open stage status panel" height={260} onClick={() => openWorkspaceObject(OBJ_TYPE.REPORT, 'Stage Status', 'Stage distribution is waiting for a live CRM connector.')} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <button className="xps-electric-hover" onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'workspace' })} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#f8fafc', fontWeight: 700 }}>Open Workspace</button>
+        <button className="xps-electric-hover" onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'connectors' })} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#f8fafc', fontWeight: 700 }}>Connector Matrix</button>
+        <button className="xps-electric-hover" onClick={() => requestAppShellNavigation({ page: 'admin', adminSection: 'integrations' })} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(212,168,67,0.35)', background: 'rgba(212,168,67,0.12)', color: gold, fontWeight: 700 }}>Open Admin Control Plane</button>
       </div>
 
       {/* Lower row */}

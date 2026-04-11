@@ -12,15 +12,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { query, context, runId } = req.body || {};
+  const { query, context, runId, credentials = {} } = req.body || {};
   if (!query) {
     return res.status(400).json({ error: 'query is required' });
   }
 
-  const mode = llmMode();
+  const mode = llmMode(credentials);
   const ts   = new Date().toISOString();
 
-  if (!hasLLM()) {
+  if (!hasLLM(credentials)) {
     return res.status(200).json({
       event_type: 'search_result',
       run_id:     runId || null,
@@ -49,7 +49,7 @@ ${context ? `Additional context: ${context}` : ''}`;
       { role: 'user',   content: query },
     ];
 
-    const summary = await callLLM(messages);
+    const summary = await callLLM(messages, { credentials });
 
     return res.status(200).json({
       event_type: 'search_result',

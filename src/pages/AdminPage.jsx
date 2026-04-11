@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
 import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
+import { getConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -237,8 +238,8 @@ function SectionHeading({ children }) {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function AdminPage() {
-  const [activeSection, setActiveSection] = useState('integrations'); // 'integrations' | 'github' | 'supabase' | 'vercel' | 'google' | 'system' | 'users'
+export default function AdminPage({ activeSection: requestedSection = 'integrations', onSectionChange }) {
+  const [activeSection, setActiveSection] = useState(requestedSection); // 'integrations' | 'github' | 'supabase' | 'vercel' | 'google' | 'system' | 'users'
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
@@ -246,6 +247,7 @@ export default function AdminPage() {
   const [authEmail, setAuthEmail] = useState('');
   const [authStatus, setAuthStatus] = useState(null);
   const [governance, setGovernanceState] = useState(getGovernance());
+  const [connectionPrefs, setConnectionPrefsState] = useState(getConnectionPrefs());
 
   const fetchStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -281,9 +283,23 @@ export default function AdminPage() {
     const unsub = subscribeGovernance(setGovernanceState);
     return unsub;
   }, []);
+  useEffect(() => {
+    setActiveSection(requestedSection);
+  }, [requestedSection]);
+  useEffect(() => {
+    setConnectionPrefsState(getConnectionPrefs());
+    const unsub = subscribeConnectionPrefs(setConnectionPrefsState);
+    return unsub;
+  }, []);
 
   const updateGovernance = (patch) => {
     setGovernanceState(setGovernance(patch));
+  };
+  const updateSessionConnections = (patch) => {
+    setConnectionPrefsState(updateConnectionPrefs(patch));
+  };
+  const resetSessionConnections = (keys) => {
+    setConnectionPrefsState(resetConnectionPrefs(keys));
   };
 
   const handleOAuth = async (provider) => {
@@ -355,12 +371,10 @@ export default function AdminPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 12px' }}>
           <div
-            className="xps-logo"
+            className="xps-logo xps-brand-logo-glow"
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              overflow: 'hidden',
+              width: 40,
+              height: 40,
               flexShrink: 0,
             }}
           >
@@ -372,8 +386,8 @@ export default function AdminPage() {
             />
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: 'var(--text-primary)' }}>XPS ADMIN</div>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: 1.4 }}>CONTROL PLANE</div>
+            <div className="xps-silver-text" style={{ fontSize: 14, fontWeight: 800, letterSpacing: 1.1 }}>XPS INTELLIGENCE</div>
+            <div className="xps-gold-text" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.6, marginTop: 3 }}>ADMIN CONTROL PLANE</div>
           </div>
         </div>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: 'rgba(255,255,255,0.3)', padding: '4px 8px 10px' }}>
@@ -386,7 +400,7 @@ export default function AdminPage() {
             <button
               key={item.id}
               data-testid={`admin-nav-${item.id}`}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => { setActiveSection(item.id); onSectionChange?.(item.id); }}
               className="xps-electric-hover"
               data-active={active ? 'true' : undefined}
               style={{
@@ -477,6 +491,9 @@ export default function AdminPage() {
             hubspotConfigured={hubspotConfigured}
             airtableConfigured={airtableConfigured}
             browserWorkerConfigured={browserWorkerConfigured}
+            connectionPrefs={connectionPrefs}
+            onUpdateConnectionPrefs={updateSessionConnections}
+            onResetConnectionPrefs={resetSessionConnections}
           />
         )}
         {activeSection === 'github'    && <GitHubSection configured={ghConfigured} liveStatus={live} />}
@@ -528,12 +545,16 @@ function IntegrationsSection({
   hubspotConfigured,
   airtableConfigured,
   browserWorkerConfigured,
+  connectionPrefs,
+  onUpdateConnectionPrefs,
+  onResetConnectionPrefs,
 }) {
   const live = liveStatus || {};
   const activeLLM  = live.llm?.active || (openaiConfigured ? 'openai' : groqConfigured ? 'groq' : 'none');
   const llmModel   = live.llm?.model  || null;
   const llmMode    = live.llm?.mode   || (activeLLM === 'none' ? 'synthetic' : 'live');
   const browserStatus = live.browser?.mode === 'local' || browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED;
+  const ollamaConfigured = live.llm?.providers?.ollama?.configured || !!connectionPrefs?.ollamaBaseUrl;
 
   return (
     <div>
@@ -579,6 +600,24 @@ function IntegrationsSection({
 
       <BlockedPassthroughPanel openaiConfigured={openaiConfigured} ghConfigured={ghConfigured} />
 
+      <SectionHeading>SESSION PASSTHROUGH / TOKEN INPUTS</SectionHeading>
+
+      <SessionConnectionMatrix
+        connectionPrefs={connectionPrefs}
+        onUpdateConnectionPrefs={onUpdateConnectionPrefs}
+        onResetConnectionPrefs={onResetConnectionPrefs}
+        statuses={{
+          openai: openaiConfigured,
+          groq: groqConfigured,
+          gemini: geminiConfigured,
+          ollama: ollamaConfigured,
+          github: ghConfigured,
+          supabase: sbConfigured,
+          vercel: vercelConfigured,
+          hubspot: hubspotConfigured,
+        }}
+      />
+
       <SectionHeading>AI / LLM Providers</SectionHeading>
 
       <CapPanel
@@ -606,6 +645,18 @@ function IntegrationsSection({
         <CapRow icon={Brain}       label="LLaMA 3 70B / 8B"                  status={deriveStatus(groqConfigured)} note="GROQ_API_KEY" />
         <CapRow icon={Zap}         label="Mixtral 8x7B"                      status={deriveStatus(groqConfigured)} />
         <CapRow icon={RefreshCw}   label="Streaming"                         status={deriveStatus(groqConfigured)} />
+      </CapPanel>
+
+      <CapPanel
+        icon={Cpu}
+        title="Ollama"
+        subtitle="Local/self-hosted model passthrough"
+        status={deriveStatus(ollamaConfigured)}
+        defaultOpen={false}
+      >
+        <CapRow icon={Brain}       label="Local chat model runtime"            status={deriveStatus(ollamaConfigured)} note="OLLAMA_BASE_URL" />
+        <CapRow icon={Server}      label="Self-hosted inference endpoint"      status={deriveStatus(ollamaConfigured)} />
+        <CapRow icon={Code}        label="OpenAI-compatible substitute path"   status={deriveStatus(ollamaConfigured)} />
       </CapPanel>
 
       <CapPanel
@@ -687,12 +738,14 @@ function IntegrationsSection({
 
       <CapPanel
         icon={Users}
-        title="HubSpot"
-        subtitle="Final CRM destination (non-blocking)"
+        title="HubSpot / Breeze AI"
+        subtitle="CRM destination plus truthful Breeze AI substitute status"
         status={deriveStatus(hubspotConfigured)}
         defaultOpen={false}
       >
         <CapRow icon={Users}     label="CRM Objects (contacts, companies, deals)" status={deriveStatus(hubspotConfigured)} note="HUBSPOT_API_KEY" />
+        <CapRow icon={Sparkles}  label="Breeze AI API substitute path"            status={deriveStatus(hubspotConfigured)} note="HubSpot token required" />
+        <CapRow icon={Ban}       label="Direct HubSpot app-session passthrough"    status={STATUS.BLOCKED} note="Unsupported product session control" />
         <CapRow icon={Package}   label="Export staging (Supabase queue)"          status={deriveStatus(sbConfigured)} />
         <CapRow icon={Shield}    label="Write-path safety gate"                   status={deriveStatus(hubspotConfigured)} />
       </CapPanel>
@@ -808,6 +861,169 @@ function BlockedPassthroughPanel({ openaiConfigured, ghConfigured }) {
   );
 }
 
+function SessionConnectionMatrix({ connectionPrefs, onUpdateConnectionPrefs, onResetConnectionPrefs, statuses }) {
+  const cards = [
+    {
+      key: 'openai',
+      title: 'ChatGPT / OpenAI API',
+      description: 'Strongest supported substitute for ChatGPT product passthrough.',
+      fields: [
+        { key: 'openaiApiKey', label: 'Session API key', placeholder: 'sk-…', secret: true },
+        { key: 'openaiModel', label: 'Preferred model', placeholder: 'gpt-4o-mini' },
+      ],
+      status: statuses.openai || !!connectionPrefs.openaiApiKey ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.openai ? 'Backend token configured.' : connectionPrefs.openaiApiKey ? 'Browser session token configured.' : 'Requires OPENAI_API_KEY or a session token.',
+    },
+    {
+      key: 'groq',
+      title: 'Groq',
+      description: 'OpenAI-compatible live inference path for fast chat.',
+      fields: [
+        { key: 'groqApiKey', label: 'Session API key', placeholder: 'gsk_…', secret: true },
+        { key: 'groqModel', label: 'Preferred model', placeholder: 'llama-3.3-70b-versatile' },
+      ],
+      status: statuses.groq || !!connectionPrefs.groqApiKey ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.groq ? 'Backend token configured.' : connectionPrefs.groqApiKey ? 'Browser session token configured.' : 'Requires GROQ_API_KEY or a session token.',
+    },
+    {
+      key: 'gemini',
+      title: 'Gemini',
+      description: 'Provider-supported Google Gemini API path.',
+      fields: [
+        { key: 'geminiApiKey', label: 'Session API key', placeholder: 'AIza…', secret: true },
+        { key: 'geminiModel', label: 'Preferred model', placeholder: 'gemini-1.5-flash' },
+      ],
+      status: statuses.gemini || !!connectionPrefs.geminiApiKey ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.gemini ? 'Backend token configured.' : connectionPrefs.geminiApiKey ? 'Browser session token configured.' : 'Requires GEMINI_API_KEY or a session token.',
+    },
+    {
+      key: 'ollama',
+      title: 'Ollama',
+      description: 'Local/self-hosted model passthrough.',
+      fields: [
+        { key: 'ollamaBaseUrl', label: 'Base URL', placeholder: 'http://localhost:11434' },
+        { key: 'ollamaModel', label: 'Preferred model', placeholder: 'llama3.1:8b' },
+      ],
+      status: statuses.ollama || !!connectionPrefs.ollamaBaseUrl ? STATUS.LOCAL : STATUS.BLOCKED,
+      note: statuses.ollama ? 'Backend base URL configured.' : connectionPrefs.ollamaBaseUrl ? 'Browser session base URL configured.' : 'Requires OLLAMA_BASE_URL or a session URL.',
+    },
+    {
+      key: 'github',
+      title: 'GitHub / Copilot Substitute',
+      description: 'Token surface for GitHub REST actions and truthful Copilot substitute controls.',
+      fields: [{ key: 'githubToken', label: 'Session token', placeholder: 'ghp_…', secret: true }],
+      status: statuses.github || !!connectionPrefs.githubToken ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.github ? 'Backend token configured.' : connectionPrefs.githubToken ? 'Browser session token configured.' : 'Requires GITHUB_TOKEN or a session token.',
+    },
+    {
+      key: 'supabase',
+      title: 'Supabase',
+      description: 'Session-scoped project URL and anon key for auth/data surfaces.',
+      fields: [
+        { key: 'supabaseUrl', label: 'Project URL', placeholder: 'https://project.supabase.co' },
+        { key: 'supabaseAnonKey', label: 'Anon key', placeholder: 'eyJ…', secret: true },
+      ],
+      status: statuses.supabase || (!!connectionPrefs.supabaseUrl && !!connectionPrefs.supabaseAnonKey) ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.supabase ? 'Backend project configured.' : connectionPrefs.supabaseUrl && connectionPrefs.supabaseAnonKey ? 'Browser session project configured.' : 'Requires SUPABASE_URL + SUPABASE_ANON_KEY.',
+    },
+    {
+      key: 'vercel',
+      title: 'Vercel',
+      description: 'Token surface for truthful deployment control readiness.',
+      fields: [{ key: 'vercelToken', label: 'Session token', placeholder: 'vercel_…', secret: true }],
+      status: statuses.vercel || !!connectionPrefs.vercelToken ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.vercel ? 'Backend token configured.' : connectionPrefs.vercelToken ? 'Browser session token configured.' : 'Requires VERCEL_TOKEN or a session token.',
+    },
+    {
+      key: 'hubspot',
+      title: 'HubSpot / Breeze AI',
+      description: 'Token surface for CRM export and truthful Breeze AI substitute state.',
+      fields: [{ key: 'hubspotApiKey', label: 'Session token', placeholder: 'pat-…', secret: true }],
+      status: statuses.hubspot || !!connectionPrefs.hubspotApiKey ? STATUS.LIVE : STATUS.BLOCKED,
+      note: statuses.hubspot ? 'Backend token configured.' : connectionPrefs.hubspotApiKey ? 'Browser session token configured.' : 'Requires HUBSPOT_API_KEY or a session token.',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
+      {cards.map((card) => (
+        <SessionConnectorCard
+          key={card.key}
+          card={card}
+          connectionPrefs={connectionPrefs}
+          onUpdateConnectionPrefs={onUpdateConnectionPrefs}
+          onResetConnectionPrefs={onResetConnectionPrefs}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SessionConnectorCard({ card, connectionPrefs, onUpdateConnectionPrefs, onResetConnectionPrefs }) {
+  const [draft, setDraft] = useState(() => Object.fromEntries(card.fields.map((field) => [field.key, connectionPrefs[field.key] || ''])));
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    setDraft(Object.fromEntries(card.fields.map((field) => [field.key, connectionPrefs[field.key] || ''])));
+  }, [card.fields, connectionPrefs]);
+
+  const handleSave = () => {
+    onUpdateConnectionPrefs(draft);
+    setNotice('Saved to this browser for session-scoped passthrough and testing.');
+  };
+
+  const handleClear = () => {
+    onResetConnectionPrefs(card.fields.map((field) => field.key));
+    setNotice('Cleared browser session values.');
+  };
+
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{card.title}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>{card.description}</div>
+        </div>
+        <StatusPill status={card.status} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {card.fields.map((field) => (
+          <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>{field.label}</span>
+            <input
+              type={field.secret ? 'password' : 'text'}
+              value={draft[field.key] || ''}
+              placeholder={field.placeholder}
+              onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
+              style={{
+                width: '100%',
+                padding: '9px 11px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8,
+                color: '#f8fafc',
+                fontSize: 12,
+              }}
+            />
+            {field.secret && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                Current: {maskSecret(connectionPrefs[field.key])}
+              </span>
+            )}
+          </label>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button onClick={handleSave} className="xps-electric-hover" style={actionBtnStyle(false, '#4ade80')}>Save Session</button>
+        <button onClick={handleClear} className="xps-electric-hover" style={actionBtnStyle(false, '#ef4444')}>Clear</button>
+      </div>
+      <div style={{ fontSize: 11, color: card.status === STATUS.BLOCKED ? '#fbbf24' : 'rgba(255,255,255,0.45)', marginTop: 10 }}>
+        {notice || card.note}
+      </div>
+    </div>
+  );
+}
+
 // ── GitHub section ─────────────────────────────────────────────────────────
 function GitHubSection({ configured, liveStatus }) {
   const [githubData, setGithubData] = useState(null);
@@ -817,6 +1033,7 @@ function GitHubSection({ configured, liveStatus }) {
   const [repoData, setRepoData] = useState({});
   const [testStatus, setTestStatus] = useState(null);
   const [testing, setTesting] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
 
   const fetchGitHub = useCallback(async (action, params = {}) => {
     if (!configured) return;
@@ -893,9 +1110,9 @@ function GitHubSection({ configured, liveStatus }) {
         statusNote={configured ? 'Token configured — GitHub REST API ready.' : 'Blocked — missing server-side token.'}
         blockedReason="GitHub OAuth is not wired. Set GITHUB_TOKEN to enable."
         actions={[
-          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
-          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
-          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: 'Connect', onClick: () => setActionNotice('Add GITHUB_TOKEN in Admin session inputs or backend env, then refresh status.'), disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => setActionNotice('GitHub uses token passthrough only. Refresh status to re-read current credentials.'), disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => setActionNotice('Direct browser disconnect is blocked. Remove GITHUB_TOKEN from env or clear the session token input.'), disabled: !configured, accent: '#ef4444' },
           { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
         ]}
         scopes={[
@@ -904,6 +1121,11 @@ function GitHubSection({ configured, liveStatus }) {
           { label: 'Copilot Passthrough', status: STATUS.BLOCKED, note: 'unsupported' },
         ]}
       />
+      {actionNotice && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>
+          Action: {actionNotice}
+        </div>
+      )}
       {testStatus && (
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
           Test result: {testStatus}
@@ -1002,6 +1224,7 @@ function SupabaseSection({ configured, liveStatus }) {
   const sb = liveStatus?.supabase || {};
   const [testStatus, setTestStatus] = useState(null);
   const [testing, setTesting] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
 
   const runTest = async () => {
     if (!configured) return;
@@ -1042,9 +1265,9 @@ function SupabaseSection({ configured, liveStatus }) {
         statusNote={configured ? 'Supabase project configured.' : 'Blocked — missing SUPABASE_URL or SUPABASE_ANON_KEY.'}
         blockedReason="Supabase Auth broker requires SUPABASE_URL + SUPABASE_ANON_KEY."
         actions={[
-          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
-          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
-          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: 'Connect', onClick: () => setActionNotice('Enter SUPABASE_URL and SUPABASE_ANON_KEY in the session inputs or backend env, then refresh status.'), disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => setActionNotice('Supabase reconnection re-reads configured URL and anon key on refresh.'), disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => setActionNotice('Direct browser disconnect is blocked. Remove env vars or clear the saved session values.'), disabled: !configured, accent: '#ef4444' },
           { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
         ]}
         scopes={[
@@ -1053,6 +1276,11 @@ function SupabaseSection({ configured, liveStatus }) {
           { label: 'Storage', status: deriveStatus(configured), note: 'buckets' },
         ]}
       />
+      {actionNotice && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>
+          Action: {actionNotice}
+        </div>
+      )}
       {testStatus && (
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
           Test result: {testStatus}
@@ -1088,6 +1316,7 @@ function VercelSection({ configured, liveStatus }) {
   const vrc = liveStatus?.vercel || {};
   const [testStatus, setTestStatus] = useState(null);
   const [testing, setTesting] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
 
   const runTest = async () => {
     if (!configured) return;
@@ -1127,9 +1356,9 @@ function VercelSection({ configured, liveStatus }) {
         statusNote={configured ? 'Vercel token configured.' : 'Blocked — missing VERCEL_TOKEN.'}
         blockedReason="Vercel OAuth is not wired. Use a server-side VERCEL_TOKEN."
         actions={[
-          { label: 'Connect', onClick: () => {}, disabled: configured, accent: '#4ade80' },
-          { label: 'Reconnect', onClick: () => {}, disabled: !configured, accent: '#fbbf24' },
-          { label: 'Disconnect', onClick: () => {}, disabled: !configured, accent: '#ef4444' },
+          { label: 'Connect', onClick: () => setActionNotice('Add VERCEL_TOKEN in the session inputs or backend env, then refresh status.'), disabled: configured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => setActionNotice('Vercel reconnection is token-based only. Refresh status after updating credentials.'), disabled: !configured, accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => setActionNotice('Direct browser disconnect is blocked. Remove VERCEL_TOKEN from env or clear the session token input.'), disabled: !configured, accent: '#ef4444' },
           { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !configured || testing, accent: '#60a5fa' },
         ]}
         scopes={[
@@ -1138,6 +1367,11 @@ function VercelSection({ configured, liveStatus }) {
           { label: 'Domains', status: deriveStatus(configured), note: 'read/write' },
         ]}
       />
+      {actionNotice && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>
+          Action: {actionNotice}
+        </div>
+      )}
       {testStatus && (
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
           Test result: {testStatus}
@@ -1166,6 +1400,7 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
   const g = liveStatus?.google || {};
   const [testStatus, setTestStatus] = useState(null);
   const [testing, setTesting] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
 
   const runTest = async () => {
     if (!configured && !geminiConfigured) return;
@@ -1212,9 +1447,9 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
         statusNote={configured || geminiConfigured ? 'Google APIs configured (OAuth-required scopes blocked).' : 'Blocked — missing GCP credentials.'}
         blockedReason="OAuth user consent required for Drive/Calendar. Service account only covers Gmail/Sheets/Admin SDK."
         actions={[
-          { label: 'Connect', onClick: () => {}, disabled: configured || geminiConfigured, accent: '#4ade80' },
-          { label: 'Reconnect', onClick: () => {}, disabled: !(configured || geminiConfigured), accent: '#fbbf24' },
-          { label: 'Disconnect', onClick: () => {}, disabled: !(configured || geminiConfigured), accent: '#ef4444' },
+          { label: 'Connect', onClick: () => setActionNotice('Configure GCP service-account credentials or a Gemini API key in the session inputs, then refresh status.'), disabled: configured || geminiConfigured, accent: '#4ade80' },
+          { label: 'Reconnect', onClick: () => setActionNotice('Google Workspace is reloaded from configured credentials on refresh. OAuth-only scopes stay blocked.'), disabled: !(configured || geminiConfigured), accent: '#fbbf24' },
+          { label: 'Disconnect', onClick: () => setActionNotice('Direct browser disconnect is blocked. Remove GCP or Gemini credentials from env/session storage.'), disabled: !(configured || geminiConfigured), accent: '#ef4444' },
           { label: testing ? 'Testing…' : 'Test Connection', onClick: runTest, disabled: !(configured || geminiConfigured) || testing, accent: '#60a5fa' },
         ]}
         scopes={[
@@ -1223,6 +1458,11 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
           { label: 'Gemini', status: deriveStatus(geminiConfigured), note: 'GEMINI_API_KEY' },
         ]}
       />
+      {actionNotice && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>
+          Action: {actionNotice}
+        </div>
+      )}
       {testStatus && (
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
           Test result: {testStatus}

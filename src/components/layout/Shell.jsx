@@ -1,18 +1,31 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 import CenterWorkspace from '../CenterWorkspace.jsx';
 import ChatRail from '../ChatRail.jsx';
 import AdminPage from '../../pages/AdminPage.jsx';
 import { WorkspaceProvider } from '../../lib/workspaceEngine.jsx';
+import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
 export default function Shell() {
   const [page, setPage] = useState('workspace'); // 'workspace' | 'admin'
   const [activePanel, setActivePanel] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [adminSection, setAdminSection] = useState('integrations');
 
   const handleWorkspaceAction = useCallback((action) => {
     if (action?.panel) setActivePanel(action.panel);
+  }, []);
+
+  useEffect(() => {
+    const handleNav = (event) => {
+      const detail = event?.detail || {};
+      if (detail.page) setPage(detail.page);
+      if (detail.panel) setActivePanel(detail.panel);
+      if (detail.adminSection) setAdminSection(detail.adminSection);
+    };
+    window.addEventListener(APP_SHELL_NAV_EVENT, handleNav);
+    return () => window.removeEventListener(APP_SHELL_NAV_EVENT, handleNav);
   }, []);
 
   return (
@@ -51,7 +64,7 @@ export default function Shell() {
           <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {page === 'workspace'
               ? <CenterWorkspace activePanel={activePanel} />
-              : <AdminPage />
+              : <AdminPage activeSection={adminSection} onSectionChange={setAdminSection} />
             }
           </main>
         </div>

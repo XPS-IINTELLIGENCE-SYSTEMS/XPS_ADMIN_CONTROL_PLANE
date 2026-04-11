@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PanelLeft, Search, Bell, MapPin, LayoutDashboard, Shield } from 'lucide-react';
 import { userContext } from '../../data/synthetic.js';
 import { ORCHESTRATOR_MODE } from '../../lib/orchestrator.js';
+import { requestAppShellNavigation } from '../../lib/appShellEvents.js';
 
 const panelLabels = {
   dashboard:        'Dashboard',
@@ -36,13 +37,11 @@ const BRAND_LOGO = '/brand/xps-shield-wings.png';
 function BrandLogo() {
   return (
     <div
-      className="xps-logo"
+      className="xps-logo xps-brand-logo-glow"
       style={{
         position: 'relative',
-        width: 26,
-        height: 26,
-        borderRadius: 6,
-        overflow: 'hidden',
+        width: 40,
+        height: 40,
         flexShrink: 0,
       }}
     >
@@ -78,11 +77,16 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
       zIndex: 9,
     }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div className="xps-brand-lockup" style={{ flexShrink: 0 }}>
         <BrandLogo />
-        <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1.2, whiteSpace: 'nowrap' }}>
-          XPS
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+          <span className="xps-silver-text" style={{ fontWeight: 800, fontSize: 16, letterSpacing: 1.1, whiteSpace: 'nowrap' }}>
+            XPS INTELLIGENCE
+          </span>
+          <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 10, letterSpacing: 2, whiteSpace: 'nowrap', marginTop: 3 }}>
+            COMMAND CENTER
+          </span>
+        </div>
       </div>
 
       {/* Divider */}
@@ -106,10 +110,10 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
               style={{
                 position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px',
+                 padding: '8px 14px',
                 borderRadius: 6,
                 border: 'none',
-                fontSize: 12, fontWeight: active ? 600 : 400,
+                 fontSize: 13, fontWeight: active ? 700 : 500,
                 cursor: 'pointer',
                 background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
                 color: active ? 'var(--text-primary)' : 'rgba(255,255,255,0.45)',
@@ -142,7 +146,7 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
         </span>
       )}
 
-      <div style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
+       <div style={{ flex: 1, maxWidth: 520, position: 'relative' }}>
         <Search size={13} className="xps-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
         <input
           value={search}
@@ -150,8 +154,8 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
           placeholder={page === 'admin' ? 'Search integrations, capabilities…' : 'Search leads, companies, proposals…'}
           style={{
             width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '6px 12px 6px 30px',
-            color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+             borderRadius: 10, padding: '9px 14px 9px 34px',
+             color: 'var(--text-primary)', fontSize: 14, outline: 'none',
           }}
         />
       </div>
@@ -161,20 +165,24 @@ export default function Header({ page, onPageChange, activePanel, onToggleSideba
       <div style={{
         display: 'flex', alignItems: 'center', gap: 5,
         background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 500,
+         borderRadius: 99, padding: '5px 12px', fontSize: 12, fontWeight: 700,
         color: modeColor,
       }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: modeColor, display: 'inline-block' }} />
         {modeLabel}
       </div>
 
-      <button className="xps-electric-hover" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', padding: 4, borderRadius: 4, position: 'relative', cursor: 'pointer' }}>
+      <button
+        className="xps-electric-hover"
+        onClick={() => requestAppShellNavigation({ page: 'admin', adminSection: 'system' })}
+        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', padding: 4, borderRadius: 4, position: 'relative', cursor: 'pointer' }}
+      >
         <Bell size={15} className="xps-icon" />
         <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%' }} className="xps-electric-accent" />
       </button>
 
       {typeof userContext.location === 'string' && userContext.location.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)', fontSize: 13 }}>
           <MapPin size={12} className="xps-icon" />
           {userContext.location}
         </div>

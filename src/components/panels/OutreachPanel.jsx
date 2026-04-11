@@ -1,5 +1,6 @@
 import React from 'react';
 import { Mail, Clock, FileText, Zap } from 'lucide-react';
+import { requestAppShellNavigation } from '../../lib/appShellEvents.js';
 
 const gold = '#d4a843';
 
@@ -66,7 +67,10 @@ export default function OutreachPanel() {
               </div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{s.desc}</div>
             </div>
-            <button style={{
+            <button
+              onClick={() => requestAppShellNavigation({ page: 'admin', adminSection: s.title === 'Email Campaigns' ? 'google' : 'integrations' })}
+              className="xps-electric-hover"
+              style={{
               padding: '7px 16px',
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.1)',

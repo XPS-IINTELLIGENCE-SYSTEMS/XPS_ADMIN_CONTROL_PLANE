@@ -12,12 +12,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { task, agent = 'bytebot', context = {}, history = [], runId } = req.body || {};
+  const { task, agent = 'bytebot', context = {}, history = [], runId, credentials = context?.credentials || {} } = req.body || {};
   if (!task) {
     return res.status(400).json({ error: 'task is required' });
   }
 
-  const mode       = llmMode();
+  const mode       = llmMode(credentials);
   const ts         = new Date().toISOString();
   const connectors = connectorState();
 
@@ -131,7 +131,7 @@ Break the task into independent parallel subtasks. Return JSON:
   };
 
   // Synthetic fallback
-  if (!hasLLM()) {
+  if (!hasLLM(credentials)) {
     const steps = [
       { step: 1, label: 'Task received',           status: 'complete', parallel: false },
       { step: 2, label: 'Connector state checked', status: 'complete', parallel: false },
@@ -181,7 +181,7 @@ Break the task into independent parallel subtasks. Return JSON:
       { role: 'user', content: buildUserPrompt(task, context) },
     ];
 
-    const raw    = await callLLM(messages, { model: process.env.OPENAI_MODEL || 'gpt-4o', json: !!process.env.OPENAI_API_KEY });
+    const raw    = await callLLM(messages, { model: process.env.OPENAI_MODEL || 'gpt-4o', json: !!(credentials.openaiApiKey || process.env.OPENAI_API_KEY), credentials });
     const parsed = safeParseJSON(raw);
 
     const plan = Array.isArray(parsed?.plan) ? parsed.plan : [];
