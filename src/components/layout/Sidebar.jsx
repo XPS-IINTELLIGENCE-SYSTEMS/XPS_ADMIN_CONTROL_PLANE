@@ -1,20 +1,5 @@
 import React from 'react';
-import {
-  BookOpen,
-  Bot,
-  LayoutDashboard,
-  Users,
-  Target,
-  FlaskConical,
-  Send,
-  FileText,
-  BarChart2,
-  Plug,
-  Shield,
-  Settings,
-  ChevronRight,
-  Eye,
-} from 'lucide-react';
+import { Blocks, ChevronRight, LayoutDashboard, KeyRound, Plug } from 'lucide-react';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
@@ -36,36 +21,12 @@ function GradAccent() {
 
 const sections = [
   {
-    label: 'OVERVIEW',
+    label: 'CONTROL CENTER',
     items: [
-      { id: 'workspace', label: 'Workspace', icon: Bot },
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'crm', label: 'CRM', icon: Users },
-      { id: 'leads', label: 'Leads', icon: Target },
-    ],
-  },
-  {
-    label: 'WORKFLOW',
-    items: [
-      { id: 'research', label: 'Research Lab', icon: FlaskConical },
-      { id: 'outreach', label: 'Outreach', icon: Send },
-      { id: 'proposals', label: 'Proposals', icon: FileText },
-    ],
-  },
-  {
-    label: 'INTELLIGENCE',
-    items: [
-      { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
-      { id: 'competition', label: 'Competition', icon: Eye },
-      { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { id: 'workspace', label: 'Workspace', icon: Blocks },
       { id: 'connectors', label: 'Connectors', icon: Plug },
-    ],
-  },
-  {
-    label: 'CONTROL',
-    items: [
-      { id: 'admin', label: 'Admin', icon: Shield },
-      { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'access', label: 'Access', icon: KeyRound },
     ],
   },
 ];
@@ -123,7 +84,7 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
               XPS INTELLIGENCE
             </div>
             <div className="xps-gold-text" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, lineHeight: 1, marginTop: 3 }}>
-              SALES INTELLIGENCE
+              SIMPLIFIED OPS
             </div>
           </div>
         )}
@@ -174,12 +135,6 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     transition: 'background 0.15s, color 0.15s',
-                  }}
-                  onMouseEnter={(event) => {
-                    if (!isActive) event.currentTarget.style.background = 'var(--bg-hover)';
-                  }}
-                  onMouseLeave={(event) => {
-                    if (!isActive) event.currentTarget.style.background = 'transparent';
                   }}
                 >
                   <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className="xps-icon" style={{ flexShrink: 0 }} />

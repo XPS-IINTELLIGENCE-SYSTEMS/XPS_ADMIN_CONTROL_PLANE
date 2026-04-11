@@ -102,6 +102,7 @@ export const WS_APPEND_LOG = 'WS_APPEND_LOG';
 export const WS_SET_STATUS = 'WS_SET_STATUS';
 export const WS_SET_ACTIVE = 'WS_SET_ACTIVE';
 export const WS_CLOSE      = 'WS_CLOSE';
+export const WS_RESET      = 'WS_RESET';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -201,6 +202,15 @@ function reducer(state, action) {
       return { ...state, objects: filtered, activeId };
     }
 
+    case WS_RESET: {
+      const nextObjects = (action.payload.objects || []).map((item) => makeObject(item));
+      return {
+        ...state,
+        objects: nextObjects,
+        activeId: nextObjects[0]?.id || null,
+      };
+    }
+
     default:
       return state;
   }
@@ -245,6 +255,10 @@ export function WorkspaceProvider({ children }) {
     dispatch({ type: WS_CLOSE, payload: { id } });
   }, []);
 
+  const resetWorkspace = useCallback((objects = []) => {
+    dispatch({ type: WS_RESET, payload: { objects } });
+  }, []);
+
   const value = {
     objects: state.objects,
     activeId: state.activeId,
@@ -255,6 +269,7 @@ export function WorkspaceProvider({ children }) {
     setStatus,
     setActive,
     closeObject,
+    resetWorkspace,
   };
 
   useEffect(() => {

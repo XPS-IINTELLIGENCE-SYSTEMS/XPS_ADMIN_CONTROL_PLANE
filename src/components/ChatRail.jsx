@@ -1,2012 +1,322 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  Shield, Search, Globe, Bot, Eye, Lightbulb, Wrench, Sparkles,
-  ChevronDown, ChevronUp, Paperclip, X, FileText, Image, File,
-  HardDrive, AlertTriangle, Send, CheckCircle,
-  Map, Cpu, Zap, Compass, Radio, Activity,
-} from 'lucide-react';
-import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
-import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
-import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
-import { subscribeGroups, getGroupList } from '../lib/parallelRunGroup.js';
-import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPreview, persistUiVersion, persistUiRollback } from '../lib/supabasePersistence.js';
-import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState, validateUiState } from '../lib/uiMutations.js';
-import { getGovernance, subscribeGovernance } from '../lib/governance.js';
-import { getConnectionPrefs, subscribeConnectionPrefs } from '../lib/connectionPrefs.js';
-import { resolveClientProviderState } from '../lib/providerState.js';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Paperclip, Send, Trash2 } from 'lucide-react';
+import { useWorkspace, detectObjectType, deriveTitle, RUN_STATUS } from '../lib/workspaceEngine.jsx';
 
-const gold = '#d4a843';
-const API_URL = import.meta.env.API_URL || '';
+const THREAD_STORAGE_KEY = 'xps.chat.thread.v3';
+const DEFAULT_THREAD = [
+  {
+    id: 'welcome',
+    role: 'assistant',
+    text: 'Persistent chat is live on the right. Ask for a workspace brief, connector change, or sign-in help.',
+    createdAt: Date.now(),
+  },
+];
 
-// ── Provider state hook ───────────────────────────────────────────────────
-function useProviderState() {
-  const [providerState, setProviderState] = useState(null);
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/status`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) setProviderState(data);
-      })
-      .catch(() => {}); // silent — fallback to build-time detection
-  }, []);
-
-  return providerState;
-}
-
-// ── Provider indicator bar ────────────────────────────────────────────────
-const PROVIDER_COLORS = {
-  openai:    { color: '#4ade80', label: 'OpenAI',    mode: 'Live' },
-  groq:      { color: '#4ade80', label: 'Groq',      mode: 'Live' },
-  gemini:    { color: '#a855f7', label: 'Gemini',    mode: 'Live' },
-  ollama:    { color: '#60a5fa', label: 'Ollama',    mode: 'Local' },
-  none:      { color: '#fbbf24', label: 'Synthetic', mode: 'Synthetic' },
+const MODE_CONFIG = {
+  assistant: {
+    label: 'Assistant',
+    note: 'Routes general requests into the center workspace.',
+  },
+  research: {
+    label: 'Research',
+    note: 'Creates research-ready notes and summaries.',
+  },
+  connectors: {
+    label: 'Connectors',
+    note: 'Pushes you toward connector management and runtime truth.',
+  },
 };
 
-function ProviderIndicator({ providerState }) {
-  const activeLLM = providerState?.llm?.active || 'none';
-  const model     = providerState?.llm?.model   || null;
-  const meta      = PROVIDER_COLORS[activeLLM] || PROVIDER_COLORS.none;
-
-  return (
-    <div
-      data-testid="provider-indicator"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '5px 10px',
-        background: meta.color + '10',
-        border: `1px solid ${meta.color}25`,
-        borderRadius: 6,
-        marginTop: 6,
-      }}
-    >
-      <div style={{ width: 5, height: 5, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
-      <span style={{ fontSize: 10, fontWeight: 600, color: meta.color }}>
-        {meta.label}
-      </span>
-      {model && (
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
-          {model}
-        </span>
-      )}
-      <span style={{
-        marginLeft: 'auto', fontSize: 10, fontWeight: 600,
-        color: 'rgba(255,255,255,0.58)', letterSpacing: 0.5,
-      }}>
-        {meta.mode.toUpperCase()}
-      </span>
-    </div>
-  );
+function loadThread() {
+  if (typeof window === 'undefined') return DEFAULT_THREAD;
+  try {
+    const raw = window.localStorage.getItem(THREAD_STORAGE_KEY);
+    if (!raw) return DEFAULT_THREAD;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_THREAD;
+  } catch {
+    return DEFAULT_THREAD;
+  }
 }
 
-const PROVIDER_STATUS_META = {
-  live:      { color: '#4ade80', label: 'Live' },
-  local:     { color: '#60a5fa', label: 'Local' },
-  blocked:   { color: '#ef4444', label: 'Blocked' },
-  synthetic: { color: '#fbbf24', label: 'Synthetic' },
-};
-
-function buildProviderOptions(state) {
-  const providers = state?.llm?.providers || {};
-  const active = state?.llm?.active || 'none';
-  const activeModel = state?.llm?.model || '';
-  return [
-    {
-      id: 'auto',
-      label: 'Auto',
-      model: activeModel || 'auto',
-      status: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
-      available: true,
-      note: active === 'none' ? (state?.llm?.reason || 'No provider configured') : `Uses ${active} (${providers[active]?.source || 'backend'})`,
-    },
-    {
-      id: 'openai',
-      label: 'OpenAI',
-      model: providers.openai?.model || 'gpt-4o-mini',
-      status: providers.openai?.configured ? 'live' : 'blocked',
-      available: !!providers.openai?.configured,
-      note: providers.openai?.configured ? `OpenAI ready via ${providers.openai?.source || 'backend'}` : (providers.openai?.reason || 'Missing OPENAI API key'),
-    },
-    {
-      id: 'groq',
-      label: 'Groq',
-      model: providers.groq?.model || 'llama-3.3-70b-versatile',
-      status: providers.groq?.configured ? 'live' : 'blocked',
-      available: !!providers.groq?.configured,
-      note: providers.groq?.configured ? `Groq ready via ${providers.groq?.source || 'backend'}` : (providers.groq?.reason || 'Missing GROQ API key'),
-    },
-    {
-      id: 'gemini',
-      label: 'Gemini',
-      model: providers.gemini?.model || 'gemini-1.5-flash',
-      status: providers.gemini?.configured ? 'live' : 'blocked',
-      available: !!providers.gemini?.configured,
-      note: providers.gemini?.configured ? `Gemini ready via ${providers.gemini?.source || 'backend'}` : (providers.gemini?.reason || 'Missing GEMINI_API_KEY'),
-    },
-    {
-      id: 'ollama',
-      label: 'Ollama',
-      model: providers.ollama?.model || 'llama3.1:8b',
-      status: providers.ollama?.configured ? 'local' : 'blocked',
-      available: !!providers.ollama?.configured,
-      note: providers.ollama?.configured ? `Ollama ready via ${providers.ollama?.source || 'backend'}` : (providers.ollama?.reason || 'Missing OLLAMA_BASE_URL'),
-    },
-    {
-      id: 'synthetic',
-      label: 'Synthetic',
-      model: 'fallback',
-      status: 'synthetic',
-      available: true,
-      note: 'No live provider',
-    },
-  ];
-}
-
-function buildModelProfiles(providerMap) {
-  const hasAnyLive = ['openai', 'groq', 'gemini', 'ollama'].some((key) => providerMap[key]?.available);
-  return [
-    {
-      id: 'groq',
-      label: 'Groq · Llama 3.3 70B',
-      provider: 'groq',
-      backendModel: 'llama-3.3-70b-versatile',
-      available: !!providerMap.groq?.available,
-      truth: 'Groq primary live lane.',
-      status: providerMap.groq?.available ? 'live' : 'blocked',
-      systemHint: 'Use concise, fast, reasoning-oriented responses optimized for a Groq-hosted model.',
-    },
-    {
-      id: 'chatgpt',
-      label: 'ChatGPT · GPT-4o Mini',
-      provider: 'openai',
-      backendModel: 'gpt-4o-mini',
-      available: !!providerMap.openai?.available,
-      truth: 'OpenAI API substitute path for ChatGPT product access.',
-      status: providerMap.openai?.available ? 'live' : 'blocked',
-      systemHint: 'Operate like a high-quality ChatGPT workspace assistant using the OpenAI API path.',
-    },
-    {
-      id: 'copilot',
-      label: 'Copilot · Operator Substitute',
-      provider: 'auto',
-      backendModel: null,
-      available: hasAnyLive,
-      truth: 'Direct GitHub Copilot product-session passthrough is unsupported. This uses the active live provider as a truthful substitute.',
-      status: hasAnyLive ? 'live' : 'blocked',
-      systemHint: 'Operate like a code-focused Copilot-style assistant, but be explicit that this is a substitute API path rather than a direct Copilot session.',
-    },
-    {
-      id: 'gemini',
-      label: 'Gemini · Flash',
-      provider: 'gemini',
-      backendModel: 'gemini-1.5-flash',
-      available: !!providerMap.gemini?.available,
-      truth: 'Gemini API path.',
-      status: providerMap.gemini?.available ? 'live' : 'blocked',
-      systemHint: 'Use the Google Gemini API path and be explicit about multimodal and Workspace-adjacent capability truth.',
-    },
-    {
-      id: 'ollama',
-      label: 'Ollama · Local Runtime',
-      provider: 'ollama',
-      backendModel: 'llama3.1:8b',
-      available: !!providerMap.ollama?.available,
-      truth: 'Local/self-hosted Ollama runtime path.',
-      status: providerMap.ollama?.available ? 'local' : 'blocked',
-      systemHint: 'Use a local-runtime tone and mention that execution is routed through the configured Ollama base URL.',
-    },
-    {
-      id: 'bytebot-lane',
-      label: 'ByteBot · Active Provider Lane',
-      provider: 'auto',
-      backendModel: null,
-      available: hasAnyLive,
-      truth: 'ByteBot/orchestrator lane uses the active live provider or remains synthetic when none is configured.',
-      status: hasAnyLive ? 'live' : 'blocked',
-      systemHint: 'Operate as the ByteBot/orchestrator lane and surface truthful runtime and connector state while using the active provider.',
-    },
-  ];
-}
-
-function buildOperatorState(apiState, connectionPrefs = {}) {
-  const browserConfigured = !!(apiState?.browser?.configured || connectionPrefs.browserWorkerUrl || import.meta.env.BROWSER_WORKER_URL);
-  const twilioConfigured = !!(apiState?.twilio?.configured || (connectionPrefs.twilioAccountSid && connectionPrefs.twilioAuthToken) || (import.meta.env.TWILIO_ACCOUNT_SID && import.meta.env.TWILIO_AUTH_TOKEN));
-  const sendgridConfigured = !!(apiState?.sendgrid?.configured || connectionPrefs.sendgridApiKey || import.meta.env.SENDGRID_API_KEY);
-  const sendgridWriteEnabled = !!(
-    apiState?.sendgrid?.capabilityState === 'write-enabled'
-    || (connectionPrefs.sendgridApiKey && connectionPrefs.sendgridFromEmail)
-    || (import.meta.env.SENDGRID_API_KEY && import.meta.env.SENDGRID_FROM_EMAIL)
-  );
-
-  return {
-    github: apiState?.github || null,
-    browser: {
-      configured: browserConfigured,
-      reason: apiState?.browser?.reason || 'Configure BROWSER_WORKER_URL or a session worker URL.',
-    },
-    twilio: {
-      configured: twilioConfigured,
-      reason: apiState?.twilio?.reason || 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.',
-    },
-    sendgrid: {
-      configured: sendgridConfigured,
-      reason: apiState?.sendgrid?.reason || 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.',
-      capabilityState: sendgridWriteEnabled ? 'write-enabled' : sendgridConfigured ? 'token-configured' : 'blocked',
-    },
-  };
-}
-
-// ── Agent registry (no emoji) ─────────────────────────────────────────────
-const AGENTS = [
-  { id: 'orchestrator', label: 'XPS Orchestrator', icon: Shield },
-  { id: 'research',     label: 'Research Agent',   icon: Search },
-  { id: 'scraper',      label: 'Scraper Agent',    icon: Globe },
-  { id: 'bytebot',      label: 'ByteBot',          icon: Bot },
-  { id: 'browser',      label: 'Browser Agent',    icon: Globe },
-  { id: 'vision',       label: 'Vision Cortex',    icon: Eye },
-  { id: 'intel',        label: 'Intel Core',       icon: Lightbulb },
-  { id: 'builder',      label: 'Auto Builder',     icon: Wrench },
-  { id: 'gpt',          label: 'Generic GPT',      icon: Sparkles },
-];
-
-// ── Mode registry ─────────────────────────────────────────────────────────
-const MODES = [
-  { id: 'planning',   label: 'Planning',        icon: Map },
-  { id: 'agent',      label: 'Agent Mode',      icon: Cpu },
-  { id: 'autonomous', label: 'Autonomous Mode', icon: Zap },
-  { id: 'scraping',   label: 'Scraping Mode',   icon: Globe },
-  { id: 'discover',   label: 'Discover Mode',   icon: Compass },
-];
-
-const SYSTEM_PROMPTS = {
-  orchestrator: 'You are the XPS Orchestrator. You coordinate intelligence operations, route tasks to agents, manage workflows, and synthesize results with connector truth.',
-  research:     'You are the XPS Research Agent. You gather, analyze, and synthesize intelligence from research queries.',
-  scraper:      'You are the XPS Scraper Agent. You extract structured data from target URLs and summarize results.',
-  bytebot:      'You are ByteBot, an autonomous task orchestrator. You break down operator requests into multi-step actions, coordinate parallel tasks, and report progress clearly.',
-  vision:       'You are Vision Cortex, the XPS visual intelligence agent. You analyze images, describe visual data, and support AI image/video workflow tasks.',
-  intel:        'You are Intel Core, the XPS competitive and market intelligence agent. You analyze competitors, market trends, and strategic signals.',
-  builder:      'You are Auto Builder, the XPS code and UI generation agent. You create, scaffold, and iterate on code, UI components, and system structures.',
-  gpt:          'You are a helpful AI assistant for the XPS Intelligence Command Center. Help the operator with any task.',
-};
-
-// ── Attachment sources ─────────────────────────────────────────────────────
-const GOOGLE_DRIVE_CONFIGURED = !!(import.meta.env.GCP_SA_KEY || import.meta.env.GCP_PROJECT_ID);
-
-const ATTACH_SOURCES = [
-  { id: 'local',   label: 'Local File',     icon: File,      available: true,                  accept: '*/*' },
-  { id: 'image',   label: 'Image',          icon: Image,     available: true,                  accept: 'image/*' },
-  { id: 'doc',     label: 'Document',       icon: FileText,  available: true,                  accept: '.pdf,.doc,.docx,.txt,.md,.csv,.xlsx' },
-  { id: 'drive',   label: 'Google Drive',   icon: HardDrive, available: GOOGLE_DRIVE_CONFIGURED, blocked: !GOOGLE_DRIVE_CONFIGURED, note: 'Requires GCP OAuth' },
-];
-
-const UI_COLOR_MAP = {
-  gold: '#d4a843',
-  silver: '#e2e8f0',
-  blue: '#60a5fa',
-  purple: '#a855f7',
-  green: '#4ade80',
-  red: '#ef4444',
-  black: '#0f0f0f',
-  white: '#ffffff',
-};
-
-const UI_ADD_COMMANDS = [
-  { pattern: /add button/i, patch: { addComponent: 'button' }, summary: 'Add button' },
-  { pattern: /add card|add panel/i, patch: { addComponent: 'card' }, summary: 'Add card' },
-  { pattern: /add section/i, patch: { addComponent: 'section' }, summary: 'Add section' },
-  { pattern: /add tab|add tabs/i, patch: { addComponent: 'tabs' }, summary: 'Add tabs' },
-  { pattern: /add page/i, patch: { addComponent: 'section' }, summary: 'Add page section' },
-];
-
-const UI_MISC_COMMANDS = [
-  { pattern: /add gradient/i, patch: { theme: { gradient: 'linear-gradient(135deg, rgba(212,168,67,0.2), rgba(59,130,246,0.2))' } }, summary: 'Add gradient' },
-  { pattern: /add animation/i, patch: { theme: { animation: 'pulse 3s ease-in-out infinite' } }, summary: 'Add animation' },
-];
-
-export default function ChatRail({ onWorkspaceAction, onNavigate }) {
-  const [agent, setAgent] = useState('orchestrator');
-  const [mode, setMode]   = useState('agent');
-  const [providerOpen, setProviderOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState('auto');
-  const [modelOpen, setModelOpen] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState('groq');
-  const [selectedModel, setSelectedModel] = useState('');
-    const [messages, setMessages] = useState([{
-      role: 'assistant',
-      content: 'Groq is the primary live lane.\n\nSelect an agent and start a prompt. Synthetic fallback only appears if no live provider is available.',
-      agent: 'orchestrator',
-    }]);
-  const [input, setInput]         = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [agentOpen, setAgentOpen] = useState(false);
-  const [modeOpen, setModeOpen]   = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [attachments, setAttachments] = useState([]);
-  const [activeRuns, setActiveRuns] = useState([]);
-  const [activeJobs, setActiveJobs] = useState([]);
-  const [activeGroups, setActiveGroups] = useState([]);
-  const [governance, setGovernanceState] = useState(getGovernance());
-  const [connectionPrefs, setConnectionPrefsState] = useState(getConnectionPrefs());
-  const bottomRef = useRef(null);
-  const inputRef  = useRef(null);
-  const fileInputRef = useRef(null);
-  const currentAttachType = useRef(null);
-
-  const providerState = useProviderState();
-  const githubConfigured = providerState?.github?.configured;
-
-  const { objects, createObject, setStatus, appendLog, patchObject } = useWorkspace();
-
-  useEffect(() => {
-    const isActive = r => r.status === 'running' || r.status === 'queued';
-    const unsub = subscribeRuns(runs => setActiveRuns(runs.filter(isActive)));
-    setActiveRuns(getRunList().filter(isActive));
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const isActive = j => j.status === 'running' || j.status === 'queued';
-    const unsub = subscribeJobs(jobs => setActiveJobs(jobs.filter(isActive)));
-    setActiveJobs(getJobList().filter(isActive));
-    return unsub;
-  }, []);
-  useEffect(() => {
-    const isActive = g => g.status === 'running';
-    const unsub = subscribeGroups(groups => setActiveGroups(groups.filter(isActive)));
-    setActiveGroups(getGroupList().filter(isActive));
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); setProviderOpen(false); setModelOpen(false); };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, []);
-
-  useEffect(() => {
-    setGovernanceState(getGovernance());
-    const unsub = subscribeGovernance(setGovernanceState);
-    return unsub;
-  }, []);
-  useEffect(() => {
-    setConnectionPrefsState(getConnectionPrefs());
-    const unsub = subscribeConnectionPrefs(setConnectionPrefsState);
-    return unsub;
-  }, []);
-
-  const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
-  const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
-  const resolvedProviderState = resolveClientProviderState(providerState, connectionPrefs);
-  const providerOptions = buildProviderOptions(resolvedProviderState);
-  const providerMap = Object.fromEntries(providerOptions.map(opt => [opt.id, opt]));
-  const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
-  const modelProfiles = buildModelProfiles(providerMap);
-  const selectedModelProfile = modelProfiles.find((profile) => profile.id === selectedProfileId) || modelProfiles[0];
-  const providerModelOptions = resolvedProviderState?.llm?.providers?.[selectedProvider === 'auto' ? resolvedProviderState?.llm?.active : selectedProvider]?.availableModels || [];
-  const operatorState = buildOperatorState(providerState, connectionPrefs);
-  const operatorModules = providerState?.operatorModules || {
-    media: {
-      image_generation: resolvedProviderState?.llm?.active !== 'none' ? 'substitute-path' : 'blocked',
-      video_generation: 'unimplemented',
-    },
-  };
-
-  useEffect(() => {
-    if (selectedProviderOption?.model) {
-      setSelectedModel(selectedProviderOption.model);
-    }
-  }, [selectedProviderOption?.model, selectedProvider]);
-  useEffect(() => {
-    if (connectionPrefs.providerPreference && connectionPrefs.providerPreference !== 'auto' && providerMap[connectionPrefs.providerPreference]?.available) {
-      setSelectedProvider(connectionPrefs.providerPreference);
-    }
-  }, [connectionPrefs.providerPreference, providerMap]);
-  useEffect(() => {
-    if (!selectedModelProfile?.available) {
-      const fallbackProfile = modelProfiles.find((profile) => profile.available) || modelProfiles[0];
-      if (fallbackProfile && fallbackProfile.id !== selectedProfileId) {
-        setSelectedProfileId(fallbackProfile.id);
-      }
-    }
-  }, [modelProfiles, selectedModelProfile, selectedProfileId]);
-  useEffect(() => {
-    if (selectedProvider === 'auto') return;
-    const preferredModel = selectedProvider === 'openai'
-      ? connectionPrefs.openaiModel
-      : selectedProvider === 'groq'
-        ? connectionPrefs.groqModel
-        : selectedProvider === 'gemini'
-          ? connectionPrefs.geminiModel
-          : selectedProvider === 'ollama'
-            ? connectionPrefs.ollamaModel
-            : '';
-    if (preferredModel) setSelectedModel(preferredModel);
-  }, [connectionPrefs.geminiModel, connectionPrefs.groqModel, connectionPrefs.ollamaModel, connectionPrefs.openaiModel, selectedProvider]);
-  useEffect(() => {
-    if (selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto') {
-      setSelectedProvider(selectedModelProfile.provider);
-      setSelectedModel(selectedModelProfile.backendModel || providerMap[selectedModelProfile.provider]?.model || '');
-    } else if (selectedModelProfile?.backendModel) {
-      setSelectedModel(selectedModelProfile.backendModel);
-    }
-  }, [selectedModelProfile, providerMap]);
-
-  const commitToWorkspace = useCallback((wsObj, agentId, prompt) => {
-    const { type, title, content, steps = [], meta = {} } = wsObj;
-    createObject({
-      type:    type   || detectObjectType(content, agentId),
-      title:   title  || deriveTitle(content, agentId) || prompt.slice(0, 55),
-      content: content || '',
-      agent:   agentId,
-      status:  RUN_STATUS.DONE,
-      steps,
-      meta,
-    });
-    onNavigate?.('workspace');
-    persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
-  }, [createObject, onNavigate]);
-
-  const pushRuntimeMessage = useCallback((content, mode = 'synthetic', meta = {}) => {
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content,
-      agent,
-      mode,
-      synthetic: mode === 'synthetic',
-      profileLabel: selectedModelProfile?.label,
-    }]);
-    commitToWorkspace({
-      type: OBJ_TYPE.RUNTIME_STATE,
-      title: mode === 'blocked' ? 'Provider Blocked' : 'Runtime State',
-      content,
-      meta,
-    }, agent, content);
-  }, [agent, commitToWorkspace, selectedModelProfile?.label]);
-
-  const ensureUiEditor = useCallback(() => {
-    const existing = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor);
-    if (existing) return existing;
-    const initialState = createDefaultUiState();
-    const history = [createHistoryEntry(initialState, 'Initial UI state', 'seed')];
-    const uiObj = {
-      id: genId(),
-      type: OBJ_TYPE.UI,
-      title: 'UI Editor Canvas',
-      content: 'Editable UI canvas',
-      status: RUN_STATUS.IDLE,
-      meta: { uiEditor: true, uiState: initialState, history },
-    };
-    createObject(uiObj);
-    onNavigate?.('workspace');
-    return uiObj;
-  }, [objects, createObject, onNavigate]);
-
-  const createUiPreview = useCallback((patch, summary, source = 'chat') => {
-    const target = ensureUiEditor();
-    const currentState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
-    const history = Array.isArray(target.meta?.history) && target.meta.history.length
-      ? target.meta.history
-      : [createHistoryEntry(currentState, 'Initial UI state', 'seed')];
-    const nextState = patch ? applyUiPatch(currentState, patch) : currentState;
-    const validation = validateUiState(nextState);
-    const previewId = genId();
-    const previewMeta = {
-      id: previewId,
-      summary,
-      source,
-      createdAt: new Date().toISOString(),
-      state: nextState,
-      validation,
-    };
-    patchObject(target.id, {
-      meta: {
-        ...target.meta,
-        uiEditor: true,
-        uiState: currentState,
-        history,
-        preview: previewMeta,
-      },
-    });
-    const mutationObject = {
-      type: OBJ_TYPE.SITE_MUTATION,
-      title: `Site Mutation Preview — ${summary}`,
-      content: `Preview ready.\n\nSummary: ${summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
-      status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
-      meta: { stage: 'preview', summary, source, validation, targetId: target.id, previewId },
-    };
-    createObject(mutationObject);
-    persistWorkspaceObject(mutationObject).catch(() => {});
-    const previewObject = {
-      type: OBJ_TYPE.PREVIEW,
-      title: `UI Preview — ${summary}`,
-      content: `${summary}\n\n${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
-      status: RUN_STATUS.IDLE,
-      meta: { previewType: 'ui', targetId: target.id, previewId, summary, state: nextState, source, validation },
-    };
-    createObject(previewObject);
-    persistWorkspaceObject(previewObject).catch(() => {});
-    persistUiPreview({ previewId, targetId: target.id, state: nextState, summary, source }).catch(() => {});
-    return { target, previewMeta };
-  }, [ensureUiEditor, patchObject, createObject]);
-
-  const applyUiPreview = useCallback((target, previewMeta, source = 'chat') => {
-    if (!target || !previewMeta) return null;
-    if (previewMeta.validation && !previewMeta.validation.valid) return null;
-    const nextState = normalizeUiState(previewMeta.state);
-    const history = Array.isArray(target.meta?.history) ? [...target.meta.history] : [];
-    history.push(createHistoryEntry(nextState, previewMeta.summary || 'Apply preview', source));
-    patchObject(target.id, {
-      meta: {
-        ...target.meta,
-        uiEditor: true,
-        uiState: nextState,
-        history,
-        preview: null,
-      },
-    });
-    const mutationObject = {
-      type: OBJ_TYPE.SITE_MUTATION,
-      title: `Site Mutation Apply — ${previewMeta.summary || 'Apply preview'}`,
-      content: `Applied governed mutation.\n\nSummary: ${previewMeta.summary || 'Apply preview'}\nValidation: ${previewMeta.validation?.summary || 'Validation passed.'}`,
-      status: RUN_STATUS.DONE,
-      meta: { stage: 'apply', summary: previewMeta.summary || 'Apply preview', source, validation: previewMeta.validation || { valid: true, issues: [] }, targetId: target.id },
-    };
-    createObject(mutationObject);
-    persistWorkspaceObject(mutationObject).catch(() => {});
-    persistUiVersion({
-      versionId: history[history.length - 1]?.id || genId(),
-      targetId: target.id,
-      state: nextState,
-      summary: previewMeta.summary || 'Apply preview',
-      source,
-    }).catch(() => {});
-    if (previewMeta.source === 'rollback' && history.length > 1) {
-      persistUiRollback({
-        rollbackId: genId(),
-        targetId: target.id,
-        fromVersion: history[history.length - 2]?.id,
-        toVersion: history[history.length - 1]?.id,
-        summary: previewMeta.summary || 'Rollback apply',
-      }).catch(() => {});
-    }
-    return history;
-  }, [patchObject, createObject]);
-
-  const createRollbackPreview = useCallback((target, source = 'chat') => {
-    const history = Array.isArray(target?.meta?.history) ? target.meta.history : [];
-    if (history.length < 2) return null;
-    const previous = history[history.length - 2];
-    const summary = `Rollback to ${previous.summary || previous.id}`;
-    return createUiPreview({ site: previous.state?.site, theme: previous.state?.theme, components: previous.state?.components }, summary, source);
-  }, [createUiPreview]);
-
-  const createBuilderArtifact = useCallback((kind, source = 'chat') => {
-    const target = ensureUiEditor();
-    const appliedState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
-    const previewState = target.meta?.preview?.state ? normalizeUiState(target.meta.preview.state) : null;
-    const state = previewState || appliedState;
-    const pages = state.site.pages || [];
-    const visiblePages = pages.filter((page) => page.visible !== false);
-    const modules = Object.entries(state.site.moduleToggles || {})
-      .map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'disabled'}`)
-      .join('\n');
-    const capabilities = Object.entries(state.site.capabilityToggles || {})
-      .map(([name, enabled]) => `- ${name}: ${enabled ? 'enabled' : 'blocked'}`)
-      .join('\n');
-
-    if (kind === 'agent-builder') {
-      const agentArtifact = {
-        type: OBJ_TYPE.AGENT_RUN,
-        title: `Agent Builder Artifact — ${state.site.pageTitle}`,
-        content: [
-          `Agent builder artifact prepared for ${state.site.pageTitle}.`,
-          '',
-          `Pages in scope: ${pages.length}`,
-          `Visible pages: ${visiblePages.length}`,
-          `Pending governed preview: ${previewState ? 'yes' : 'no'}`,
-          '',
-          'Builder execution targets:',
-          '- Site builder object',
-          '- Page builder object',
-          '- Feature builder object',
-          '- Governed apply / rollback history',
-        ].join('\n'),
-        agent,
-        status: RUN_STATUS.DONE,
-        meta: {
-          builderArtifact: 'agent-builder',
-          source,
-          targetId: target.id,
-          pageCount: pages.length,
-          visiblePageCount: visiblePages.length,
-          previewPending: !!previewState,
-        },
-      };
-      createObject(agentArtifact);
-      persistWorkspaceObject(agentArtifact).catch(() => {});
-      onNavigate?.('workspace');
-      return 'Agent builder artifact created in the workspace.';
-    }
-
-    const runbookObject = {
-      type: OBJ_TYPE.WORKFLOW,
-      title: `Site Builder Runbook — ${state.site.pageTitle}`,
-      content: [
-        `Objective: Governed mutation path for ${state.site.pageTitle}`,
-        '',
-        `Preview pending: ${previewState ? 'yes' : 'no'}`,
-        `Rollback history entries: ${(target.meta?.history || []).length}`,
-        '',
-        'Pages:',
-        ...pages.map((page) => `- ${page.title} (${page.route}) · ${page.visible !== false ? 'visible' : 'hidden'}`),
-        '',
-        'Modules:',
-        modules || '- none',
-        '',
-        'Capabilities:',
-        capabilities || '- none',
-      ].join('\n'),
-      agent,
-      status: RUN_STATUS.DONE,
-      meta: {
-        builderArtifact: 'runbook',
-        source,
-        targetId: target.id,
-        previewPending: !!previewState,
-        pages,
-      },
-    };
-    createObject(runbookObject);
-    persistWorkspaceObject(runbookObject).catch(() => {});
-    onNavigate?.('workspace');
-    return 'Site builder runbook created in the workspace.';
-  }, [agent, createObject, ensureUiEditor, onNavigate]);
-
-  const parseBuilderArtifactCommand = (prompt) => {
-    const lower = prompt.toLowerCase();
-    if (/agent builder|builder agent|agent-builder/.test(lower)) return { intent: 'agent-builder' };
-    if (/runbook|builder plan|mutation plan|site plan/.test(lower)) return { intent: 'runbook' };
-    return null;
-  };
-
-  const findBuilderPage = (rawLabel) => {
-    const label = `${rawLabel || ''}`.trim().toLowerCase();
-    if (!label) return null;
-    const uiState = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE);
-    return uiState.site.pages.find((page) =>
-      [page.title, page.navLabel, page.route].some((value) => `${value || ''}`.toLowerCase() === label)
-    ) || null;
-  };
-
-  const parseUiCommand = (prompt) => {
-    const lower = prompt.toLowerCase();
-    if (/rollback|revert|undo/.test(lower)) return { intent: 'rollback' };
-    if (/apply|confirm/.test(lower) && /preview|changes|mutation/.test(lower)) return { intent: 'apply' };
-    if (/cancel.*preview|discard.*preview|reject/.test(lower)) return { intent: 'cancel' };
-
-    const createPageMatch = prompt.match(/(?:create|add)\s+page(?: called| named| titled)?\s+["“]?([^"\n”]+)["”]?/i);
-    if (createPageMatch) {
-      const title = createPageMatch[1].trim();
-      return {
-        intent: 'preview',
-        patch: { addPage: { title, navLabel: title } },
-        summary: `Create page ${title}`,
-      };
-    }
-
-    const pageVisibilityMatch = prompt.match(/(show|hide)\s+page\s+["“]?([^"\n”]+)["”]?/i);
-    if (pageVisibilityMatch) {
-      const action = pageVisibilityMatch[1].toLowerCase();
-      const target = findBuilderPage(pageVisibilityMatch[2]);
-      if (target) {
-        return {
-          intent: 'preview',
-          patch: { updatePage: { id: target.id, patch: { visible: action === 'show' } } },
-          summary: `${action === 'show' ? 'Show' : 'Hide'} page ${target.title}`,
-        };
-      }
-    }
-
-    const navLabelMatch = prompt.match(/nav(?:igation)? label for ["“]?([^"\n”]+)["”]?(?: to)? ["“]?([^"\n”]+)["”]?/i);
-    if (navLabelMatch) {
-      const target = findBuilderPage(navLabelMatch[1]);
-      if (target) {
-        return {
-          intent: 'preview',
-          patch: { updatePage: { id: target.id, patch: { navLabel: navLabelMatch[2].trim() } } },
-          summary: `Update nav label for ${target.title}`,
-        };
-      }
-    }
-
-    const titleMatch = prompt.match(/page title(?: to)? ["“]?([^"\n”]+)["”]?/i);
-    if (titleMatch) {
-      return { intent: 'preview', patch: { site: { pageTitle: titleMatch[1].trim() } }, summary: 'Update page title' };
-    }
-
-    const routeMatch = prompt.match(/route(?: to)? (\/[^\s]+)/i);
-    if (routeMatch) {
-      return { intent: 'preview', patch: { site: { route: routeMatch[1].trim() } }, summary: 'Update route' };
-    }
-
-    const effectMatch = prompt.match(/effect(?: preset)?(?: to)? ([\w-]+)/i);
-    if (effectMatch) {
-      return { intent: 'preview', patch: { site: { effectPreset: effectMatch[1].trim() } }, summary: 'Update effect preset' };
-    }
-
-    const navMatch = prompt.match(/nav(?:igation)?(?: items?)?(?: to)? ([\w\s,-]+)/i);
-    if (navMatch) {
-      const navItems = navMatch[1].split(',').map(item => item.trim()).filter(Boolean);
-      if (navItems.length) return { intent: 'preview', patch: { site: { navItems } }, summary: 'Update navigation' };
-    }
-
-    const featureMatch = prompt.match(/(enable|disable) feature ([\w-]+)/i);
-    if (featureMatch) {
-      return {
-        intent: 'preview',
-        patch: { site: { featureFlags: { [featureMatch[2]]: featureMatch[1].toLowerCase() === 'enable' } } },
-        summary: `${featureMatch[1][0].toUpperCase()}${featureMatch[1].slice(1).toLowerCase()} feature ${featureMatch[2]}`,
-      };
-    }
-
-    const colorMatch = prompt.match(/(primary|accent|background|text) color to ([#\w]+)/i);
-    if (colorMatch) {
-      const key = colorMatch[1].toLowerCase();
-      const raw = colorMatch[2].toLowerCase();
-      const color = raw.startsWith('#') ? raw : (UI_COLOR_MAP[raw] || raw);
-      return { intent: 'preview', patch: { theme: { [`${key}Color`]: color } }, summary: `Update ${key} color` };
-    }
-
-    const fontMatch = prompt.match(/font(?: family)?(?: to)? ([\w\s-]+)/i);
-    if (fontMatch) {
-      return { intent: 'preview', patch: { theme: { fontFamily: fontMatch[1].trim() } }, summary: 'Update font family' };
-    }
-
-    const headingScaleMatch = prompt.match(/heading scale(?: to)? (\d+(?:\.\d+)?)/i);
-    if (headingScaleMatch) {
-      return { intent: 'preview', patch: { theme: { headingScale: Number(headingScaleMatch[1]) } }, summary: 'Update heading scale' };
-    }
-
-    const bodyScaleMatch = prompt.match(/body scale(?: to)? (\d+(?:\.\d+)?)/i);
-    if (bodyScaleMatch) {
-      return { intent: 'preview', patch: { theme: { bodyScale: Number(bodyScaleMatch[1]) } }, summary: 'Update body scale' };
-    }
-
-    const radiusMatch = prompt.match(/border radius (\d+)/i);
-    if (radiusMatch) {
-      return { intent: 'preview', patch: { theme: { borderRadius: Number(radiusMatch[1]) } }, summary: 'Update border radius' };
-    }
-
-    const moduleMatch = prompt.match(/(enable|disable)\s+module\s+([\w-]+)/i);
-    if (moduleMatch) {
-      return {
-        intent: 'preview',
-        patch: { site: { moduleToggles: { [moduleMatch[2]]: moduleMatch[1].toLowerCase() === 'enable' } } },
-        summary: `${moduleMatch[1][0].toUpperCase()}${moduleMatch[1].slice(1).toLowerCase()} module ${moduleMatch[2]}`,
-      };
-    }
-
-    const capabilityMatch = prompt.match(/(enable|disable)\s+capability\s+([\w-]+)/i);
-    if (capabilityMatch) {
-      return {
-        intent: 'preview',
-        patch: { site: { capabilityToggles: { [capabilityMatch[2]]: capabilityMatch[1].toLowerCase() === 'enable' } } },
-        summary: `${capabilityMatch[1][0].toUpperCase()}${capabilityMatch[1].slice(1).toLowerCase()} capability ${capabilityMatch[2]}`,
-      };
-    }
-
-    for (const cmd of UI_ADD_COMMANDS) {
-      if (cmd.pattern.test(lower)) return { intent: 'preview', patch: cmd.patch, summary: cmd.summary };
-    }
-    for (const cmd of UI_MISC_COMMANDS) {
-      if (cmd.pattern.test(lower)) return { intent: 'preview', patch: cmd.patch, summary: cmd.summary };
-    }
-
-    return null;
-  };
-
-  const parseGitHubCommand = (prompt) => {
-    const lower = prompt.toLowerCase();
-    if (/pull request|create pr|open pr/.test(lower)) return { intent: 'pr' };
-    if (/commit|patch|diff/.test(lower)) return { intent: 'patch' };
-    if (/github.*(status|repo|branch|write|commit|patch|pr)/.test(lower)) return { intent: 'status' };
-    return null;
-  };
-
-  const parseCommunicationCommand = (prompt) => {
-    const lower = prompt.toLowerCase();
-    if (/email|sendgrid|outreach/.test(lower)) {
-      const to = prompt.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
-      const subject = prompt.match(/subject(?:\s*:|\s+)(.+?)(?:\n|$)/i)?.[1]?.trim() || 'XPS control plane message';
-      const body = prompt.match(/body(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || prompt;
-      return { intent: 'email', channel: 'sendgrid', payload: { to, subject, text: body } };
-    }
-    if (/call|phone|twilio/.test(lower)) {
-      const to = prompt.match(/\+?[0-9][0-9()\-\s]{7,}/)?.[0]?.trim() || '';
-      const message = prompt.match(/(?:say|message)(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || prompt;
-      return { intent: 'call', channel: 'twilio', payload: { to, message } };
-    }
-    return null;
-  };
-
-  const parseMediaCommand = (prompt) => {
-    const lower = prompt.toLowerCase();
-    if (/image|thumbnail|hero visual/.test(lower)) return { intent: 'image' };
-    if (/video|motion|clip/.test(lower)) return { intent: 'video' };
-    return null;
-  };
-
-  const credentialOverrides = {
-    openaiApiKey: connectionPrefs.openaiApiKey,
-    openaiModel: connectionPrefs.openaiModel,
-    groqApiKey: connectionPrefs.groqApiKey,
-    groqModel: connectionPrefs.groqModel,
-    geminiApiKey: connectionPrefs.geminiApiKey,
-    geminiModel: connectionPrefs.geminiModel,
-    ollamaBaseUrl: connectionPrefs.ollamaBaseUrl,
-    ollamaModel: connectionPrefs.ollamaModel,
-    twilioAccountSid: connectionPrefs.twilioAccountSid,
-    twilioAuthToken: connectionPrefs.twilioAuthToken,
-    twilioPhoneNumber: connectionPrefs.twilioPhoneNumber,
-    sendgridApiKey: connectionPrefs.sendgridApiKey,
-    sendgridFromEmail: connectionPrefs.sendgridFromEmail,
-    runtimeTarget: connectionPrefs.runtimeTarget,
-    repoTarget: connectionPrefs.repoTarget,
-    deploymentTarget: connectionPrefs.deploymentTarget,
-    twilioWebhookUrl: connectionPrefs.twilioWebhookUrl,
-    sendgridWebhookUrl: connectionPrefs.sendgridWebhookUrl,
-    genericWebhookUrl: connectionPrefs.genericWebhookUrl,
-    providerPreference: connectionPrefs.providerPreference,
-    bytebotProvider: connectionPrefs.bytebotProvider,
-  };
-
-  const send = async (e) => {
-    e?.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userMsg = { role: 'user', content: input.trim(), agent, mode };
-    const attachmentSummary = attachments
-      .map(att => `${att.name} (${att.type || 'file'}, ${Math.round(att.size / 1024)}kb)`)
-      .join('\n');
-    const profileSummary = selectedModelProfile
-      ? `Model profile: ${selectedModelProfile.label}\nTruth: ${selectedModelProfile.truth}`
-      : '';
-    const prompt  = attachmentSummary
-      ? `${userMsg.content}\n\n${profileSummary}\n\nAttachments:\n${attachmentSummary}`
-      : profileSummary
-        ? `${userMsg.content}\n\n${profileSummary}`
-        : userMsg.content;
-    const history = [...messages, userMsg];
-    setMessages(history);
-    setInput('');
-    setAttachments([]);
-    setLoading(true);
-
-    if (agent === 'orchestrator' || agent === 'builder') {
-      const uiCommand = parseUiCommand(prompt);
-      if (uiCommand) {
-        if (!governance.allowUiEdits) {
-          setMessages(prev => [...prev, { role: 'assistant', content: 'UI edits are blocked by governance settings.', agent, mode: 'synthetic' }]);
-          setLoading(false);
-          return;
-        }
-        if (uiCommand.patch?.site && !governance.allowSiteMutations) {
-          setMessages(prev => [...prev, { role: 'assistant', content: 'Site mutation commands are blocked by governance settings.', agent, mode: 'blocked' }]);
-          setLoading(false);
-          return;
-        }
-        const target = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor) || ensureUiEditor();
-        if (uiCommand.intent === 'preview') {
-          const summary = uiCommand.summary || summarizeUiPatch(uiCommand.patch || {});
-          createUiPreview(uiCommand.patch || {}, summary, 'chat');
-          setMessages(prev => [...prev, { role: 'assistant', content: `Preview created: ${summary}. Confirm to apply.`, agent, mode: 'synthetic' }]);
-          setLoading(false);
-          return;
-        }
-        if (uiCommand.intent === 'apply') {
-          if (governance.previewOnly || governance.requireApproval) {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Apply blocked by governance (preview-only or approval required).', agent, mode: 'synthetic' }]);
-            setLoading(false);
-            return;
-          }
-          const previewMeta = target?.meta?.preview;
-          if (!previewMeta) {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'No pending preview found to apply.', agent, mode: 'synthetic' }]);
-            setLoading(false);
-            return;
-          }
-          const applied = applyUiPreview(target, previewMeta, 'chat');
-          if (!applied) {
-            setMessages(prev => [...prev, { role: 'assistant', content: `Apply blocked by validation. ${previewMeta.validation?.issues?.join(' ') || 'Resolve validation issues first.'}`, agent, mode: 'blocked' }]);
-            setLoading(false);
-            return;
-          }
-          setMessages(prev => [...prev, { role: 'assistant', content: `Applied preview: ${previewMeta.summary || 'UI update'}. Rollback available.`, agent, mode: 'synthetic' }]);
-          setLoading(false);
-          return;
-        }
-        if (uiCommand.intent === 'cancel') {
-          if (target?.meta?.preview) {
-            patchObject(target.id, { meta: { ...target.meta, preview: null } });
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Preview cancelled.', agent, mode: 'synthetic' }]);
-          } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'No preview to cancel.', agent, mode: 'synthetic' }]);
-          }
-          setLoading(false);
-          return;
-        }
-        if (uiCommand.intent === 'rollback') {
-          const created = createRollbackPreview(target, 'chat');
-          if (created) {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Rollback preview created. Confirm to apply.', agent, mode: 'synthetic' }]);
-          } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'No prior versions available to rollback.', agent, mode: 'synthetic' }]);
-          }
-          setLoading(false);
-          return;
-        }
-      }
-    }
-
-    if (agent === 'orchestrator' || agent === 'builder') {
-      const builderArtifactCommand = parseBuilderArtifactCommand(prompt);
-      if (builderArtifactCommand) {
-        const message = createBuilderArtifact(builderArtifactCommand.intent, 'chat');
-        setMessages(prev => [...prev, { role: 'assistant', content: message, agent, mode: 'synthetic' }]);
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (agent === 'orchestrator' || agent === 'builder') {
-      const ghCommand = parseGitHubCommand(prompt);
-      if (ghCommand) {
-        if (!governance.allowGitHubWrites) {
-          createObject({
-            type: OBJ_TYPE.CONNECTOR_ACTION,
-            title: 'GitHub write blocked',
-            content: 'GitHub write actions are blocked by governance. Enable "Allow GitHub writes" in Admin → Governance.',
-            status: RUN_STATUS.DONE,
-            meta: { connector: 'github', mode: 'blocked', reason: 'governance' },
-          });
-          setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub writes are blocked by governance settings.', agent, mode: 'synthetic' }]);
-          setLoading(false);
-          return;
-        }
-        if (!githubConfigured) {
-          createObject({
-            type: OBJ_TYPE.CONNECTOR_ACTION,
-            title: 'GitHub write blocked',
-            content: 'GitHub token not configured. Set GITHUB_TOKEN and re-run to enable write actions.',
-            status: RUN_STATUS.DONE,
-            meta: { connector: 'github', mode: 'blocked', reason: 'missing token' },
-          });
-          setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub token not configured — cannot write or open PRs.', agent, mode: 'synthetic' }]);
-          setLoading(false);
-          return;
-        }
-        createObject({
-          type: OBJ_TYPE.PRE_STAGE,
-          title: 'GitHub Patch Staging',
-          content: `Intent: ${ghCommand.intent}\nPrompt: ${prompt}\n\nDraft patch staged. Awaiting approval before write-through.`,
-          status: RUN_STATUS.QUEUED,
-          meta: { connector: 'github', intent: ghCommand.intent, approvalRequired: governance.requireApproval, mode: 'staged' },
-        });
-        setMessages(prev => [...prev, { role: 'assistant', content: 'GitHub patch staged. Review preview and approve before apply.', agent, mode: 'synthetic' }]);
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (agent === 'orchestrator' || agent === 'builder' || agent === 'vision') {
-      const commsCommand = parseCommunicationCommand(prompt);
-      if (commsCommand) {
-        const governanceAllowed = governance.communicationActions && governance.connectorPermissions;
-        const payloadReady = commsCommand.channel === 'sendgrid'
-          ? !!(commsCommand.payload?.to && commsCommand.payload?.text)
-          : !!(commsCommand.payload?.to && commsCommand.payload?.message);
-        const ready = (commsCommand.channel === 'sendgrid'
-          ? operatorState.sendgrid?.configured
-          : operatorState.twilio?.configured) && payloadReady;
-        const reason = !governanceAllowed
-          ? 'Communications actions are blocked by governance.'
-          : !payloadReady
-            ? commsCommand.channel === 'sendgrid'
-              ? 'Provide a destination email address and body to execute SendGrid.'
-              : 'Provide a destination phone number and message to execute Twilio.'
-          : commsCommand.channel === 'sendgrid'
-            ? operatorState.sendgrid?.reason || 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.'
-            : operatorState.twilio?.reason || 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.';
-
-        createObject({
-          type: OBJ_TYPE.CONNECTOR_ACTION,
-          title: commsCommand.intent === 'email' ? 'SendGrid Email Surface' : 'Twilio Call Surface',
-          content: ready && governanceAllowed
-            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action ready.\n\nTarget: ${commsCommand.payload?.to || 'missing target'}\n${commsCommand.intent === 'email' ? `Subject: ${commsCommand.payload?.subject || 'XPS control plane message'}\n` : ''}\nUse Execute in the workspace to trigger the live connector path.`
-            : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked.\n\nPrompt: ${prompt}\n\nReason: ${reason}`,
-          agent,
-          status: RUN_STATUS.DONE,
-          meta: {
-            connector: commsCommand.channel,
-            mode: ready && governanceAllowed ? 'live' : 'blocked',
-            status: ready && governanceAllowed ? 'ready' : 'blocked',
-            reason: ready && governanceAllowed ? null : reason,
-            draft: commsCommand.payload,
-            executeAction: commsCommand.channel === 'sendgrid' ? 'sendgrid_email' : 'twilio_call',
-            executeLabel: commsCommand.channel === 'sendgrid' ? 'Send email now' : 'Place call now',
-          },
-        });
-        onNavigate?.('workspace');
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: ready && governanceAllowed
-            ? `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action opened in the workspace. Use the execute control to trigger the live path.`
-            : `${commsCommand.intent === 'email' ? 'Email' : 'Call'} action blocked: ${reason}`,
-          agent,
-          mode: ready && governanceAllowed ? 'live' : 'blocked',
-        }]);
-        setLoading(false);
-        return;
-      }
-
-      const mediaCommand = parseMediaCommand(prompt);
-      if (mediaCommand) {
-        const governanceAllowed = governance.mediaActions;
-        const mediaState = operatorModules.media?.[mediaCommand.intent === 'video' ? 'video_generation' : 'image_generation'] || 'blocked';
-        const ready = governanceAllowed && ['substitute-path', 'write-enabled', 'connected'].includes(mediaState);
-        const type = mediaCommand.intent === 'video' ? OBJ_TYPE.VIDEO : OBJ_TYPE.IMAGE;
-        createObject({
-          type,
-          title: mediaCommand.intent === 'video' ? 'Video Workflow Brief' : 'Image Workflow Brief',
-          content: ready
-            ? `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow created.\n\nPrompt: ${prompt}\n\nState: ${mediaState}\nThis workspace object is a truthful staging surface until a dedicated generation endpoint is connected.`
-            : `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow blocked.\n\nPrompt: ${prompt}\n\nReason: ${!governanceAllowed ? 'Media actions are blocked by governance.' : `Capability state: ${mediaState}`}`,
-          agent,
-          status: RUN_STATUS.DONE,
-          meta: { mode: ready ? mediaState : 'blocked' },
-        });
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: ready
-            ? `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow staged in the workspace.`
-            : `${mediaCommand.intent === 'video' ? 'Video' : 'Image'} workflow blocked: ${!governanceAllowed ? 'media actions disabled in governance' : mediaState}.`,
-          agent,
-          mode: ready ? 'synthetic' : 'blocked',
-        }]);
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (selectedProvider === 'synthetic') {
-      pushRuntimeMessage('Provider set to synthetic — no live call executed.', 'synthetic', { provider: 'synthetic', profileId: selectedModelProfile?.id || null });
-      setLoading(false);
-      return;
-    }
-
-    if (selectedProvider !== 'auto' && !selectedProviderOption?.available) {
-      pushRuntimeMessage(`Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, 'blocked', { provider: selectedProvider, reason: selectedProviderOption?.note || 'Not configured' });
-      setLoading(false);
-      return;
-    }
-
-    if (selectedModelProfile && !selectedModelProfile.available) {
-      pushRuntimeMessage(`Model profile blocked: ${selectedModelProfile.truth}`, 'blocked', { provider: selectedModelProfile.provider, profileId: selectedModelProfile.id, reason: selectedModelProfile.truth });
-      setLoading(false);
-      return;
-    }
-
-    const effectiveProvider = selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto'
-      ? selectedModelProfile.provider
-      : selectedProvider;
-    const effectiveModel = selectedModel || selectedModelProfile?.backendModel || selectedProviderOption?.model;
-
-    if (mode === 'autonomous' && agent !== 'bytebot') {
-      setLoading(false);
-      const bytebotProvider = connectionPrefs.bytebotProvider && connectionPrefs.bytebotProvider !== 'auto'
-        ? connectionPrefs.bytebotProvider
-        : effectiveProvider;
-      startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: bytebotProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
-        { createObject, setStatus, appendLog, patchObject },
-        onNavigate,
-      ).then(runId => {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Autonomous run started. ByteBot is orchestrating parallel steps and workspace updates.`,
-          agent: 'bytebot',
-          runId,
-          profileLabel: selectedModelProfile?.label,
-        }]);
-      });
-      return;
-    }
-
-    if (agent === 'bytebot') {
-      setLoading(false);
-      const bytebotProvider = connectionPrefs.bytebotProvider && connectionPrefs.bytebotProvider !== 'auto'
-        ? connectionPrefs.bytebotProvider
-        : effectiveProvider;
-      startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile, provider: bytebotProvider, model: effectiveModel, operatorState, operatorModules, browserWorkerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget } },
-        { createObject, setStatus, appendLog, patchObject },
-        onNavigate,
-      ).then(runId => {
-        setMessages(prev => [...prev, {
-          role: 'assistant', content: 'ByteBot run started. Watching workspace for progress…',
-          agent: 'bytebot', runId, profileLabel: selectedModelProfile?.label,
-        }]);
-      });
-      return;
-    }
-
-    if (agent === 'browser') {
-      setLoading(false);
-      const isUrl = /^https?:\/\//i.test(prompt.trim());
-      const url   = isUrl ? prompt.trim() : `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
-      const action = isUrl ? 'scrape' : 'research';
-      startBrowserJob(
-        { url, action, prompt: isUrl ? '' : prompt, workerUrl: connectionPrefs.browserWorkerUrl, runtimeTarget: connectionPrefs.runtimeTarget, repoTarget: connectionPrefs.repoTarget, deploymentTarget: connectionPrefs.deploymentTarget },
-        { createObject, setStatus, appendLog, patchObject },
-        onNavigate,
-      ).then(jobId => {
-        setMessages(prev => [...prev, {
-          role: 'assistant', content: `Browser job started for: ${url}\nAction: ${action} — watching workspace for result…`,
-          agent: 'browser', jobId,
-        }]);
-      });
-      return;
-    }
-
-    if (agent === 'research') {
-      setLoading(false);
-      try {
-        const contextLabel = mode;
-        const res = await fetch(`${API_URL}/api/search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId(), credentials: credentialOverrides }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
-        if (data.workspace_object) {
-          commitToWorkspace(data.workspace_object, agent, prompt);
-        }
-        persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
-      } catch (err) {
-        pushRuntimeMessage(`Research request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
-      }
-      return;
-    }
-
-    if (agent === 'scraper') {
-      setLoading(false);
-      const urlMatch = prompt.match(/https?:\/\/[^\s)]+/i);
-      const url = urlMatch ? urlMatch[0] : null;
-      try {
-        if (!url) {
-          const contextLabel = 'scrape-discovery';
-          const res = await fetch(`${API_URL}/api/search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId(), credentials: credentialOverrides }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setMessages(prev => [...prev, { role: 'assistant', content: data.summary || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
-          if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
-          persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
-        } else {
-          const res = await fetch(`${API_URL}/api/scrape`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, prompt, runId: genId(), credentials: credentialOverrides }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setMessages(prev => [...prev, { role: 'assistant', content: data.summary || data.workspace_object?.content || 'No summary returned.', agent, mode: data.mode || 'synthetic' }]);
-          if (data.workspace_object) commitToWorkspace(data.workspace_object, agent, prompt);
-          persistScrapeJob({ url, prompt, status: 'complete', result: data.summary, rawContent: null, mode: data.mode || 'synthetic' }).catch(() => {});
-        }
-      } catch (err) {
-        pushRuntimeMessage(`Scrape request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
-      }
-      return;
-    }
-
-    const runId   = genId();
-    const wsObjId = genId();
-
-    createObject({
-      id: wsObjId, type: OBJ_TYPE.LOG,
-      title: `${selectedAgent.label} — ${prompt.slice(0, 40)}`,
-      content: '', agent, status: RUN_STATUS.RUNNING,
-    });
-    onNavigate?.('workspace');
-
-    const apiMessages = [
-      { role: 'system', content: `${SYSTEM_PROMPTS[agent] || SYSTEM_PROMPTS.gpt}\n\n${selectedModelProfile?.systemHint || ''}`.trim() },
-      ...history.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m === userMsg ? prompt : m.content })),
-    ];
-
-    try {
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: apiMessages,
-          agent,
-          runId,
-          mode,
-          provider: effectiveProvider,
-          model: effectiveModel,
-          attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
-          credentials: credentialOverrides,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      const reply   = data.reply || data.error || 'No response.';
-      const wsObj   = data.workspace_object || null;
-      const evtMode = data.mode || 'synthetic';
-      const evtType = data.event_type || 'run_completed';
-
-      setMessages(prev => [...prev, {
-        role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic', profileLabel: selectedModelProfile?.label,
-      }]);
-      patchObject(wsObjId, {
-        content: reply,
-        progress: 100,
-        steps: data.steps || [],
-        meta: {
-          provider: data.provider || effectiveProvider,
-          model: data.model || effectiveModel,
-          mode: evtMode,
-          eventType: evtType,
-          blockedReason: data.blocked_reason || null,
-        },
-      });
-      setStatus(wsObjId, evtType === 'run_failed' || evtType === 'run_blocked' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
-
-      if (evtType !== 'run_failed' && wsObj) {
-        commitToWorkspace(wsObj, agent, prompt);
-      } else if (evtType !== 'run_failed') {
-        commitToWorkspace({ type: detectObjectType(reply, agent), title: deriveTitle(reply, agent) || prompt.slice(0, 55), content: reply }, agent, prompt);
-      }
-    } catch (err) {
-      patchObject(wsObjId, {
-        content: `Request failed before a backend response was returned.\n\n${err.message}`,
-        progress: 100,
-        meta: { provider: effectiveProvider, model: effectiveModel, mode: 'synthetic', error: err.message },
-      });
-      setStatus(wsObjId, RUN_STATUS.ERROR);
-      const syntheticReplies = {
-        orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add GROQ_API_KEY to enable live responses.`,
-        research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
-        scraper:      `[Synthetic] Scraper Agent: Target queued. Use the Scraper panel to run live scrape jobs.`,
-        default:      `[Synthetic] Agent offline — set GROQ_API_KEY to enable live responses.`,
-      };
-      const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
-      setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true, profileLabel: selectedModelProfile?.label }]);
-      commitToWorkspace({ type: detectObjectType(syntheticContent, agent), title: `[Synthetic] ${selectedAgent.label}`, content: syntheticContent }, agent, prompt);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  };
-
-  const handleFileSelected = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const newAttachments = files.map(f => ({ id: genId(), name: f.name, size: f.size, type: f.type, file: f }));
-    setAttachments(prev => [...prev, ...newAttachments]);
-    setAttachOpen(false);
-    e.target.value = '';
-  };
-
-  const openFileChooser = (accept) => {
-    if (fileInputRef.current) {
-      fileInputRef.current.accept = accept;
-      fileInputRef.current.click();
-    }
-  };
-
-  const AgentIcon = selectedAgent.icon;
-  const ModeIcon  = selectedMode.icon;
-
-  return (
-    <div
-      data-testid="chat-rail"
-      style={{
-        width: 'var(--rail-w)', minWidth: 'var(--rail-w)', height: '100%',
-        background: '#0f0f0f',
-        borderLeft: '1px solid rgba(255,255,255,0.07)',
-        display: 'flex', flexDirection: 'column',
-      }}
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Rail header */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: 'rgba(255,255,255,0.4)' }}>AGENT RAIL</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-            {messages.filter(m => m.role !== 'system').length} messages
-          </span>
-        </div>
-
-        {/* Agent selector */}
-        <div style={{ position: 'relative', marginBottom: 6 }} onClick={e => e.stopPropagation()}>
-          <button
-            data-testid="agent-selector"
-            onClick={() => { setAgentOpen(o => !o); setModeOpen(false); }}
-            className="xps-electric-hover"
-            data-active={agentOpen ? 'true' : undefined}
-            style={{
-              position: 'relative',
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '7px 10px', background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
-               color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <AgentIcon size={13} className="xps-icon" style={{ flexShrink: 0 }} />
-              <span>{selectedAgent.label}</span>
-            </span>
-            {agentOpen ? <ChevronUp size={12} className="xps-icon" /> : <ChevronDown size={12} className="xps-icon" />}
-          </button>
-
-          {agentOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, zIndex: 50, overflow: 'hidden',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            }}>
-              {AGENTS.map(a => {
-                const AIcon = a.icon;
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => { setAgent(a.id); setAgentOpen(false); }}
-                    className="xps-electric-hover"
-                    data-active={agent === a.id ? 'true' : undefined}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      width: '100%', padding: '8px 12px',
-                      background: agent === a.id ? 'rgba(212,168,67,0.12)' : 'transparent',
-                      border: 'none', color: agent === a.id ? gold : 'rgba(255,255,255,0.75)',
-                      fontSize: 12, cursor: 'pointer', textAlign: 'left',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <AIcon size={12} className="xps-icon" />
-                    <span style={{ fontWeight: agent === a.id ? 600 : 400 }}>{a.label}</span>
-                    {agent === a.id && <CheckCircle size={11} className="xps-icon" style={{ marginLeft: 'auto' }} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Mode selector */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button
-            data-testid="mode-selector"
-            onClick={() => { setModeOpen(o => !o); setAgentOpen(false); }}
-            className="xps-electric-hover"
-            data-active={modeOpen ? 'true' : undefined}
-            style={{
-              position: 'relative',
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '6px 10px', background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7,
-               color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <ModeIcon size={11} className="xps-icon" />
-              <span>{selectedMode.label}</span>
-            </span>
-            {modeOpen ? <ChevronUp size={11} className="xps-icon" /> : <ChevronDown size={11} className="xps-icon" />}
-          </button>
-
-          {modeOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, zIndex: 50, overflow: 'hidden',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            }}>
-              {MODES.map(m => {
-                const MIcon = m.icon;
-                return (
-                  <button
-                    key={m.id}
-                    data-testid={`mode-option-${m.id}`}
-                    onClick={() => { setMode(m.id); setModeOpen(false); }}
-                    className="xps-electric-hover"
-                    data-active={mode === m.id ? 'true' : undefined}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      width: '100%', padding: '7px 12px',
-                      background: mode === m.id ? 'rgba(255,255,255,0.06)' : 'transparent',
-                      border: 'none', color: mode === m.id ? '#e2e8f0' : 'rgba(255,255,255,0.6)',
-                      fontSize: 12, cursor: 'pointer', textAlign: 'left',
-                      borderBottom: '1px solid rgba(255,255,255,0.04)',
-                    }}
-                  >
-                    <MIcon size={11} className="xps-icon" />
-                    <span style={{ fontWeight: mode === m.id ? 600 : 400 }}>{m.label}</span>
-                    {mode === m.id && <CheckCircle size={10} className="xps-icon" style={{ marginLeft: 'auto' }} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {/* Provider/runtime indicator */}
-        <ProviderIndicator providerState={resolvedProviderState} />
-      </div>
-
-      {/* Message thread */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '12px 12px 0',
-        display: 'flex', flexDirection: 'column', gap: 8,
-      }}>
-        {activeRuns.length > 0 && <ActiveRunsSummary runs={activeRuns} />}
-        {activeJobs.length > 0 && <ActiveJobsSummary jobs={activeJobs} />}
-        {activeGroups.length > 0 && <ActiveGroupsSummary groups={activeGroups} />}
-        {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
-        {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px' }}>
-            <ThinkingDots />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{selectedAgent.label} thinking…</span>
-          </div>
-        )}
-        <div ref={bottomRef} style={{ height: 8 }} />
-      </div>
-
-      {/* Attachments preview */}
-      {attachments.length > 0 && (
-        <div style={{
-          padding: '8px 12px 0',
-          display: 'flex', flexWrap: 'wrap', gap: 6,
-          borderTop: '1px solid rgba(255,255,255,0.05)',
-        }}>
-          {attachments.map(att => (
-            <div key={att.id} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '4px 8px', background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6,
-              fontSize: 11, color: 'rgba(255,255,255,0.7)', maxWidth: 160,
-            }}>
-              <FileText size={10} style={{ flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                {att.name}
-              </span>
-              <button
-                onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0, display: 'flex', lineHeight: 1 }}
-              >
-                <X size={10} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Input area */}
-      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-        {/* Attachment panel */}
-        {attachOpen && (
-          <div
-            data-testid="attachment-panel"
-            style={{
-              marginBottom: 8, background: '#161616',
-              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
-              overflow: 'hidden',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: 1 }}>
-              ATTACH FILE
-            </div>
-            {ATTACH_SOURCES.map(src => {
-              const SIcon = src.icon;
-              return (
-                  <button
-                    key={src.id}
-                    data-testid={`attach-source-${src.id}`}
-                    disabled={!src.available}
-                    onClick={() => {
-                      if (src.available && !src.blocked) {
-                        openFileChooser(src.accept || '*/*');
-                      }
-                    }}
-                    className="xps-electric-hover"
-                    data-active={false}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      width: '100%', padding: '9px 12px',
-                      background: 'transparent',
-                      border: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                      color: src.available ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)',
-                      fontSize: 12, cursor: src.available ? 'pointer' : 'not-allowed',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <SIcon size={13} className="xps-icon" style={{ flexShrink: 0 }} />
-                    <span style={{ flex: 1 }}>{src.label}</span>
-                    {src.blocked && (
-                      <span style={{
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        fontSize: 10, fontWeight: 600,
-                        color: '#ef4444', padding: '2px 7px', borderRadius: 99,
-                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-                      }}>
-                      <AlertTriangle size={9} className="xps-icon" />
-                      {src.note || 'Blocked'}
-                    </span>
-                  )}
-                  {src.available && !src.blocked && (
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Select</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div style={{ position: 'relative', marginBottom: 8 }} onClick={e => e.stopPropagation()}>
-          <button
-            data-testid="model-selector"
-            onClick={() => { setModelOpen(o => !o); setAgentOpen(false); setModeOpen(false); setProviderOpen(false); }}
-            className="xps-electric-hover"
-            data-active={modelOpen ? 'true' : undefined}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 11px', background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
-              color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              marginBottom: 8,
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={12} className="xps-icon" />
-              <span>{selectedModelProfile?.label || 'Model profile'}</span>
-            </span>
-            <span style={{ fontSize: 10, color: PROVIDER_STATUS_META[selectedModelProfile?.status || 'synthetic']?.color }}>
-              {selectedModelProfile?.status === 'blocked' ? 'Blocked' : 'Ready'}
-            </span>
-          </button>
-
-          {modelOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% - 2px)', left: 0, right: 0,
-              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, zIndex: 51, overflow: 'hidden',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            }}>
-              {modelProfiles.map(profile => {
-                const statusMeta = PROVIDER_STATUS_META[profile.status] || PROVIDER_STATUS_META.synthetic;
-                const disabled = !profile.available;
-                return (
-                  <button
-                    key={profile.id}
-                    data-testid={`model-option-${profile.id}`}
-                    onClick={() => { setSelectedProfileId(profile.id); setModelOpen(false); }}
-                    disabled={disabled}
-                    className="xps-electric-hover"
-                    data-active={selectedProfileId === profile.id ? 'true' : undefined}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
-                      width: '100%', padding: '10px 12px',
-                      background: selectedProfileId === profile.id ? 'rgba(212,168,67,0.12)' : 'transparent',
-                      border: 'none', color: disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
-                      fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700 }}>{profile.label}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 10, color: statusMeta.color }}>{statusMeta.label}</span>
-                    </div>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{profile.truth}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div style={{ position: 'relative', marginBottom: 8 }} onClick={e => e.stopPropagation()}>
-          <button
-            data-testid="provider-selector"
-            onClick={() => { setProviderOpen(o => !o); setAgentOpen(false); setModeOpen(false); setModelOpen(false); }}
-            className="xps-electric-hover"
-            data-active={providerOpen ? 'true' : undefined}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-               padding: '8px 11px', background: 'rgba(255,255,255,0.04)',
-               border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
-               color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Cpu size={12} className="xps-icon" />
-              <span>{selectedProviderOption?.label || 'Provider'}</span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
-                {selectedProviderOption?.model}
-              </span>
-            </span>
-            <span style={{ fontSize: 10, color: PROVIDER_STATUS_META[selectedProviderOption?.status || 'synthetic']?.color }}>
-              {PROVIDER_STATUS_META[selectedProviderOption?.status || 'synthetic']?.label}
-            </span>
-          </button>
-
-          {providerOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
-              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 10, zIndex: 50, overflow: 'hidden',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-            }}>
-              {providerOptions.map(option => {
-                const statusMeta = PROVIDER_STATUS_META[option.status] || PROVIDER_STATUS_META.synthetic;
-                const disabled = option.id !== 'auto' && !option.available;
-                return (
-                  <button
-                    key={option.id}
-                    data-testid={`provider-option-${option.id}`}
-                    onClick={() => { setSelectedProvider(option.id); setSelectedModel(option.model); setProviderOpen(false); }}
-                    disabled={disabled}
-                    className="xps-electric-hover"
-                    data-active={selectedProvider === option.id ? 'true' : undefined}
-                    style={{
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      width: '100%', padding: '8px 12px',
-                      background: selectedProvider === option.id ? 'rgba(212,168,67,0.12)' : 'transparent',
-                      border: 'none', color: disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.75)',
-                      fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    <span style={{ fontWeight: 600 }}>{option.label}</span>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{option.model}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: statusMeta.color }}>{statusMeta.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div style={{
-          marginBottom: 10,
-          padding: '9px 11px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 8,
-          display: 'grid',
-          gap: 8,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>
-              Runtime model
-            </span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
-              {selectedProviderOption?.note || 'No provider note'}
-            </span>
-          </div>
-          {providerModelOptions.length > 0 && (
-            <select
-              value={providerModelOptions.includes(selectedModel) ? selectedModel : ''}
-              onChange={(e) => setSelectedModel(e.target.value || selectedModel)}
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 8,
-                color: '#f8fafc',
-                fontSize: 12,
-              }}
-            >
-              <option value="">Select known model</option>
-              {providerModelOptions.map((modelName) => (
-                <option key={modelName} value={modelName}>{modelName}</option>
-              ))}
-            </select>
-          )}
-          <input
-            value={selectedModel || ''}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            placeholder="Enter exact model name"
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 8,
-              color: '#f8fafc',
-              fontSize: 12,
-            }}
-          />
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)' }}>
-            Source truth: {selectedProviderOption?.status || 'synthetic'} · {selectedProviderOption?.note || 'No live provider configured'}.
-          </div>
-        </div>
-
-        <form onSubmit={send} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <textarea
-            ref={inputRef}
-            data-testid="chat-input"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${selectedAgent.label}…`}
-             rows={4}
-             style={{
-               resize: 'none', width: '100%', padding: '12px 14px',
-               background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-               borderRadius: 10, color: '#fff', fontSize: 14, lineHeight: 1.6,
-              outline: 'none', fontFamily: 'inherit',
-            }}
-            onFocus={e => { e.target.style.borderColor = 'rgba(212,168,67,0.4)'; }}
-            onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {/* Paperclip */}
-            <button
-              type="button"
-              data-testid="attach-btn"
-              onClick={() => { setAttachOpen(o => !o); setAgentOpen(false); setModeOpen(false); }}
-              title="Attach file"
-              className="xps-electric-hover"
-              data-active={attachOpen ? 'true' : undefined}
-              style={{
-                position: 'relative',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 30, height: 30,
-                background: attachOpen ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 7, color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              <Paperclip size={13} className="xps-icon" />
-            </button>
-
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', flex: 1 }}>
-              {attachments.length > 0 ? `${attachments.length} file(s)` : ''}
-            </span>
-
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>
-              {attachments.length === 0 && '↵ Send  ⇧↵ Newline'}
-            </span>
-
-            <button
-              type="submit"
-              data-testid="send-btn"
-              disabled={loading || !input.trim()}
-              className="xps-electric-hover"
-              data-active={!!input.trim() && !loading ? 'true' : undefined}
-              style={{
-                position: 'relative',
-                padding: '6px 14px',
-                background: input.trim() && !loading ? gold : 'rgba(255,255,255,0.08)',
-                color: input.trim() && !loading ? '#0a0a0a' : 'rgba(255,255,255,0.3)',
-                border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600,
-                cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
-                transition: 'background 0.15s, color 0.15s',
-                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-              }}
-            >
-              {loading ? '…' : 'Send'}
-              {!loading && <Send size={11} className="xps-icon" />}
-            </button>
-          </div>
-        </form>
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          style={{ display: 'none' }}
-          onChange={handleFileSelected}
-          multiple
-        />
-      </div>
-    </div>
-  );
-}
-
-function ActiveRunsSummary({ runs }) {
-  return (
-    <div style={{
-      background: 'rgba(212,168,67,0.06)', border: '1px solid rgba(212,168,67,0.2)',
-      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
-    }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: gold, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
-        Active Runs ({runs.length})
-      </div>
-      {runs.map(run => (
-        <div key={run.runId} style={{ marginBottom: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: gold, animation: 'xpsPulse 1s ease-in-out infinite' }} />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {run.agent}: {run.task.slice(0, 35)}
-            </span>
-            <button
-              onClick={() => cancelRun(run.runId)}
-              title="Cancel run"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}
-            >
-              <X size={12} />
-            </button>
-          </div>
-          {run.progress > 0 && (
-            <div style={{ marginTop: 4, marginLeft: 11 }}>
-              <div style={{ width: '100%', height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
-                <div style={{ width: `${run.progress}%`, height: '100%', background: gold, borderRadius: 1, transition: 'width 0.3s' }} />
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ActiveJobsSummary({ jobs }) {
-  return (
-    <div style={{
-      background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)',
-      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
-    }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#60a5fa', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
-        Browser Jobs ({jobs.length})
-      </div>
-      {jobs.map(job => (
-        <div key={job.jobId} style={{ marginBottom: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#60a5fa', animation: 'xpsPulse 1s ease-in-out infinite' }} />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {job.action}: {job.url?.slice(0, 40) || 'browser job'}
-            </span>
-            <button
-              onClick={() => cancelBrowserJob(job.jobId)}
-              title="Cancel job"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}
-            >
-              <X size={12} />
-            </button>
-          </div>
-          {job.progress > 0 && (
-            <div style={{ marginTop: 4, marginLeft: 11 }}>
-              <div style={{ width: '100%', height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
-                <div style={{ width: `${job.progress}%`, height: '100%', background: '#60a5fa', borderRadius: 1, transition: 'width 0.3s' }} />
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ActiveGroupsSummary({ groups }) {
-  return (
-    <div style={{
-      background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
-      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
-    }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#c084fc', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
-        Parallel Groups ({groups.length})
-      </div>
-      {groups.map(group => (
-        <div key={group.groupId} style={{ marginBottom: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#c084fc', animation: 'xpsPulse 1s ease-in-out infinite' }} />
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {group.title}
-            </span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
-              {group.jobs?.length || 0} job{(group.jobs?.length || 0) === 1 ? '' : 's'}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MessageBubble({ msg }) {
-  const isUser = msg.role === 'user';
-  const agentInfo = AGENTS.find(a => a.id === msg.agent);
-  const modeColor = msg.mode === 'live'
-    ? '#4ade80'
-    : msg.mode === 'local'
-      ? '#60a5fa'
-      : msg.mode === 'blocked'
-        ? '#ef4444'
-        : msg.mode === 'synthetic' || msg.synthetic
-          ? '#fbbf24'
-          : 'rgba(255,255,255,0.25)';
-  const modeLabel = ['live', 'local', 'blocked'].includes(msg.mode)
-    ? msg.mode
-    : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
-  const ModeInfo = msg.mode ? MODES.find(m => m.id === msg.mode) : null;
-
-  if (isUser) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{
-          maxWidth: '88%', padding: '8px 12px',
-          background: 'rgba(212,168,67,0.15)', border: '1px solid rgba(212,168,67,0.25)',
-          borderRadius: '12px 12px 2px 12px', color: '#fff', fontSize: 13, lineHeight: 1.5,
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          {msg.content}
-          {msg.mode && ModeInfo && (
-            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, opacity: 0.5, fontSize: 10 }}>
-              <ModeInfo.icon size={9} />
-              {ModeInfo.label}
-            </div>
-          )}
-        </div>
-      </div>
-    );
+function buildAssistantReply(text, mode, attachmentCount) {
+  const trimmed = text.trim() || 'No prompt provided.';
+  const attachmentLine = attachmentCount ? `\n\nAttachments included: ${attachmentCount}.` : '';
+
+  if (mode === 'research') {
+    return `# Research brief\n\n${trimmed}\n\n- Capture the lead objective\n- Pull the most relevant facts\n- Turn findings into a sales-ready summary${attachmentLine}`;
   }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {agentInfo && (
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.5, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <agentInfo.icon size={10} />
-          {agentInfo.label}
-          {modeLabel && <span style={{ color: modeColor, fontWeight: 600 }}>· {modeLabel}</span>}
-          {msg.profileLabel && <span style={{ color: 'rgba(255,255,255,0.45)' }}>· {msg.profileLabel}</span>}
-        </span>
-      )}
-      <div style={{
-        maxWidth: '95%', padding: '8px 12px',
-        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '2px 12px 12px 12px', color: 'rgba(255,255,255,0.85)',
-        fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      }}>
-        {msg.content}
-      </div>
-    </div>
-  );
+  if (mode === 'connectors') {
+    return `# Connector action\n\n${trimmed}\n\n- Review the unified connectors section\n- Save the field updates you need\n- Add or remove custom connectors from the same screen${attachmentLine}`;
+  }
+
+  return `# Workspace brief\n\n${trimmed}\n\n- Create or update an editable workspace object\n- Keep the next action visible in the center screen\n- Use the connector or access sections when the request needs them${attachmentLine}`;
 }
 
-function ThinkingDots() {
+export default function ChatRail({ onNavigate }) {
+  const { createObject } = useWorkspace();
+  const [thread, setThread] = useState(loadThread);
+  const [mode, setMode] = useState('assistant');
+  const [composer, setComposer] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const fileInputRef = useRef(null);
+  const threadEndRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(THREAD_STORAGE_KEY, JSON.stringify(thread));
+  }, [thread]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [thread]);
+
+  const presets = useMemo(() => [
+    { label: 'Daily brief', prompt: 'Build a short daily workspace brief for the sales team.' },
+    { label: 'Connector update', prompt: 'Show me the connector changes I need to make today.' },
+    { label: 'Sign-in help', prompt: 'Take me to the sign-in and access section.' },
+  ], []);
+
+  const handleAttach = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFiles = (event) => {
+    const next = Array.from(event.target.files || []).map((file) => ({ name: file.name, size: file.size }));
+    setAttachments(next);
+    event.target.value = '';
+  };
+
+  const handleSend = () => {
+    if (!composer.trim() && attachments.length === 0) return;
+
+    const nextUserMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      text: composer.trim() || 'Shared attachments only.',
+      createdAt: Date.now(),
+    };
+    const reply = buildAssistantReply(composer, mode, attachments.length);
+    const nextAssistantMessage = {
+      id: `assistant-${Date.now() + 1}`,
+      role: 'assistant',
+      text: reply,
+      createdAt: Date.now() + 1,
+    };
+
+    setThread((current) => [...current, nextUserMessage, nextAssistantMessage]);
+    createObject({
+      type: detectObjectType(reply, mode === 'research' ? 'research' : null),
+      title: deriveTitle(reply, mode),
+      content: reply,
+      agent: MODE_CONFIG[mode].label,
+      status: RUN_STATUS.DONE,
+      meta: {
+        mode,
+        attachments,
+      },
+    });
+
+    if (mode === 'connectors' || /connector|token|api key|runtime/i.test(composer)) {
+      onNavigate?.('connectors');
+    } else if (/sign in|login|access/i.test(composer)) {
+      onNavigate?.('access');
+    } else {
+      onNavigate?.('workspace');
+    }
+
+    setComposer('');
+    setAttachments([]);
+  };
+
+  const clearThread = () => {
+    setThread(DEFAULT_THREAD);
+    setAttachments([]);
+    setComposer('');
+  };
+
   return (
-    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-      {[0, 1, 2].map(i => (
-        <div key={i} style={{
-          width: 4, height: 4, borderRadius: '50%', background: gold,
-          animation: `xpsPulse 1.2s ease-in-out ${i * 0.2}s infinite`, opacity: 0.7,
-        }} />
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: 'var(--text-muted)' }}>PERSISTENT CHAT</div>
+            <div className="xps-gold-text" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>Right-rail operator chat</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+              {MODE_CONFIG[mode].note}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearThread}
+            className="xps-electric-hover"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              borderRadius: 10,
+              padding: '8px 10px',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            <Trash2 size={14} className="xps-icon" />
+            Clear
+          </button>
+        </div>
+
+        <select
+          data-testid="model-selector"
+          value={mode}
+          onChange={(event) => setMode(event.target.value)}
+          style={{
+            width: '100%',
+            marginTop: 14,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            color: 'var(--text-primary)',
+            padding: '10px 12px',
+            outline: 'none',
+          }}
+        >
+          {Object.entries(MODE_CONFIG).map(([value, config]) => (
+            <option key={value} value={value}>{config.label}</option>
+          ))}
+        </select>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          {presets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => setComposer(preset.prompt)}
+              className="xps-electric-hover"
+              style={{
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                borderRadius: 999,
+                padding: '7px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '18px', display: 'grid', gap: 12 }}>
+        {thread.map((message) => {
+          const isAssistant = message.role === 'assistant';
+          return (
+            <div
+              key={message.id}
+              style={{
+                justifySelf: isAssistant ? 'stretch' : 'end',
+                maxWidth: '100%',
+                background: isAssistant ? 'var(--bg-card)' : 'rgba(198,162,79,0.12)',
+                border: `1px solid ${isAssistant ? 'var(--border)' : 'rgba(198,162,79,0.28)'}`,
+                borderRadius: 16,
+                padding: '12px 14px',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.1, color: isAssistant ? 'var(--text-muted)' : 'var(--gold)', marginBottom: 6 }}>
+                {isAssistant ? MODE_CONFIG[mode].label.toUpperCase() : 'YOU'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7 }}>{message.text}</div>
+            </div>
+          );
+        })}
+        <div ref={threadEndRef} />
+      </div>
+
+      <div style={{ padding: 18, borderTop: '1px solid var(--border)' }}>
+        {attachments.length > 0 && (
+          <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+            {attachments.map((file) => (
+              <div key={file.name} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                {file.name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <textarea
+          data-testid="chat-input"
+          value={composer}
+          onChange={(event) => setComposer(event.target.value)}
+          placeholder={`Message ${MODE_CONFIG[mode].label}…`}
+          style={{
+            width: '100%',
+            minHeight: 104,
+            resize: 'vertical',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: '12px 14px',
+            color: 'var(--text-primary)',
+            outline: 'none',
+            lineHeight: 1.6,
+          }}
+        />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              data-testid="attach-btn"
+              type="button"
+              onClick={handleAttach}
+              className="xps-electric-hover"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+              }}
+              aria-label="Attach file"
+            >
+              <Paperclip size={16} className="xps-icon" />
+            </button>
+            <input ref={fileInputRef} type="file" multiple hidden onChange={handleFiles} />
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chat stays visible on the right side.</div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!composer.trim() && attachments.length === 0}
+            className="xps-electric-hover"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              border: 'none',
+              background: !composer.trim() && attachments.length === 0 ? 'rgba(198,162,79,0.35)' : 'var(--gold)',
+              color: '#090a0d',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontWeight: 800,
+              opacity: !composer.trim() && attachments.length === 0 ? 0.6 : 1,
+            }}
+          >
+            Send
+            <Send size={15} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
