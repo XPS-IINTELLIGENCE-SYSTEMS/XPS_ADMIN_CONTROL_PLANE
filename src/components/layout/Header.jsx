@@ -157,7 +157,7 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
         </button>
       )}
 
-      <div style={{ minWidth: 0, flexShrink: 0 }}>
+      <div style={{ flexShrink: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{label}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }} className="truncate">
           {description}
