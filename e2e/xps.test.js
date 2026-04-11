@@ -69,14 +69,17 @@ test.describe('XPS Intelligence simplified control center', () => {
     await screenshot(page, 'connectors-crud');
   });
 
-  test('chat creates a connector-focused response and keeps the rail pinned right', async ({ page }) => {
+  test('chat stays in the right rail and does not replace the center workspace', async ({ page }) => {
     await signIn(page);
+    await expect(page.getByTestId('workspace-tab-bar')).toContainText('Operations board');
+    await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
+
     await page.getByTestId('model-selector').selectOption('connectors');
     await page.getByTestId('chat-input').fill('Show me the connector changes I need to make today.');
     await page.getByRole('button', { name: 'Send' }).click();
 
-    await expect(page.getByText('Add or remove custom connectors from the same screen').first()).toBeVisible();
-    await expect(page.getByTestId('control-center').getByText('Unified connectors', { exact: true })).toBeVisible();
+    await expect(page.getByText('I’ll keep connector guidance in this chat while the center stays on your control surfaces.')).toBeVisible();
+    await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
   });
 
   test('access actions return to sign in and open real external sign-in pages', async ({ page }) => {

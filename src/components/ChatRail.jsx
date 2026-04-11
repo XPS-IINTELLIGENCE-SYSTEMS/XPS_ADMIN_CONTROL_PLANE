@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
-import { useWorkspace, detectObjectType, deriveTitle, RUN_STATUS } from '../lib/workspaceEngine.jsx';
 
 const THREAD_STORAGE_KEY = 'xps.chat.thread.v3';
 const DEFAULT_THREAD = [
   {
     id: 'welcome',
     role: 'assistant',
-    text: 'Persistent chat is live on the right. Ask for a workspace brief, connector change, or sign-in help.',
+    mode: 'assistant',
+    text: 'Persistent chat is live on the right. The center stays reserved for dashboards, graphs, and workspace actions.',
     createdAt: Date.now(),
   },
 ];
@@ -15,15 +15,15 @@ const DEFAULT_THREAD = [
 const MODE_CONFIG = {
   assistant: {
     label: 'Assistant',
-    note: 'Routes general requests into the center workspace.',
+    note: 'Free-flow operator chat that stays in the right rail.',
   },
   research: {
     label: 'Research',
-    note: 'Creates research-ready notes and summaries.',
+    note: 'Research guidance stays in chat unless you use a workspace action.',
   },
   connectors: {
     label: 'Connectors',
-    note: 'Pushes you toward connector management and runtime truth.',
+    note: 'Connector help stays in chat and does not replace the center surface.',
   },
 };
 
@@ -33,7 +33,15 @@ function loadThread() {
     const raw = window.localStorage.getItem(THREAD_STORAGE_KEY);
     if (!raw) return DEFAULT_THREAD;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed : DEFAULT_THREAD;
+    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_THREAD;
+    return parsed.map((message, index) => ({
+      ...message,
+      id: message?.id || `message-${index}`,
+      role: message?.role === 'user' ? 'user' : 'assistant',
+      mode: MODE_CONFIG[message?.mode] ? message.mode : 'assistant',
+      text: typeof message?.text === 'string' ? message.text : '',
+      createdAt: Number.isFinite(message?.createdAt) ? message.createdAt : Date.now() - index,
+    }));
   } catch {
     return DEFAULT_THREAD;
   }
@@ -41,21 +49,20 @@ function loadThread() {
 
 function buildAssistantReply(text, mode, attachmentCount) {
   const trimmed = text.trim() || 'No prompt provided.';
-  const attachmentLine = attachmentCount ? `\n\nAttachments included: ${attachmentCount}.` : '';
+  const attachmentLine = attachmentCount ? `\n\nI also have ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'} in this thread.` : '';
 
   if (mode === 'research') {
-    return `# Research brief\n\n${trimmed}\n\n- Capture the lead objective\n- Pull the most relevant facts\n- Turn findings into a sales-ready summary${attachmentLine}`;
+    return `Got it — I can help you research that right here without changing the center workspace.\n\nFocus: ${trimmed}\n\nTell me if you want a summary, open questions, or a next-step checklist.${attachmentLine}`;
   }
 
   if (mode === 'connectors') {
-    return `# Connector action\n\n${trimmed}\n\n- Review the unified connectors section\n- Save the field updates you need\n- Add or remove custom connectors from the same screen${attachmentLine}`;
+    return `Understood. I’ll keep connector guidance in this chat while the center stays on your control surfaces.\n\nRequest: ${trimmed}\n\nIf you want to change a connector, use the connector controls in the center when you are ready.${attachmentLine}`;
   }
 
-  return `# Workspace brief\n\n${trimmed}\n\n- Create or update an editable workspace object\n- Keep the next action visible in the center screen\n- Use the connector or access sections when the request needs them${attachmentLine}`;
+  return `Got it. We can keep this as a normal back-and-forth conversation in the right rail.\n\nRequest: ${trimmed}\n\nThe center UI will stay focused on dashboards, graphs, and button-driven workspace actions.${attachmentLine}`;
 }
 
-export default function ChatRail({ onNavigate }) {
-  const { createObject } = useWorkspace();
+export default function ChatRail() {
   const [thread, setThread] = useState(loadThread);
   const [mode, setMode] = useState('assistant');
   const [composer, setComposer] = useState('');
@@ -95,37 +102,19 @@ export default function ChatRail({ onNavigate }) {
       id: `user-${Date.now()}`,
       role: 'user',
       text: composer.trim() || 'Shared attachments only.',
+      mode,
       createdAt: Date.now(),
     };
     const reply = buildAssistantReply(composer, mode, attachments.length);
     const nextAssistantMessage = {
       id: `assistant-${Date.now() + 1}`,
       role: 'assistant',
+      mode,
       text: reply,
       createdAt: Date.now() + 1,
     };
 
     setThread((current) => [...current, nextUserMessage, nextAssistantMessage]);
-    createObject({
-      type: detectObjectType(reply, mode === 'research' ? 'research' : null),
-      title: deriveTitle(reply, mode),
-      content: reply,
-      agent: MODE_CONFIG[mode].label,
-      status: RUN_STATUS.DONE,
-      meta: {
-        mode,
-        attachments,
-      },
-    });
-
-    if (mode === 'connectors' || /connector|token|api key|runtime/i.test(composer)) {
-      onNavigate?.('connectors');
-    } else if (/sign in|login|access/i.test(composer)) {
-      onNavigate?.('access');
-    } else {
-      onNavigate?.('workspace');
-    }
-
     setComposer('');
     setAttachments([]);
   };
@@ -134,6 +123,13 @@ export default function ChatRail({ onNavigate }) {
     setThread(DEFAULT_THREAD);
     setAttachments([]);
     setComposer('');
+  };
+
+  const handleComposerKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
+    }
   };
 
   return (
@@ -215,6 +211,7 @@ export default function ChatRail({ onNavigate }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '18px', display: 'grid', gap: 12 }}>
         {thread.map((message) => {
           const isAssistant = message.role === 'assistant';
+          const messageMode = MODE_CONFIG[message.mode] || MODE_CONFIG.assistant;
           return (
             <div
               key={message.id}
@@ -229,7 +226,7 @@ export default function ChatRail({ onNavigate }) {
               }}
             >
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.1, color: isAssistant ? 'var(--text-muted)' : 'var(--gold)', marginBottom: 6 }}>
-                {isAssistant ? MODE_CONFIG[mode].label.toUpperCase() : 'YOU'}
+                {isAssistant ? messageMode.label.toUpperCase() : 'YOU'}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7 }}>{message.text}</div>
             </div>
@@ -253,6 +250,7 @@ export default function ChatRail({ onNavigate }) {
           data-testid="chat-input"
           value={composer}
           onChange={(event) => setComposer(event.target.value)}
+          onKeyDown={handleComposerKeyDown}
           placeholder={`Message ${MODE_CONFIG[mode].label}…`}
           style={{
             width: '100%',
@@ -291,7 +289,7 @@ export default function ChatRail({ onNavigate }) {
               <Paperclip size={16} className="xps-icon" />
             </button>
             <input ref={fileInputRef} type="file" multiple hidden onChange={handleFiles} />
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chat stays visible on the right side.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Enter to send · Shift+Enter for a new line.</div>
           </div>
 
           <button

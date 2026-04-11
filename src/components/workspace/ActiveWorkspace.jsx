@@ -84,7 +84,7 @@ function TabBar({ objects, activeId, onSelect, onClose }) {
       overflowX: 'auto',
       borderBottom: '1px solid rgba(255,255,255,0.07)',
       background: '#111',
-    }}>
+    }} data-testid="workspace-tab-bar">
       {objects.map(obj => {
         const meta  = OBJ_TYPE_META[obj.type] ?? { label: obj.type, icon: '◻' };
         const color = STATUS_COLOR[obj.status];
