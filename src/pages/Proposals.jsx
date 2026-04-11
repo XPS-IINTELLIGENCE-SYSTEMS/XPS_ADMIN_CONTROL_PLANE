@@ -5,12 +5,7 @@ import { Plus, FileText } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
-const proposals = [
-  { id: 1, company: 'Ace Hardware Distribution', contact: 'Robert Chen',   value: '$45,000', status: 'Proposal',     sent: '2d ago' },
-  { id: 2, company: 'Gulf Coast Logistics',       contact: 'Diana Patel',   value: '$38,000', status: 'Qualified',    sent: '5d ago' },
-  { id: 3, company: 'Palm Medical Center',        contact: 'Dr. James Liu', value: '$55,000', status: 'Negotiation',  sent: '1w ago' },
-  { id: 4, company: 'Tampa Bay Brewing Co.',      contact: 'Sarah Mills',   value: '$28,000', status: 'Closed Won',   sent: '2w ago' },
-];
+const proposals = [];
 
 export default function Proposals() {
   const [items, setItems] = useState(proposals);
@@ -23,7 +18,7 @@ export default function Proposals() {
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>Track, create, and manage sales proposals</p>
         </div>
         <button
-          onClick={() => setItems(prev => [{ id: Date.now(), company: 'New Proposal Draft', contact: 'Operator Added', value: '$18,500', status: 'Proposal', sent: 'just now' }, ...prev])}
+          onClick={() => setItems(prev => [{ id: Date.now(), company: 'New Proposal Draft', contact: 'Awaiting reviewer', value: '$0', status: 'Proposal', sent: 'just now' }, ...prev])}
           className="xps-electric-hover"
           style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}
         >
@@ -46,6 +41,11 @@ export default function Proposals() {
               <StatusBadge status={p.status} />
             </div>
           ))}
+          {items.length === 0 && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+              No live proposals yet. Create a draft or connect storage to sync proposal records.
+            </div>
+          )}
         </div>
       </Panel>
 

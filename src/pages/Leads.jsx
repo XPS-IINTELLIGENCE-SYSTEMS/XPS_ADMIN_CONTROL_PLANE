@@ -25,7 +25,7 @@ export default function Leads() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700 }}>Lead Intelligence</h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: 14 }}>{leads.length} active leads across all territories</p>
+          <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: 14 }}>{filtered.length} configured leads currently loaded</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
@@ -43,15 +43,15 @@ export default function Leads() {
             onClick={() => setExtraLeads(prev => [{
               id: `lead-${Date.now()}`,
               company: 'New Account Draft',
-              contact: 'Operator Added',
-              vertical: 'New Business',
-              location: 'Remote',
-              score: 72,
-              stage: 'Qualified',
-              value: '$12,000',
-              email: 'draft@xps.local',
-              rating: '4.8',
-              reviews: '12 reviews',
+              contact: 'Awaiting assignment',
+              vertical: 'Unassigned',
+              location: 'Pending',
+              score: 0,
+              stage: 'New',
+              value: '$0',
+              email: 'not-set',
+              rating: '—',
+              reviews: '0 reviews',
             }, ...prev])}
             className="xps-electric-hover"
             style={{

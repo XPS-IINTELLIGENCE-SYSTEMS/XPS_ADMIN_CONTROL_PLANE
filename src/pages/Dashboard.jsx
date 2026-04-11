@@ -24,12 +24,14 @@ function CustomTooltip({ active, payload, label }) {
 }
 
 export default function Dashboard() {
+  const greeting = userContext.name ? `Good morning, ${userContext.name}` : 'Good morning';
+
   return (
     <div>
       {/* Greeting */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-          Good morning, {userContext.name}
+          {greeting}
         </h1>
         <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: 14 }}>
           Here's your sales intelligence briefing for today.

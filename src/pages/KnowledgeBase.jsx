@@ -4,13 +4,7 @@ import { BookOpen, Search } from 'lucide-react';
 
 const GOLD = '#c49e3c';
 
-const articles = [
-  { id: 1, title: 'XPS Product Catalogue 2026',        category: 'Products',   updated: '1d ago' },
-  { id: 2, title: 'Objection Handling — Warehouse',     category: 'Sales',      updated: '3d ago' },
-  { id: 3, title: 'Territory Pricing Guide — SE FL',    category: 'Pricing',    updated: '5d ago' },
-  { id: 4, title: 'Application Specs: EpoxyShield Pro', category: 'Technical',  updated: '1w ago' },
-  { id: 5, title: 'New Client Onboarding Process',      category: 'Process',    updated: '2w ago' },
-];
+const articles = [];
 
 export default function KnowledgeBase() {
   return (
@@ -37,6 +31,11 @@ export default function KnowledgeBase() {
             </div>
           </div>
         ))}
+        {articles.length === 0 && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+            No indexed articles yet. Connect document storage to populate the knowledge base.
+          </div>
+        )}
       </Panel>
 
       <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 16px' }}>
