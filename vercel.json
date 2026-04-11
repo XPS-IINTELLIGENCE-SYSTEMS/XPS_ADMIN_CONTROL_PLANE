@@ -2,6 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "rewrites": [
+    { "source": "/api/browser/run", "destination": "/api/browser?action=run" },
+    { "source": "/api/browser/status", "destination": "/api/browser?action=status" },
+    { "source": "/api/browser/cancel", "destination": "/api/browser?action=cancel" },
+    { "source": "/api/webhooks/twilio/inbound", "destination": "/api/webhooks/twilio?event=inbound" },
+    { "source": "/api/webhooks/twilio/status", "destination": "/api/webhooks/twilio?event=status" },
+    { "source": "/api/webhooks/sendgrid/inbound", "destination": "/api/webhooks/sendgrid?event=inbound" },
+    { "source": "/api/webhooks/sendgrid/events", "destination": "/api/webhooks/sendgrid?event=events" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -130,7 +130,7 @@ export async function cancelBrowserJob(jobId) {
 
   // Notify backend if job is in-flight
   try {
-    await fetch(`${API_URL}/api/browser/cancel`, {
+    await fetch(`${API_URL}/api/browser?action=cancel`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ job_id: jobId }),
@@ -165,11 +165,11 @@ async function _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx) 
   const wsObjId = job.wsObjId;
 
   try {
-    _emitLog(jobId, workspaceCtx, `[browser] Calling /api/browser/run…`);
+    _emitLog(jobId, workspaceCtx, `[browser] Calling /api/browser?action=run…`);
     _patchJob(jobId, { progress: 15 });
     workspaceCtx.patchObject(wsObjId, { progress: 15 });
 
-    const res = await fetch(`${API_URL}/api/browser/run`, {
+    const res = await fetch(`${API_URL}/api/browser?action=run`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
@@ -289,7 +289,7 @@ async function pollBrowserStatus(jobId, workerUrl, workspaceCtx, wsObjId, url, a
     await new Promise(resolve => setTimeout(resolve, BROWSER_POLL_INTERVAL_MS));
     let data;
     try {
-      const res = await fetch(`${API_URL}/api/browser/status?job_id=${encodeURIComponent(jobId)}${workerUrl ? `&worker_url=${encodeURIComponent(workerUrl)}` : ''}`);
+      const res = await fetch(`${API_URL}/api/browser?action=status&job_id=${encodeURIComponent(jobId)}${workerUrl ? `&worker_url=${encodeURIComponent(workerUrl)}` : ''}`);
       data = await res.json();
     } catch (err) {
       return {
