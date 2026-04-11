@@ -258,7 +258,10 @@ export function WorkspaceProvider({ children }) {
   };
 
   useEffect(() => {
-    saveWorkspaceSnapshot(state);
+    const timeoutId = setTimeout(() => {
+      saveWorkspaceSnapshot(state);
+    }, 500);
+    return () => clearTimeout(timeoutId);
   }, [state]);
 
   return (

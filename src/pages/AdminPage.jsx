@@ -8,7 +8,7 @@
  * build-time env var detection. No faked data. Blocked passthrough is
  * explicitly surfaced with truthful reasons.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   GitBranch, Database, Cpu, Globe, Mail, Sparkles,
   CheckCircle, XCircle, AlertTriangle, MinusCircle,
@@ -245,6 +245,16 @@ function SectionHeading({ children }) {
       {children}
     </div>
   );
+}
+
+function getRuntimeSourceMeta(statusSource) {
+  if (statusSource === 'live') {
+    return { label: 'live /api/status', color: '#4ade80' };
+  }
+  if (statusSource === 'recovered') {
+    return { label: 'last browser-local continuity snapshot', color: '#fbbf24' };
+  }
+  return { label: 'unavailable', color: 'rgba(255,255,255,0.35)' };
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -1788,13 +1798,17 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
 function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
   const runtimeOps = statusSnapshot?.runtimeOps || {};
   const continuitySnapshot = statusSnapshot?.persistence || null;
+  const runtimeSourceMeta = getRuntimeSourceMeta(statusSource);
   const [runs, setRuns] = useState(getRunList());
   const [jobs, setJobs] = useState(getJobList());
   const [groups, setGroups] = useState(getGroupList());
-  const recoveredWorkspaceObjects = workspace.objects.filter((item) => item.meta?.persistence?.recoveredAt).length;
-  const recoveredRuns = runs.filter((item) => item.recoveryPending).length;
-  const recoveredJobs = jobs.filter((item) => item.recoveryPending).length;
-  const recoveredGroups = groups.filter((item) => item.recoveryPending).length;
+  const recoveredWorkspaceObjects = useMemo(
+    () => workspace.objects.filter((item) => item.meta?.persistence?.recoveredAt).length,
+    [workspace.objects],
+  );
+  const recoveredRuns = useMemo(() => runs.filter((item) => item.recoveryPending).length, [runs]);
+  const recoveredJobs = useMemo(() => jobs.filter((item) => item.recoveryPending).length, [jobs]);
+  const recoveredGroups = useMemo(() => groups.filter((item) => item.recoveryPending).length, [groups]);
   const workspaceCtx = {
     createObject: workspace.createObject,
     patchObject: workspace.patchObject,
@@ -1879,15 +1893,15 @@ function RuntimeSection({ statusSnapshot, statusSource = 'live', workspace }) {
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
           Truthful inbound events, job orchestration, parallel groups, runtime targets, and execution history.
         </p>
-        <div style={{ marginTop: 8, fontSize: 11, color: statusSource === 'live' ? '#4ade80' : statusSource === 'recovered' ? '#fbbf24' : 'rgba(255,255,255,0.35)' }}>
-          Runtime source: {statusSource === 'live' ? 'live /api/status' : statusSource === 'recovered' ? 'last browser-local continuity snapshot' : 'unavailable'}
+        <div style={{ marginTop: 8, fontSize: 11, color: runtimeSourceMeta.color }}>
+          Runtime source: {runtimeSourceMeta.label}
         </div>
       </div>
 
       <CapPanel icon={Workflow} title="Runtime Targets" subtitle="Local vs cloud routing, workers, and webhook targets" status={runtimeOps.environment?.runtime === 'cloud' ? STATUS.LIVE : STATUS.LOCAL} defaultOpen>
         <InfoRow label="Runtime mode" value={runtimeOps.environment?.runtime || 'unknown'} />
         <InfoRow label="History store" value={runtimeOps.environment?.historyStore || 'unknown'} />
-        <InfoRow label="Snapshot source" value={statusSource === 'live' ? 'live /api/status' : statusSource === 'recovered' ? 'browser-local recovery snapshot' : 'not available'} />
+        <InfoRow label="Snapshot source" value={runtimeSourceMeta.label} />
         <InfoRow label="Continuity save" value={continuitySnapshot?.savedAt || 'No browser-local runtime snapshot saved yet'} />
         <InfoRow label="Browser worker target" value={runtimeOps.targets?.browserWorker?.target || 'Blocked — no worker target configured'} />
         <InfoRow label="Twilio inbound target" value={runtimeOps.targets?.webhookTargets?.twilioInbound || '/api/webhooks/twilio/inbound'} />
@@ -2226,6 +2240,7 @@ const actionInputStyle = {
 };
 // ── System section ─────────────────────────────────────────────────────────
 function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured, runtimeStatusSource = 'live', savedStatus = null }) {
+  const runtimeSourceMeta = getRuntimeSourceMeta(runtimeStatusSource);
   const services = [
     { label: 'API Routes (/api/*)',      ok: true,                         note: 'Vercel serverless' },
     { label: 'LLM Adapter',             ok: openaiConfigured || groqConfigured, note: 'api/_llm.js' },
@@ -2330,7 +2345,7 @@ function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browser
         <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>
           CONTINUITY / RECOVERY TRUTH
         </div>
-        <InfoRow label="Runtime source" value={runtimeStatusSource === 'live' ? 'live /api/status' : runtimeStatusSource === 'recovered' ? 'browser-local continuity snapshot' : 'unavailable'} />
+        <InfoRow label="Runtime source" value={runtimeSourceMeta.label} />
         <InfoRow label="Last continuity save" value={savedStatus?.persistence?.savedAt || 'No runtime snapshot saved yet'} />
         <div style={{ padding: '0 16px 14px', fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>
           Browser-local continuity restores operator state after reloads and exposes the last saved runtime/admin snapshot. Durable backend mutation and orchestration history still require configured runtime persistence such as Supabase.

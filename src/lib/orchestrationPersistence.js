@@ -10,6 +10,7 @@ const KEYS = {
 
 const ACTIVE_WORKSPACE_STATUSES = new Set(['queued', 'running', 'retry']);
 const ACTIVE_RUNTIME_STATUSES = new Set(['queued', 'running', 'retry']);
+const MAX_HISTORY_ENTRIES = 24;
 
 function nowIso() {
   return new Date().toISOString();
@@ -45,8 +46,7 @@ function createRecoveryEntry(status, detail, savedAt) {
 function normalizeHistory(history, fallbackStatus, fallbackDetail, savedAt) {
   const normalized = Array.isArray(history) ? history.filter(Boolean) : [];
   const detail = fallbackDetail || `Recovered ${fallbackStatus}.`;
-  normalized.unshift(createRecoveryEntry('recovered', detail, savedAt));
-  return normalized.slice(0, 24);
+  return [createRecoveryEntry('recovered', detail, savedAt), ...normalized].slice(0, MAX_HISTORY_ENTRIES);
 }
 
 function serializeWorkspaceObject(object = {}) {
@@ -95,7 +95,12 @@ export function loadWorkspaceSnapshot() {
       }),
     };
   });
-  const activeId = objects.find((item) => item.id === raw.activeId)?.id || objects[objects.length - 1]?.id || null;
+  let activeId = null;
+  if (objects.find((item) => item.id === raw.activeId)) {
+    activeId = raw.activeId;
+  } else if (objects.length > 0) {
+    activeId = objects[objects.length - 1].id;
+  }
   return {
     objects,
     activeId,
@@ -263,15 +268,15 @@ export function loadGroupSnapshot() {
     const recoveryPending = ACTIVE_RUNTIME_STATUSES.has(group.status);
     return {
       ...group,
-      status: recoveryPending ? 'recovery_pending' : (group.status || 'running'),
+      status: recoveryPending ? 'recovery_pending' : (group.status || 'queued'),
       jobs: Array.isArray(group.jobs) ? group.jobs : [],
       createdAt: normalizeTs(group.createdAt),
       updatedAt: Date.now(),
       recoveryPending,
-      recoveredFromStatus: group.status || 'running',
+      recoveredFromStatus: group.status || 'queued',
       history: normalizeHistory(
         group.history,
-        group.status || 'running',
+        group.status || 'queued',
         recoveryPending
           ? 'Recovered active parallel group; inspect member jobs and resume manually from the last truthful snapshot.'
           : 'Recovered parallel group history from the last saved browser-local snapshot.',
