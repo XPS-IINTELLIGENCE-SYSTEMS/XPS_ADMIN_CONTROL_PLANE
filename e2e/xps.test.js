@@ -277,6 +277,16 @@ test.describe('XPS Control Plane', () => {
     await screenshot(page, 'provider-model-dropdown');
   });
 
+  test('Chat rail — model dropdown shows ChatGPT, Copilot, and Groq', async ({ page }) => {
+    const modelSelector = page.locator('[data-testid="model-selector"]');
+    await expect(modelSelector).toBeVisible();
+    await modelSelector.click();
+    await expect(page.locator('[data-testid="model-option-chatgpt"]')).toBeVisible();
+    await expect(page.locator('[data-testid="model-option-copilot"]')).toBeVisible();
+    await expect(page.locator('[data-testid="model-option-groq"]')).toBeVisible();
+    await screenshot(page, 'chat-model-dropdown');
+  });
+
   test('Workspace — UI editor preview/apply/rollback flow', async ({ page }) => {
     await page.locator('aside nav button', { hasText: 'Editor' }).click();
     await page.waitForTimeout(300);
@@ -302,6 +312,30 @@ test.describe('XPS Control Plane', () => {
     await page.locator('[data-testid="send-btn"]').click();
     await page.waitForTimeout(600);
     await screenshot(page, 'orchestrator-ui-preview');
+  });
+
+  test('Chat rail — completes a 10-message operator run', async ({ page }) => {
+    const prompts = [
+      'Add button to the UI',
+      'Add card to the UI',
+      'Add section to the UI',
+      'Add tabs to the UI',
+      'primary color to blue',
+      'accent color to gold',
+      'text color to white',
+      'border radius 12',
+      'add gradient',
+      'add animation',
+    ];
+
+    for (const prompt of prompts) {
+      await page.locator('[data-testid="chat-input"]').fill(prompt);
+      await page.locator('[data-testid="send-btn"]').click();
+      await page.waitForTimeout(180);
+    }
+
+    await expect(page.locator('[data-testid="chat-rail"]')).toContainText('21 messages');
+    await screenshot(page, 'chat-ten-message-run');
   });
 
   test('Mode dropdown — opens and shows all modes', async ({ page }) => {

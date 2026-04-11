@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   base,
   // Expose env vars that start with any of these service-name prefixes to the browser
-  envPrefix: ['SUPABASE_', 'OPENAI_', 'GITHUB_', 'VERCEL_', 'GROQ_', 'GCP_', 'GPT_', 'API_', 'BASE_'],
+  envPrefix: ['SUPABASE_', 'OPENAI_', 'GITHUB_', 'VERCEL_', 'GROQ_', 'GCP_', 'GEMINI_', 'OLLAMA_', 'HUBSPOT_', 'AIRTABLE_', 'BROWSER_', 'GPT_', 'API_', 'BASE_'],
   build: {
     outDir: 'dist',
     sourcemap: false,

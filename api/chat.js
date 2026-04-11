@@ -12,12 +12,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { messages, model, provider, agent = 'orchestrator', runId, attachments = [] } = req.body || {}
+  const { messages, model, provider, agent = 'orchestrator', runId, attachments = [], credentials = {} } = req.body || {}
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array is required' })
   }
 
-  const mode = llmMode();
+  const mode = llmMode(credentials);
   const attachmentNote = attachments.length
     ? `Attachment context:\n${attachments.map(a => `- ${a.name} (${a.type || 'file'}, ${Math.round((a.size || 0) / 1024)}kb)`).join('\n')}`
     : '';
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!hasLLM()) {
+  if (!hasLLM(credentials)) {
     // Structured synthetic response
     return res.status(200).json({
       event_type: 'run_completed',
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const reply = await callLLM(promptMessages, { model, provider })
+      const reply = await callLLM(promptMessages, { model, provider, credentials })
     const wsType = inferWsType(reply, agent);
 
     return res.status(200).json({

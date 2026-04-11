@@ -10,18 +10,19 @@ import {
   Link,
   Plug,
 } from 'lucide-react';
+import { requestAppShellNavigation } from '../../lib/appShellEvents.js';
 
 const gold = '#d4a843';
 
 const CONNECTORS = [
-  { id: 'crm',        name: 'CRM Sync',         desc: 'Customer relationship management integration', icon: Users, status: 'not_connected' },
-  { id: 'email',      name: 'Email / Outreach',  desc: 'Email send and tracking integration',          icon: Mail, status: 'not_connected' },
-  { id: 'calendar',   name: 'Calendar',          desc: 'Calendar and scheduling integration',           icon: Calendar, status: 'not_connected' },
-  { id: 'analytics',  name: 'Analytics Source',  desc: 'Analytics and reporting data source',           icon: BarChart3, status: 'not_connected' },
-  { id: 'storage',    name: 'Cloud Storage',     desc: 'Document and file storage integration',         icon: Cloud, status: 'not_connected' },
-  { id: 'supabase',   name: 'Supabase',          desc: 'Primary durable backend database',              icon: Database, status: 'awaiting_config' },
-  { id: 'openai',     name: 'OpenAI',            desc: 'GPT-4 / chat completion backend',               icon: Cpu, status: 'awaiting_config' },
-  { id: 'webhook',    name: 'Webhooks',          desc: 'Outbound webhook endpoints',                    icon: Link, status: 'not_connected' },
+  { id: 'crm',        name: 'CRM Sync',         desc: 'Customer relationship management integration', icon: Users, status: 'not_connected', adminSection: 'integrations' },
+  { id: 'email',      name: 'Email / Outreach',  desc: 'Email send and tracking integration',          icon: Mail, status: 'not_connected', adminSection: 'google' },
+  { id: 'calendar',   name: 'Calendar',          desc: 'Calendar and scheduling integration',           icon: Calendar, status: 'not_connected', adminSection: 'google' },
+  { id: 'analytics',  name: 'Analytics Source',  desc: 'Analytics and reporting data source',           icon: BarChart3, status: 'not_connected', adminSection: 'system' },
+  { id: 'storage',    name: 'Cloud Storage',     desc: 'Document and file storage integration',         icon: Cloud, status: 'not_connected', adminSection: 'google' },
+  { id: 'supabase',   name: 'Supabase',          desc: 'Primary durable backend database',              icon: Database, status: 'awaiting_config', adminSection: 'supabase' },
+  { id: 'openai',     name: 'OpenAI',            desc: 'GPT-4 / chat completion backend',               icon: Cpu, status: 'awaiting_config', adminSection: 'integrations' },
+  { id: 'webhook',    name: 'Webhooks',          desc: 'Outbound webhook endpoints',                    icon: Link, status: 'not_connected', adminSection: 'system' },
 ];
 
 const STATUS_CONFIG = {
@@ -93,7 +94,10 @@ export default function ConnectorsPanel() {
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot }} />
                   <span style={{ fontSize: 10, fontWeight: 600, color: st.color, letterSpacing: 0.4 }}>{st.label}</span>
                 </div>
-                <button style={{
+                <button
+                  onClick={() => requestAppShellNavigation({ page: 'admin', adminSection: conn.adminSection })}
+                  className="xps-electric-hover"
+                  style={{
                   padding: '4px 12px',
                   background: 'transparent',
                   border: '1px solid rgba(255,255,255,0.12)',

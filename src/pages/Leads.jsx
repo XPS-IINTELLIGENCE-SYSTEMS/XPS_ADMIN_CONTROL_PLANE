@@ -8,12 +8,16 @@ const GOLD = '#c49e3c';
 
 export default function Leads() {
   const [search, setSearch] = useState('');
+  const [showQualifiedOnly, setShowQualifiedOnly] = useState(false);
+  const [extraLeads, setExtraLeads] = useState([]);
 
-  const filtered = leads.filter(l =>
-    !search || l.company.toLowerCase().includes(search.toLowerCase()) ||
-    l.contact.toLowerCase().includes(search.toLowerCase()) ||
-    l.vertical.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = [...extraLeads, ...leads].filter(l => {
+    const matchesSearch = !search || l.company.toLowerCase().includes(search.toLowerCase()) ||
+      l.contact.toLowerCase().includes(search.toLowerCase()) ||
+      l.vertical.toLowerCase().includes(search.toLowerCase());
+    const matchesStage = !showQualifiedOnly || ['Qualified', 'Proposal', 'Negotiation', 'Closed Won'].includes(l.stage);
+    return matchesSearch && matchesStage;
+  });
 
   return (
     <div>
@@ -24,15 +28,33 @@ export default function Leads() {
           <p style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: 14 }}>{leads.length} active leads across all territories</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button style={{
+          <button
+            onClick={() => setShowQualifiedOnly(v => !v)}
+            className="xps-electric-hover"
+            style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'var(--bg-card)', border: '1px solid var(--border)',
             color: 'var(--text-secondary)', borderRadius: 8, padding: '8px 14px',
             fontSize: 13, fontWeight: 500,
           }}>
-            <Filter size={13} /> Filter
+            <Filter size={13} /> {showQualifiedOnly ? 'Show All' : 'Qualified+'}
           </button>
-          <button style={{
+          <button
+            onClick={() => setExtraLeads(prev => [{
+              id: `lead-${Date.now()}`,
+              company: 'New Account Draft',
+              contact: 'Operator Added',
+              vertical: 'New Business',
+              location: 'Remote',
+              score: 72,
+              stage: 'Qualified',
+              value: '$12,000',
+              email: 'draft@xps.local',
+              rating: '4.8',
+              reviews: '12 reviews',
+            }, ...prev])}
+            className="xps-electric-hover"
+            style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: GOLD, border: 'none',
             color: '#0a0b0c', borderRadius: 8, padding: '8px 16px',

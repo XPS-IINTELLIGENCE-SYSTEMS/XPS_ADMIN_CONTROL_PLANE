@@ -41,9 +41,9 @@
   --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
   --shadow-lg:   0 8px 32px rgba(0,0,0,0.5);
 
-  --sidebar-w: 220px;
-  --header-h:  56px;
-  --rail-w:    380px;
+  --sidebar-w: 260px;
+  --header-h:  64px;
+  --rail-w:    420px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -54,7 +54,7 @@ html, body, #root {
   background: var(--bg-root);
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -134,7 +134,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* Metallic animated logo treatment */
 .xps-logo {
   position: relative;
-  background: #0b0d12;
+  background: transparent;
   overflow: hidden;
 }
 .xps-logo::before {
@@ -204,10 +204,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 svg.xps-icon {
   color: var(--icon-silver);
   stroke: currentColor;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.08));
 }
 .lucide {
   color: var(--icon-silver) !important;
   stroke: currentColor;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.08));
 }
 .xps-icon-muted {
   color: var(--icon-silver-muted);
@@ -240,3 +242,36 @@ svg.xps-icon {
 .recharts-cartesian-grid-vertical line { stroke: rgba(255,255,255,0.06); }
 .recharts-text { fill: var(--text-muted) !important; font-size: 11px; }
 .recharts-tooltip-wrapper { outline: none; }
+
+.xps-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.xps-brand-logo-glow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 22px rgba(212,168,67,0.2));
+}
+
+.xps-brand-logo-glow::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(212,168,67,0.28) 0%, rgba(212,168,67,0.08) 35%, rgba(212,168,67,0) 70%);
+  pointer-events: none;
+}
+
+.xps-silver-text {
+  background: linear-gradient(115deg, #f8fbff 0%, #d7dee8 24%, #9ea8b7 49%, #edf2f9 72%, #c4ccd8 100%);
+  background-size: 240% 100%;
+  animation: xpsGoldShimmer 4.5s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}

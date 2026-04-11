@@ -12,6 +12,8 @@ const sequences = [
 ];
 
 export default function Outreach() {
+  const [items, setItems] = useState(sequences);
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
@@ -19,15 +21,19 @@ export default function Outreach() {
           <h1 style={{ fontSize: 24, fontWeight: 700 }}>Outreach</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>AI-drafted email sequences and cadences</p>
         </div>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}>
+        <button
+          onClick={() => setItems(prev => [{ id: Date.now(), name: 'New Operator Sequence', status: 'draft', leads: 0, opens: '—', replies: '—' }, ...prev])}
+          className="xps-electric-hover"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: GOLD, color: '#0a0b0c', border: 'none', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13 }}
+        >
           <Plus size={14} /> New Sequence
         </button>
       </div>
 
       <Panel title="Active Sequences" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {sequences.map((seq, i) => (
-            <div key={seq.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: i < sequences.length - 1 ? '1px solid var(--border)' : 'none' }}>
+          {items.map((seq, i) => (
+            <div key={seq.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(196,158,60,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Send size={15} color={GOLD} />
               </div>

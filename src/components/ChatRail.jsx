@@ -11,6 +11,7 @@ import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '..
 import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPreview, persistUiVersion, persistUiRollback } from '../lib/supabasePersistence.js';
 import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState } from '../lib/uiMutations.js';
 import { getGovernance, subscribeGovernance } from '../lib/governance.js';
+import { getConnectionPrefs, subscribeConnectionPrefs } from '../lib/connectionPrefs.js';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -31,24 +32,88 @@ function useProviderState() {
   return providerState;
 }
 
-function buildFallbackState() {
+function buildFallbackState(connectionPrefs = {}) {
   const env = import.meta.env;
-  const hasOpenAI = !!env.OPENAI_API_KEY;
-  const hasGroq = !!env.GROQ_API_KEY;
-  const hasGemini = !!env.GEMINI_API_KEY;
-  const hasOllama = !!env.OLLAMA_BASE_URL;
+  const hasOpenAI = !!(env.OPENAI_API_KEY || connectionPrefs.openaiApiKey);
+  const hasGroq = !!(env.GROQ_API_KEY || connectionPrefs.groqApiKey);
+  const hasGemini = !!(env.GEMINI_API_KEY || connectionPrefs.geminiApiKey);
+  const hasOllama = !!(env.OLLAMA_BASE_URL || connectionPrefs.ollamaBaseUrl);
   const active = hasOpenAI ? 'openai' : hasGroq ? 'groq' : hasGemini ? 'gemini' : hasOllama ? 'ollama' : 'none';
   return {
     llm: {
       active,
-      model: active === 'openai' ? 'gpt-4o-mini' : active === 'groq' ? 'llama3-8b-8192' : active === 'gemini' ? 'gemini-1.5-flash' : active === 'ollama' ? 'llama3' : null,
+      model: active === 'openai'
+        ? (connectionPrefs.openaiModel || 'gpt-4o-mini')
+        : active === 'groq'
+          ? (connectionPrefs.groqModel || 'llama-3.3-70b-versatile')
+          : active === 'gemini'
+            ? (connectionPrefs.geminiModel || 'gemini-1.5-flash')
+            : active === 'ollama'
+              ? (connectionPrefs.ollamaModel || 'llama3.1:8b')
+              : null,
       mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
       providers: {
-        openai: { configured: hasOpenAI, model: 'gpt-4o-mini' },
-        groq: { configured: hasGroq, model: 'llama3-8b-8192' },
-        gemini: { configured: hasGemini, model: 'gemini-1.5-flash' },
-        ollama: { configured: hasOllama, model: 'llama3' },
+        openai: { configured: hasOpenAI, model: connectionPrefs.openaiModel || 'gpt-4o-mini' },
+        groq: { configured: hasGroq, model: connectionPrefs.groqModel || 'llama-3.3-70b-versatile' },
+        gemini: { configured: hasGemini, model: connectionPrefs.geminiModel || 'gemini-1.5-flash' },
+        ollama: { configured: hasOllama, model: connectionPrefs.ollamaModel || 'llama3.1:8b' },
       },
+    },
+  };
+}
+
+function mergeProviderState(apiState, connectionPrefs) {
+  const fallback = buildFallbackState(connectionPrefs);
+  if (!apiState?.llm) return fallback;
+
+  const providers = {
+    openai: {
+      configured: !!(apiState.llm.providers?.openai?.configured || connectionPrefs.openaiApiKey),
+      model: apiState.llm.providers?.openai?.model || connectionPrefs.openaiModel || 'gpt-4o-mini',
+    },
+    groq: {
+      configured: !!(apiState.llm.providers?.groq?.configured || connectionPrefs.groqApiKey),
+      model: apiState.llm.providers?.groq?.model || connectionPrefs.groqModel || 'llama-3.3-70b-versatile',
+    },
+    gemini: {
+      configured: !!(apiState.llm.providers?.gemini?.configured || connectionPrefs.geminiApiKey),
+      model: apiState.llm.providers?.gemini?.model || connectionPrefs.geminiModel || 'gemini-1.5-flash',
+    },
+    ollama: {
+      configured: !!(apiState.llm.providers?.ollama?.configured || connectionPrefs.ollamaBaseUrl),
+      model: apiState.llm.providers?.ollama?.model || connectionPrefs.ollamaModel || 'llama3.1:8b',
+    },
+  };
+
+  let active = apiState.llm.active || 'none';
+  if (active === 'none') {
+    active = providers.openai.configured
+      ? 'openai'
+      : providers.groq.configured
+        ? 'groq'
+        : providers.gemini.configured
+          ? 'gemini'
+          : providers.ollama.configured
+            ? 'ollama'
+            : 'none';
+  }
+
+  return {
+    ...apiState,
+    llm: {
+      ...apiState.llm,
+      active,
+      model: active === 'openai'
+        ? providers.openai.model
+        : active === 'groq'
+          ? providers.groq.model
+          : active === 'gemini'
+            ? providers.gemini.model
+            : active === 'ollama'
+              ? providers.ollama.model
+              : null,
+      mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
+      providers,
     },
   };
 }
@@ -124,15 +189,15 @@ function buildProviderOptions(state) {
       model: providers.openai?.model || 'gpt-4o-mini',
       status: providers.openai?.configured ? 'live' : 'blocked',
       available: !!providers.openai?.configured,
-      note: providers.openai?.configured ? 'OPENAI_API_KEY' : 'Missing OPENAI_API_KEY',
+      note: providers.openai?.configured ? 'Backend or session OpenAI API key configured' : 'Missing OPENAI API key',
     },
     {
       id: 'groq',
       label: 'Groq',
-      model: providers.groq?.model || 'llama3-8b-8192',
+      model: providers.groq?.model || 'llama-3.3-70b-versatile',
       status: providers.groq?.configured ? 'live' : 'blocked',
       available: !!providers.groq?.configured,
-      note: providers.groq?.configured ? 'GROQ_API_KEY' : 'Missing GROQ_API_KEY',
+      note: providers.groq?.configured ? 'Backend or session Groq key configured' : 'Missing GROQ API key',
     },
     {
       id: 'gemini',
@@ -145,10 +210,10 @@ function buildProviderOptions(state) {
     {
       id: 'ollama',
       label: 'Ollama',
-      model: providers.ollama?.model || 'llama3',
+      model: providers.ollama?.model || 'llama3.1:8b',
       status: providers.ollama?.configured ? 'local' : 'blocked',
       available: !!providers.ollama?.configured,
-      note: providers.ollama?.configured ? 'OLLAMA_BASE_URL' : 'Missing OLLAMA_BASE_URL',
+      note: providers.ollama?.configured ? 'Backend or session Ollama base URL configured' : 'Missing OLLAMA_BASE_URL',
     },
     {
       id: 'synthetic',
@@ -157,6 +222,42 @@ function buildProviderOptions(state) {
       status: 'synthetic',
       available: true,
       note: 'No live provider',
+    },
+  ];
+}
+
+function buildModelProfiles(providerMap) {
+  const hasAnyLive = ['openai', 'groq', 'gemini', 'ollama'].some((key) => providerMap[key]?.available);
+  return [
+    {
+      id: 'chatgpt',
+      label: 'ChatGPT · GPT-4o Mini',
+      provider: 'openai',
+      backendModel: 'gpt-4o-mini',
+      available: !!providerMap.openai?.available,
+      truth: 'OpenAI API substitute path for ChatGPT product access.',
+      status: providerMap.openai?.available ? 'live' : 'blocked',
+      systemHint: 'Operate like a high-quality ChatGPT workspace assistant using the OpenAI API path.',
+    },
+    {
+      id: 'copilot',
+      label: 'Copilot · Operator Substitute',
+      provider: 'auto',
+      backendModel: null,
+      available: hasAnyLive,
+      truth: 'Direct GitHub Copilot product-session passthrough is unsupported. This uses the active live provider as a truthful substitute.',
+      status: hasAnyLive ? 'live' : 'blocked',
+      systemHint: 'Operate like a code-focused Copilot-style assistant, but be explicit that this is a substitute API path rather than a direct Copilot session.',
+    },
+    {
+      id: 'groq',
+      label: 'Groq · Llama 3.3 70B',
+      provider: 'groq',
+      backendModel: 'llama-3.3-70b-versatile',
+      available: !!providerMap.groq?.available,
+      truth: 'Groq API path.',
+      status: providerMap.groq?.available ? 'live' : 'blocked',
+      systemHint: 'Use concise, fast, reasoning-oriented responses optimized for a Groq-hosted model.',
     },
   ];
 }
@@ -233,6 +334,8 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [mode, setMode]   = useState('agent');
   const [providerOpen, setProviderOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState('auto');
+  const [modelOpen, setModelOpen] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState('chatgpt');
   const [selectedModel, setSelectedModel] = useState('');
   const [messages, setMessages] = useState([{
     role: 'assistant',
@@ -248,6 +351,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [activeRuns, setActiveRuns] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
   const [governance, setGovernanceState] = useState(getGovernance());
+  const [connectionPrefs, setConnectionPrefsState] = useState(getConnectionPrefs());
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
   const fileInputRef = useRef(null);
@@ -278,7 +382,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   // Close dropdowns when clicking outside
   useEffect(() => {
-    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); setProviderOpen(false); };
+    const handler = () => { setAgentOpen(false); setModeOpen(false); setAttachOpen(false); setProviderOpen(false); setModelOpen(false); };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, []);
@@ -288,19 +392,42 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const unsub = subscribeGovernance(setGovernanceState);
     return unsub;
   }, []);
+  useEffect(() => {
+    setConnectionPrefsState(getConnectionPrefs());
+    const unsub = subscribeConnectionPrefs(setConnectionPrefsState);
+    return unsub;
+  }, []);
 
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
   const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
-  const resolvedProviderState = providerState || buildFallbackState();
+  const resolvedProviderState = mergeProviderState(providerState, connectionPrefs);
   const providerOptions = buildProviderOptions(resolvedProviderState);
   const providerMap = Object.fromEntries(providerOptions.map(opt => [opt.id, opt]));
   const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
+  const modelProfiles = buildModelProfiles(providerMap);
+  const selectedModelProfile = modelProfiles.find((profile) => profile.id === selectedProfileId) || modelProfiles[0];
 
   useEffect(() => {
     if (selectedProviderOption?.model) {
       setSelectedModel(selectedProviderOption.model);
     }
   }, [selectedProviderOption?.model, selectedProvider]);
+  useEffect(() => {
+    if (!selectedModelProfile?.available) {
+      const fallbackProfile = modelProfiles.find((profile) => profile.available) || modelProfiles[0];
+      if (fallbackProfile && fallbackProfile.id !== selectedProfileId) {
+        setSelectedProfileId(fallbackProfile.id);
+      }
+    }
+  }, [modelProfiles, selectedModelProfile, selectedProfileId]);
+  useEffect(() => {
+    if (selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto') {
+      setSelectedProvider(selectedModelProfile.provider);
+      setSelectedModel(selectedModelProfile.backendModel || providerMap[selectedModelProfile.provider]?.model || '');
+    } else if (selectedModelProfile?.backendModel) {
+      setSelectedModel(selectedModelProfile.backendModel);
+    }
+  }, [selectedModelProfile, providerMap]);
 
   const commitToWorkspace = useCallback((wsObj, agentId, prompt) => {
     const { type, title, content, steps = [], meta = {} } = wsObj;
@@ -453,6 +580,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     return null;
   };
 
+  const credentialOverrides = {
+    openaiApiKey: connectionPrefs.openaiApiKey,
+    groqApiKey: connectionPrefs.groqApiKey,
+    geminiApiKey: connectionPrefs.geminiApiKey,
+    ollamaBaseUrl: connectionPrefs.ollamaBaseUrl,
+  };
+
   const send = async (e) => {
     e?.preventDefault();
     if (!input.trim() || loading) return;
@@ -461,9 +595,14 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const attachmentSummary = attachments
       .map(att => `${att.name} (${att.type || 'file'}, ${Math.round(att.size / 1024)}kb)`)
       .join('\n');
+    const profileSummary = selectedModelProfile
+      ? `Model profile: ${selectedModelProfile.label}\nTruth: ${selectedModelProfile.truth}`
+      : '';
     const prompt  = attachmentSummary
-      ? `${userMsg.content}\n\nAttachments:\n${attachmentSummary}`
-      : userMsg.content;
+      ? `${userMsg.content}\n\n${profileSummary}\n\nAttachments:\n${attachmentSummary}`
+      : profileSummary
+        ? `${userMsg.content}\n\n${profileSummary}`
+        : userMsg.content;
     const history = [...messages, userMsg];
     setMessages(history);
     setInput('');
@@ -578,10 +717,27 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       return;
     }
 
+    if (selectedModelProfile && !selectedModelProfile.available) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Model profile blocked: ${selectedModelProfile.truth}`,
+        agent,
+        mode: 'synthetic',
+        profileLabel: selectedModelProfile.label,
+      }]);
+      setLoading(false);
+      return;
+    }
+
+    const effectiveProvider = selectedModelProfile?.provider && selectedModelProfile.provider !== 'auto'
+      ? selectedModelProfile.provider
+      : selectedProvider;
+    const effectiveModel = selectedModelProfile?.backendModel || selectedModel || selectedProviderOption?.model;
+
     if (mode === 'autonomous' && agent !== 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
+        { task: prompt, agent: 'bytebot', context: { mode, originAgent: agent, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
@@ -590,6 +746,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           content: `Autonomous run started. ByteBot is orchestrating parallel steps and workspace updates.`,
           agent: 'bytebot',
           runId,
+          profileLabel: selectedModelProfile?.label,
         }]);
       });
       return;
@@ -598,13 +755,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     if (agent === 'bytebot') {
       setLoading(false);
       startRun(
-        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })) } },
+        { task: prompt, agent: 'bytebot', context: { mode, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })), credentials: credentialOverrides, modelProfile: selectedModelProfile } },
         { createObject, setStatus, appendLog, patchObject },
         onNavigate,
       ).then(runId => {
         setMessages(prev => [...prev, {
           role: 'assistant', content: 'ByteBot run started. Watching workspace for progress…',
-          agent: 'bytebot', runId,
+          agent: 'bytebot', runId, profileLabel: selectedModelProfile?.label,
         }]);
       });
       return;
@@ -635,7 +792,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         const res = await fetch(`${API_URL}/api/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
+          body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId(), credentials: credentialOverrides }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -660,7 +817,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           const res = await fetch(`${API_URL}/api/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId() }),
+            body: JSON.stringify({ query: prompt, context: contextLabel, runId: genId(), credentials: credentialOverrides }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
@@ -671,7 +828,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           const res = await fetch(`${API_URL}/api/scrape`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, prompt, runId: genId() }),
+            body: JSON.stringify({ url, prompt, runId: genId(), credentials: credentialOverrides }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
@@ -696,7 +853,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     onNavigate?.('workspace');
 
     const apiMessages = [
-      { role: 'system', content: SYSTEM_PROMPTS[agent] || SYSTEM_PROMPTS.gpt },
+      { role: 'system', content: `${SYSTEM_PROMPTS[agent] || SYSTEM_PROMPTS.gpt}\n\n${selectedModelProfile?.systemHint || ''}`.trim() },
       ...history.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m === userMsg ? prompt : m.content })),
     ];
 
@@ -709,9 +866,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           agent,
           runId,
           mode,
-          provider: selectedProvider,
-          model: selectedModel || selectedProviderOption?.model,
+          provider: effectiveProvider,
+          model: effectiveModel,
           attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
+          credentials: credentialOverrides,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -723,7 +881,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       const evtType = data.event_type || 'run_completed';
 
       setMessages(prev => [...prev, {
-        role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic',
+        role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic', profileLabel: selectedModelProfile?.label,
       }]);
       setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
 
@@ -741,7 +899,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
       };
       const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
-      setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true, profileLabel: selectedModelProfile?.label }]);
       commitToWorkspace({ type: detectObjectType(syntheticContent, agent), title: `[Synthetic] ${selectedAgent.label}`, content: syntheticContent }, agent, prompt);
     } finally {
       setLoading(false);
@@ -775,7 +933,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     <div
       data-testid="chat-rail"
       style={{
-        width: 340, minWidth: 340, height: '100%',
+        width: 'var(--rail-w)', minWidth: 'var(--rail-w)', height: '100%',
         background: '#0f0f0f',
         borderLeft: '1px solid rgba(255,255,255,0.07)',
         display: 'flex', flexDirection: 'column',
@@ -785,8 +943,8 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       {/* Rail header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: 'rgba(255,255,255,0.3)' }}>AGENT RAIL</span>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: 'rgba(255,255,255,0.4)' }}>AGENT RAIL</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
             {messages.filter(m => m.role !== 'system').length} messages
           </span>
         </div>
@@ -803,7 +961,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '7px 10px', background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
-              color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+               color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -860,7 +1018,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '6px 10px', background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7,
-              color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+               color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -1020,15 +1178,78 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
         <div style={{ position: 'relative', marginBottom: 8 }} onClick={e => e.stopPropagation()}>
           <button
+            data-testid="model-selector"
+            onClick={() => { setModelOpen(o => !o); setAgentOpen(false); setModeOpen(false); setProviderOpen(false); }}
+            className="xps-electric-hover"
+            data-active={modelOpen ? 'true' : undefined}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 11px', background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+              color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              marginBottom: 8,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Sparkles size={12} className="xps-icon" />
+              <span>{selectedModelProfile?.label || 'Model profile'}</span>
+            </span>
+            <span style={{ fontSize: 10, color: PROVIDER_STATUS_META[selectedModelProfile?.status || 'synthetic']?.color }}>
+              {selectedModelProfile?.status === 'blocked' ? 'Blocked' : 'Ready'}
+            </span>
+          </button>
+
+          {modelOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% - 2px)', left: 0, right: 0,
+              background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10, zIndex: 51, overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+            }}>
+              {modelProfiles.map(profile => {
+                const statusMeta = PROVIDER_STATUS_META[profile.status] || PROVIDER_STATUS_META.synthetic;
+                const disabled = !profile.available;
+                return (
+                  <button
+                    key={profile.id}
+                    data-testid={`model-option-${profile.id}`}
+                    onClick={() => { setSelectedProfileId(profile.id); setModelOpen(false); }}
+                    disabled={disabled}
+                    className="xps-electric-hover"
+                    data-active={selectedProfileId === profile.id ? 'true' : undefined}
+                    style={{
+                      position: 'relative',
+                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
+                      width: '100%', padding: '10px 12px',
+                      background: selectedProfileId === profile.id ? 'rgba(212,168,67,0.12)' : 'transparent',
+                      border: 'none', color: disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
+                      fontSize: 11, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
+                      borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 700 }}>{profile.label}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 10, color: statusMeta.color }}>{statusMeta.label}</span>
+                    </div>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{profile.truth}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ position: 'relative', marginBottom: 8 }} onClick={e => e.stopPropagation()}>
+          <button
             data-testid="provider-selector"
-            onClick={() => { setProviderOpen(o => !o); setAgentOpen(false); setModeOpen(false); }}
+            onClick={() => { setProviderOpen(o => !o); setAgentOpen(false); setModeOpen(false); setModelOpen(false); }}
             className="xps-electric-hover"
             data-active={providerOpen ? 'true' : undefined}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '6px 10px', background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
-              color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+               padding: '8px 11px', background: 'rgba(255,255,255,0.04)',
+               border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+               color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: 700, cursor: 'pointer',
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1089,11 +1310,11 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${selectedAgent.label}…`}
-            rows={3}
-            style={{
-              resize: 'none', width: '100%', padding: '9px 12px',
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 8, color: '#fff', fontSize: 13, lineHeight: 1.5,
+             rows={4}
+             style={{
+               resize: 'none', width: '100%', padding: '12px 14px',
+               background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+               borderRadius: 10, color: '#fff', fontSize: 14, lineHeight: 1.6,
               outline: 'none', fontFamily: 'inherit',
             }}
             onFocus={e => { e.target.style.borderColor = 'rgba(212,168,67,0.4)'; }}
@@ -1274,6 +1495,7 @@ function MessageBubble({ msg }) {
           <agentInfo.icon size={10} />
           {agentInfo.label}
           {modeLabel && <span style={{ color: modeColor, fontWeight: 600 }}>· {modeLabel}</span>}
+          {msg.profileLabel && <span style={{ color: 'rgba(255,255,255,0.45)' }}>· {msg.profileLabel}</span>}
         </span>
       )}
       <div style={{

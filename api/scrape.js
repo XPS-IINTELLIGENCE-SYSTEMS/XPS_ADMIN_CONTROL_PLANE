@@ -15,12 +15,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { url, prompt, runId } = req.body || {}
+  const { url, prompt, runId, credentials = {} } = req.body || {}
   if (!url) {
     return res.status(400).json({ error: 'url is required' })
   }
 
-  const mode = llmMode();
+  const mode = llmMode(credentials);
   const ts   = new Date().toISOString();
 
   try {
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       .trim()
       .slice(0, MAX_CONTENT_LENGTH)
 
-    if (!hasLLM()) {
+    if (!hasLLM(credentials)) {
       return res.status(200).json({
         event_type: 'scrape_result',
         run_id:     runId || null,
@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       { role: 'user',   content: `URL: ${url}\n\nPage content:\n${text}` },
     ]
 
-    const summary = await callLLM(messages);
+    const summary = await callLLM(messages, { credentials });
 
     return res.status(200).json({
       event_type: 'scrape_result',

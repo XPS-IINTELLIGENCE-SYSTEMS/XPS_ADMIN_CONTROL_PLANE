@@ -81,7 +81,7 @@ const sections = [
 export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }) {
   return (
     <aside style={{
-      width: collapsed ? 56 : 220,
+      width: collapsed ? 64 : 'var(--sidebar-w)',
       minHeight: '100vh',
       background: 'var(--bg-sidebar)',
       borderRight: '1px solid var(--border)',
@@ -104,16 +104,14 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
         flexShrink: 0,
       }}>
         <div
-          className="xps-logo"
+          className="xps-logo xps-brand-logo-glow"
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
+            width: 42,
+            height: 42,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            overflow: 'hidden',
             position: 'relative',
           }}
         >
@@ -126,8 +124,8 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
         </div>
         {!collapsed && (
           <div>
-            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: 0.5, color: 'var(--text-primary)', lineHeight: 1.2 }}>XPS INTELLIGENCE</div>
-            <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1.2, lineHeight: 1 }}>COMMAND CENTER</div>
+            <div className="xps-silver-text" style={{ fontWeight: 800, fontSize: 15, letterSpacing: 0.6, lineHeight: 1.1 }}>XPS INTELLIGENCE</div>
+            <div className="xps-gold-text" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.6, lineHeight: 1, marginTop: 3 }}>COMMAND CENTER</div>
           </div>
         )}
       </div>
@@ -138,7 +136,7 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
           <div key={section.label} style={{ marginBottom: 4 }}>
             {!collapsed && (
               <div style={{
-                fontSize: 10, fontWeight: 600, letterSpacing: 1.2,
+                 fontSize: 11, fontWeight: 700, letterSpacing: 1.3,
                 color: 'var(--text-muted)', padding: '12px 16px 4px',
                 userSelect: 'none',
               }}>
@@ -160,13 +158,13 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
-                    padding: collapsed ? '9px 14px' : '8px 16px',
+                     padding: collapsed ? '11px 16px' : '10px 18px',
                     margin: '1px 6px',
                     borderRadius: 'var(--radius-sm)',
                     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                     background: isActive ? 'var(--bg-active)' : 'transparent',
                     fontWeight: isActive ? 600 : 400,
-                    fontSize: 13,
+                     fontSize: 14,
                     border: 'none',
                     cursor: 'pointer',
                     width: 'calc(100% - 12px)',
