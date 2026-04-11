@@ -12,18 +12,25 @@ async function screenshot(page, name) {
 test.describe('XPS Intelligence site restore', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForSelector('text=Restore the');
+    await page.waitForSelector('text=Welcome back');
   });
 
-  test('landing page restores the branded front door', async ({ page }) => {
-    await expect(page.getByText('Restore the')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Dashboard' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Launch Assistant' })).toBeVisible();
+  test('login page restores the branded front door', async ({ page }) => {
+    await expect(page.getByText('Welcome back')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+    await expect(page.getByText('This screen is visual only and does not require authentication.')).toBeVisible();
     await screenshot(page, 'landing-front-door');
   });
 
+  test('login opens the new home page before the app shell', async ({ page }) => {
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page.getByText('Choose where to go next')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Platform' })).toBeVisible();
+  });
+
   test('entering the app opens the simplified dashboard shell', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     await expect(page.locator('aside')).toBeVisible();
     await expect(page.getByRole('banner').getByText('Dashboard')).toBeVisible();
     await expect(page.locator('[data-testid="brand-logo-header"]')).toBeVisible();
@@ -31,7 +38,8 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('sidebar only shows intended product pages', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     const sidebar = page.locator('aside');
     await expect(sidebar).toContainText('Dashboard');
     await expect(sidebar).toContainText('CRM');
@@ -43,7 +51,8 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('core workflow pages remain usable', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
 
     await page.getByRole('button', { name: 'CRM' }).click();
     await expect(page.getByText('CRM Dashboard')).toBeVisible();
@@ -65,6 +74,7 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('ai assistant is a first-class page', async ({ page }) => {
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await page.getByRole('button', { name: 'Launch Assistant' }).click();
     await expect(page.getByText('XPS AI Sales Assistant')).toBeVisible();
     await expect(page.getByPlaceholder('Ask your AI assistant anything…')).toBeVisible();
@@ -72,7 +82,8 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('connectors page is centralized and cleaner', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     await page.getByRole('button', { name: 'Connectors' }).click();
     await expect(page.getByText('Routing defaults')).toBeVisible();
     await expect(page.getByText('AI providers')).toBeVisible();
@@ -81,7 +92,8 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('admin page is smaller and still useful', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     await page.locator('aside').getByRole('button', { name: 'Admin' }).click();
     await expect(page.getByText('Focused runtime, access, and governance controls')).toBeVisible();
     await expect(page.locator('[data-testid="active-provider-banner"]')).toBeVisible();
@@ -93,7 +105,8 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('settings centralize defaults and reset actions', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     await page.getByRole('button', { name: 'Settings' }).click();
     await expect(page.getByText('Workspace defaults', { exact: true })).toBeVisible();
     await expect(page.getByText('Credential readiness', { exact: true })).toBeVisible();
@@ -102,9 +115,10 @@ test.describe('XPS Intelligence site restore', () => {
   });
 
   test('home button returns to the landing page', async ({ page }) => {
-    await page.getByRole('button', { name: 'Open Dashboard' }).click();
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Open Platform' }).click();
     await page.getByRole('button', { name: 'Home' }).click();
-    await expect(page.getByText('Restore the')).toBeVisible();
+    await expect(page.getByText('Choose where to go next')).toBeVisible();
   });
 
   test('branding stays black and gold with no white screen', async ({ page }) => {

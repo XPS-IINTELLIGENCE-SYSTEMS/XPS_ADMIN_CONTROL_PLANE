@@ -3,6 +3,7 @@ import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 import CenterWorkspace from '../CenterWorkspace.jsx';
 import HomePage from '../HomePage.jsx';
+import LoginPage from '../LoginPage.jsx';
 import { WorkspaceProvider } from '../../lib/workspaceEngine.jsx';
 import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
@@ -21,7 +22,7 @@ const APP_PANELS = new Set([
 ]);
 
 export default function Shell() {
-  const [page, setPage] = useState('home');
+  const [page, setPage] = useState('login');
   const [activePanel, setActivePanel] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -30,9 +31,21 @@ export default function Shell() {
     setActivePanel(APP_PANELS.has(panel) ? panel : 'dashboard');
   }, []);
 
+  const openHome = useCallback(() => {
+    setPage('home');
+  }, []);
+
+  const openLogin = useCallback(() => {
+    setPage('login');
+  }, []);
+
   useEffect(() => {
     const handleNav = (event) => {
       const detail = event?.detail || {};
+      if (detail.page === 'login') {
+        setPage('login');
+        return;
+      }
       if (detail.page === 'home') {
         setPage('home');
         return;
@@ -54,8 +67,10 @@ export default function Shell() {
 
   return (
     <WorkspaceProvider>
-      {page === 'home' ? (
-        <HomePage onEnterApp={enterApp} />
+      {page === 'login' ? (
+        <LoginPage onContinue={openHome} />
+      ) : page === 'home' ? (
+        <HomePage onOpenPanel={enterApp} onBackToLogin={openLogin} />
       ) : (
         <div
           style={{
@@ -83,7 +98,7 @@ export default function Shell() {
           >
             <Header
               activePanel={activePanel}
-              onGoHome={() => setPage('home')}
+              onGoHome={openHome}
               onOpenAdmin={() => setActivePanel('admin')}
               onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
               sidebarVisible
