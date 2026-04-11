@@ -70,7 +70,7 @@ export default function Shell() {
       {page === 'login' ? (
         <LoginPage onContinue={openHome} />
       ) : page === 'home' ? (
-        <HomePage onOpenPanel={enterApp} onBackToLogin={openLogin} />
+        <HomePage onEnterApp={enterApp} onBackToLogin={openLogin} />
       ) : (
         <div
           style={{

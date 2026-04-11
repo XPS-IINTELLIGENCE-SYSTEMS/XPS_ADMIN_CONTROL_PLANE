@@ -25,7 +25,7 @@ const highlights = [
   { value: '24/7', label: 'AI SUPPORT' },
 ];
 
-export default function HomePage({ onOpenPanel, onBackToLogin }) {
+export default function HomePage({ onEnterApp, onBackToLogin }) {
   return (
     <div
       style={{
@@ -61,7 +61,7 @@ export default function HomePage({ onOpenPanel, onBackToLogin }) {
               Back to Login
             </button>
             <button
-              onClick={() => onOpenPanel('dashboard')}
+              onClick={() => onEnterApp('dashboard')}
               style={{
                 border: 'none',
                 background: GOLD,
@@ -134,7 +134,7 @@ export default function HomePage({ onOpenPanel, onBackToLogin }) {
               </div>
 
               <button
-                onClick={() => onOpenPanel('ai-assistant')}
+                onClick={() => onEnterApp('ai-assistant')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -156,7 +156,7 @@ export default function HomePage({ onOpenPanel, onBackToLogin }) {
               {featureCards.map(({ panel, title, note, icon: Icon }) => (
                 <button
                   key={panel}
-                  onClick={() => onOpenPanel(panel)}
+                  onClick={() => onEnterApp(panel)}
                   className="xps-electric-hover"
                   style={{
                     position: 'relative',

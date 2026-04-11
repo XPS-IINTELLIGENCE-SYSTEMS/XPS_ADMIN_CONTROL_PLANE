@@ -19,7 +19,7 @@ export default function LoginPage({ onContinue }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onContinue({ email, password });
+    onContinue();
   };
 
   const handleAuxAction = (event) => {
@@ -98,6 +98,8 @@ export default function LoginPage({ onContinue }) {
             <label style={{ display: 'block', marginBottom: 22 }}>
               <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', marginBottom: 10 }}>Email</div>
               <input
+                id="login-email"
+                type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@xpsxpress.com"
@@ -109,6 +111,7 @@ export default function LoginPage({ onContinue }) {
               <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', marginBottom: 10 }}>Password</div>
               <div style={{ position: 'relative' }}>
                 <input
+                  id="login-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? 'text' : 'password'}
