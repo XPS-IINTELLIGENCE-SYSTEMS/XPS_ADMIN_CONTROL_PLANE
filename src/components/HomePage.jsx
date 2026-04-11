@@ -1,231 +1,241 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { ArrowRight, Bot, Plug, ShieldCheck, Sparkles } from 'lucide-react';
 
-const gold = '#d4a843';
-const darkBg = '#0d0d0d';
+const BRAND_LOGO = '/brand/xps-shield-wings.png';
+const GOLD = '#d4a843';
 
-const navStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '16px 48px',
-  borderBottom: '1px solid rgba(255,255,255,0.08)',
-  position: 'sticky',
-  top: 0,
-  zIndex: 100,
-  background: 'rgba(13,13,13,0.92)',
-  backdropFilter: 'blur(8px)',
-};
-
-const navLinkStyle = {
-  color: 'rgba(255,255,255,0.85)',
-  textDecoration: 'none',
-  fontSize: 15,
-  fontWeight: 500,
-  cursor: 'pointer',
-  padding: '4px 0',
-  background: 'none',
-  border: 'none',
-};
-
-const statsData = [
-  { value: '60+', label: 'LOCATIONS' },
-  { value: '200+', label: 'SALES STAFF' },
-  { value: '50K+', label: 'LEADS MANAGED' },
-  { value: '$120M+', label: 'REVENUE TRACKED' },
+const previewCards = [
+  { id: 'dashboard', title: 'Dashboard', image: '/screenshots/dashboard.png' },
+  { id: 'crm', title: 'CRM', image: '/screenshots/crm.png' },
+  { id: 'ai-assistant', title: 'AI Assistant', image: '/screenshots/ai-assistant.png' },
+  { id: 'research', title: 'Research Lab', image: '/screenshots/research.png' },
+  { id: 'analytics', title: 'Analytics', image: '/screenshots/analytics.png' },
+  { id: 'connectors', title: 'Connectors', image: '/screenshots/connectors.png' },
 ];
 
-export default function HomePage({ onEnterAdmin }) {
+const valueCards = [
+  {
+    title: 'Clear front door',
+    text: 'A branded landing experience that opens directly into the sales intelligence workflow.',
+    icon: Sparkles,
+  },
+  {
+    title: 'Focused workflow',
+    text: 'Dashboard, CRM, leads, assistant, research, outreach, proposals, analytics, connectors, admin, settings.',
+    icon: Bot,
+  },
+  {
+    title: 'Clean operations',
+    text: 'Live provider truth, centralized connectors, and smaller admin controls without control-plane sprawl.',
+    icon: ShieldCheck,
+  },
+];
+
+export default function HomePage({ onEnterApp }) {
   return (
-    <div style={{ background: darkBg, minHeight: '100vh', color: '#fff', fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
-      {/* ── Navigation ── */}
-      <nav style={navStyle}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} aria-label="XPS Intelligence - Xtreme Polishing Systems">
-          <div style={{
-            width: 36, height: 36, background: gold, borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <svg width="20" height="22" viewBox="0 0 20 22" fill="none">
-              <path d="M10 1L2 5V10C2 14.97 5.4 19.45 10 21C14.6 19.45 18 14.97 18 10V5L10 1Z" fill="#0d0d0d" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: 0.5 }}>XPS INTELLIGENCE</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', letterSpacing: 1.5 }}>XTREME POLISHING SYSTEMS</div>
-          </div>
-        </div>
+    <div style={{ minHeight: '100vh', background: '#06070a', color: '#fff' }}>
+      <div
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          minHeight: '100vh',
+          background: 'radial-gradient(circle at top, rgba(212,168,67,0.14), transparent 36%), linear-gradient(180deg, #090a0e 0%, #06070a 100%)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
+            backgroundSize: '80px 80px',
+            maskImage: 'linear-gradient(180deg, rgba(0,0,0,0.8), transparent 90%)',
+            pointerEvents: 'none',
+          }}
+        />
 
-        {/* Nav Links – placeholder anchors for future section routing */}
-        <div style={{ display: 'flex', gap: 36 }}>
-          {['Platform', 'Solutions', 'Coverage', 'About'].map(link => (
-            <a
-              key={link}
-              href={`#${link.toLowerCase()}`}
-              style={{ ...navLinkStyle, textDecoration: 'none' }}
-            >
-              {link}
-            </a>
-          ))}
-        </div>
-
-        {/* CTA Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <button
-            onClick={onEnterAdmin}
-            style={{ ...navLinkStyle, fontSize: 14 }}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={onEnterAdmin}
+        <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px 48px' }}>
+          <nav
             style={{
-              background: gold, color: '#0d0d0d', border: 'none', borderRadius: 6,
-              padding: '9px 22px', fontWeight: 700, fontSize: 14, cursor: 'pointer',
-              letterSpacing: 0.3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 20,
+              padding: '8px 0 28px',
             }}
           >
-            Request Demo
-          </button>
-        </div>
-      </nav>
-
-      {/* ── Hero Section ── */}
-      <div style={{
-        position: 'relative',
-        minHeight: '80vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        padding: '80px 24px 60px',
-        overflow: 'hidden',
-      }}>
-        {/* Decorative particle dots */}
-        <Particles />
-
-        {/* Badge pill */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 7,
-          background: 'rgba(212,168,67,0.12)', border: '1px solid rgba(212,168,67,0.3)',
-          borderRadius: 50, padding: '6px 18px', marginBottom: 32,
-          fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 500,
-        }}>
-          <Sparkles size={16} className="xps-icon" />
-          AI-Powered Sales Intelligence Platform
-        </div>
-
-        {/* Hero heading */}
-        <h1 style={{
-          fontSize: 'clamp(42px, 6vw, 72px)',
-          fontWeight: 800,
-          lineHeight: 1.1,
-          margin: '0 0 24px',
-          maxWidth: 820,
-          letterSpacing: -1,
-        }}>
-          The Command Center for<br />
-          <span style={{ color: gold }}>Xtreme Sales</span>
-        </h1>
-
-        {/* Sub-headline */}
-        <p style={{
-          fontSize: 18,
-          color: 'rgba(255,255,255,0.65)',
-          maxWidth: 620,
-          lineHeight: 1.7,
-          margin: '0 0 44px',
-        }}>
-          Empowering 60+ locations and 200+ sales professionals with AI-driven
-          CRM, lead intelligence, proposal automation, and competitive insights —
-          built for the polishing industry.
-        </p>
-
-        {/* CTA Buttons */}
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button
-            onClick={onEnterAdmin}
-            style={{
-              background: gold, color: '#0d0d0d', border: 'none', borderRadius: 8,
-              padding: '14px 32px', fontWeight: 700, fontSize: 16, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}
-          >
-            Get Started <span style={{ fontSize: 18 }}>→</span>
-          </button>
-          <button
-            onClick={onEnterAdmin}
-            style={{
-              background: 'transparent', color: '#fff',
-              border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8,
-              padding: '14px 32px', fontWeight: 600, fontSize: 16, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}
-          >
-            <span style={{ fontSize: 14 }}>▷</span> Watch Demo
-          </button>
-        </div>
-
-        {/* Stats Row */}
-        <div style={{
-          display: 'flex',
-          gap: 0,
-          marginTop: 72,
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-          paddingTop: 40,
-          width: '100%',
-          maxWidth: 820,
-          justifyContent: 'space-around',
-          flexWrap: 'wrap',
-        }}>
-          {statsData.map(({ value, label }) => (
-            <div key={label} style={{ textAlign: 'center', padding: '8px 20px' }}>
-              <div style={{ fontSize: 36, fontWeight: 800, color: gold, lineHeight: 1 }}>{value}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 6, letterSpacing: 1.5 }}>{label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div className="xps-logo xps-brand-logo-glow" style={{ width: 46, height: 46, borderRadius: 12 }}>
+                <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
+              <div>
+                <div className="xps-silver-text" style={{ fontSize: 16, fontWeight: 800, letterSpacing: 1.1 }}>XPS INTELLIGENCE</div>
+                <div className="xps-gold-text" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2.1, marginTop: 4 }}>PREMIUM SALES INTELLIGENCE</div>
+              </div>
             </div>
-          ))}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => onEnterApp('dashboard')}
+                style={{
+                  background: 'transparent',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  borderRadius: 10,
+                  padding: '10px 18px',
+                  fontWeight: 600,
+                }}
+              >
+                Open Dashboard
+              </button>
+              <button
+                onClick={() => onEnterApp('ai-assistant')}
+                style={{
+                  background: GOLD,
+                  color: '#090a0d',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '10px 18px',
+                  fontWeight: 800,
+                }}
+              >
+                Launch Assistant
+              </button>
+            </div>
+          </nav>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(360px, 0.95fr)', gap: 28, alignItems: 'center' }}>
+            <div>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(212,168,67,0.25)',
+                  background: 'rgba(212,168,67,0.08)',
+                  color: 'rgba(255,255,255,0.86)',
+                  fontSize: 13,
+                  marginBottom: 22,
+                }}
+              >
+                <Sparkles size={15} className="xps-icon" />
+                Black and gold sales intelligence workspace
+              </div>
+
+              <h1 style={{ fontSize: 'clamp(44px, 6vw, 78px)', lineHeight: 1, letterSpacing: -1.8, marginBottom: 18 }}>
+                Restore the
+                <span className="xps-gold-text" style={{ display: 'block' }}>intended XPS experience.</span>
+              </h1>
+
+              <p style={{ color: 'rgba(255,255,255,0.68)', fontSize: 18, lineHeight: 1.75, maxWidth: 680, marginBottom: 28 }}>
+                A clearer front door, a cleaner left navigation, and a focused sales intelligence workflow built around dashboard, CRM, leads, assistant, research, outreach, proposals, analytics, connectors, admin, and settings.
+              </p>
+
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 32 }}>
+                <button
+                  onClick={() => onEnterApp('dashboard')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: GOLD,
+                    color: '#090a0d',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '14px 22px',
+                    fontWeight: 800,
+                    fontSize: 15,
+                  }}
+                >
+                  Enter Platform
+                  <ArrowRight size={16} />
+                </button>
+                <button
+                  onClick={() => onEnterApp('connectors')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'rgba(255,255,255,0.03)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 12,
+                    padding: '14px 22px',
+                    fontWeight: 700,
+                    fontSize: 15,
+                  }}
+                >
+                  <Plug size={16} />
+                  View Connectors
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+                {valueCards.map(({ title, text, icon: Icon }) => (
+                  <div
+                    key={title}
+                    style={{
+                      background: 'rgba(255,255,255,0.035)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 16,
+                      padding: 18,
+                    }}
+                  >
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(212,168,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                      <Icon size={18} color={GOLD} />
+                    </div>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
+                    <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, lineHeight: 1.65 }}>{text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(10,11,15,0.92)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 24,
+                padding: 20,
+                boxShadow: '0 24px 90px rgba(0,0,0,0.45)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Intended page system</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>Built from the original repo screenshots</div>
+                </div>
+                <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.3 }}>XPS</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {previewCards.map((card) => (
+                  <button
+                    key={card.id}
+                    onClick={() => onEnterApp(card.id)}
+                    style={{
+                      padding: 0,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      background: '#0b0d12',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ aspectRatio: '16 / 10', overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <img src={card.image} alt={card.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </div>
+                    <div style={{ padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{card.title}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.52)', fontSize: 11, marginTop: 4 }}>Open page</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-/* Simple SVG-based decorative particles to mimic the screenshot background */
-function Particles() {
-  const dots = [
-    { cx: '12%', cy: '20%', r: 1.5, opacity: 0.5 },
-    { cx: '25%', cy: '60%', r: 1, opacity: 0.3 },
-    { cx: '40%', cy: '15%', r: 2, opacity: 0.4 },
-    { cx: '55%', cy: '75%', r: 1.2, opacity: 0.35 },
-    { cx: '70%', cy: '30%', r: 1.8, opacity: 0.45 },
-    { cx: '80%', cy: '65%', r: 1, opacity: 0.3 },
-    { cx: '90%', cy: '20%', r: 1.5, opacity: 0.4 },
-    { cx: '8%', cy: '80%', r: 1.2, opacity: 0.25 },
-    { cx: '60%', cy: '50%', r: 1, opacity: 0.2 },
-    { cx: '33%', cy: '85%', r: 1.5, opacity: 0.3 },
-    { cx: '75%', cy: '90%', r: 1, opacity: 0.25 },
-    { cx: '18%', cy: '40%', r: 1.2, opacity: 0.35 },
-    { cx: '88%', cy: '45%', r: 1.8, opacity: 0.3 },
-    { cx: '50%', cy: '10%', r: 1, opacity: 0.4 },
-    { cx: '95%', cy: '70%', r: 1.5, opacity: 0.25 },
-  ];
-
-  return (
-    <svg
-      aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-    >
-      {dots.map((d, i) => (
-        <circle key={i} cx={d.cx} cy={d.cy} r={d.r} fill={gold} opacity={d.opacity} />
-      ))}
-      {/* Subtle radial glow behind hero text */}
-      <radialGradient id="heroGlow" cx="50%" cy="50%" r="40%">
-        <stop offset="0%" stopColor={gold} stopOpacity="0.06" />
-        <stop offset="100%" stopColor={gold} stopOpacity="0" />
-      </radialGradient>
-      <rect x="0" y="0" width="100%" height="100%" fill="url(#heroGlow)" />
-    </svg>
   );
 }
