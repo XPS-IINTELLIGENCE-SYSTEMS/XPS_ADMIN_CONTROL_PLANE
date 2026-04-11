@@ -12,6 +12,10 @@ import { persistParallelGroup } from './supabasePersistence.js';
 const _groups = new Map();  // groupId → GroupState
 const _subs   = new Set();
 
+function createHistory(status, detail) {
+  return { ts: new Date().toISOString(), status, detail };
+}
+
 export function subscribeGroups(cb) {
   _subs.add(cb);
   return () => _subs.delete(cb);
@@ -23,6 +27,10 @@ function notify() {
 
 export function getGroupList() {
   return [..._groups.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function getGroup(groupId) {
+  return _groups.get(groupId) || null;
 }
 
 /**
@@ -45,6 +53,7 @@ export function createRunGroup(title, initialJobs = [], workspaceCtx) {
     wsObjId:   null,
     createdAt: now,
     updatedAt: now,
+    history:   [createHistory('running', `${title} created with ${initialJobs.length} job(s).`)],
   };
   _groups.set(groupId, group);
 
@@ -75,6 +84,8 @@ export function addJobToGroup(groupId, job, workspaceCtx) {
   if (!group) return;
   group.jobs.push({ ...job, status: job.status || 'queued' });
   group.updatedAt = Date.now();
+  group.history.unshift(createHistory('updated', `Added ${job.title || job.jobId || 'job'} to group.`));
+  if (group.history.length > 20) group.history.length = 20;
   _refreshGroupObject(groupId, workspaceCtx);
   notify();
 }
@@ -94,20 +105,27 @@ export function updateGroupJobStatus(groupId, jobId, status, workspaceCtx) {
   const done     = ['complete', 'error', 'cancelled', 'blocked'];
   const allDone  = group.jobs.every(j => done.includes(j.status));
   const anyError = group.jobs.some(j => j.status === 'error');
+  const anyBlocked = group.jobs.some(j => j.status === 'blocked');
+  const anyCancelled = group.jobs.some(j => j.status === 'cancelled');
+  group.history.unshift(createHistory(status, `${jobId} → ${status}`));
+  if (group.history.length > 20) group.history.length = 20;
 
   if (allDone) {
-    group.status = anyError ? 'error' : 'complete';
+    group.status = anyError || anyBlocked || anyCancelled ? 'partial_failure' : 'complete';
 
     if (group.wsObjId) {
       const completed = group.jobs.filter(j => j.status === 'complete').length;
-      const summary   = `${completed}/${group.jobs.length} jobs completed`;
+      const failed = group.jobs.filter(j => ['error', 'blocked', 'cancelled'].includes(j.status)).length;
+      const summary   = failed > 0
+        ? `${completed}/${group.jobs.length} jobs completed, ${failed} ended blocked/error/cancelled`
+        : `${completed}/${group.jobs.length} jobs completed`;
       workspaceCtx?.patchObject(group.wsObjId, {
-        status:   anyError ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+        status:   failed > 0 ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
         progress: 100,
         content:  `Parallel group complete: ${summary}`,
-        meta:     { groupId, jobs: group.jobs, summary },
+        meta:     { groupId, jobs: group.jobs, summary, history: group.history, status: group.status },
       });
-      workspaceCtx?.setStatus(group.wsObjId, anyError ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
+      workspaceCtx?.setStatus(group.wsObjId, failed > 0 ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
     }
     persistParallelGroup({ groupId, title: group.title, jobIds: group.jobs.map(j => j.jobId), status: group.status }).catch(() => {});
   } else {
@@ -125,7 +143,7 @@ function _refreshGroupObject(groupId, workspaceCtx) {
   const prog   = total > 0 ? Math.round((done / total) * 100) : 0;
   workspaceCtx?.patchObject(group.wsObjId, {
     progress: prog,
-    meta:     { groupId, jobs: group.jobs },
+    meta:     { groupId, jobs: group.jobs, history: group.history, status: group.status },
     content:  `Parallel group: ${done}/${total} jobs done`,
   });
 }

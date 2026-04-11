@@ -186,6 +186,15 @@ test.describe('XPS Control Plane', () => {
     await screenshot(page, 'admin-communications-panel');
   });
 
+  test('Admin — runtime operations panel renders inbound and job runtime truth', async ({ page }) => {
+    await page.click('[data-testid="page-tab-admin"]');
+    await page.click('[data-testid="admin-nav-runtime"]');
+    await page.waitForTimeout(400);
+    await expect(page.locator('[data-testid="admin-runtime-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="admin-runtime-panel"]')).toContainText('Runtime Operations Center');
+    await screenshot(page, 'admin-runtime-panel');
+  });
+
   test('Admin — builder panel renders mutation and media truth', async ({ page }) => {
     await page.click('[data-testid="page-tab-admin"]');
     await page.click('[data-testid="admin-nav-builder"]');

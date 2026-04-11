@@ -1,6 +1,7 @@
 // Vercel serverless function: POST/GET /api/control
 // Control plane actions — connector state, agent dispatch, workspace actions
 import { llmMode, hasLLM, connectorState } from './_llm.js';
+import { getRuntimeSnapshot, recordExecution } from './_runtimeStore.js';
 
 const MAX_TWILIO_MESSAGE_LENGTH = 800;
 const MAX_EMAIL_SUBJECT_LENGTH = 160;
@@ -25,6 +26,7 @@ export default async function handler(req, res) {
       service:      'xps-control-plane',
       mode:         llmMode(),
       connectors:   connectorState(),
+      runtime:      getRuntimeSnapshot(process.env, req),
       capabilities: ['connector_status', 'agent_dispatch', 'workspace_action', 'runtime_settings', 'run_cancel'],
       timestamp:    ts,
     });
@@ -55,6 +57,7 @@ export default async function handler(req, res) {
       }
 
       case 'runtime_settings': {
+        const runtime = getRuntimeSnapshot(process.env, req);
         return res.status(200).json({
           event_type:     'connector_state',
           action,
@@ -62,7 +65,25 @@ export default async function handler(req, res) {
           runtime_mode:   llmMode(),
           supabase_ready: !!process.env.SUPABASE_URL,
           llm_ready:      hasLLM(),
+          runtime,
           timestamp:      ts,
+        });
+      }
+
+      case 'runtime_snapshot': {
+        const runtime = getRuntimeSnapshot(process.env, req);
+        return res.status(200).json({
+          event_type: 'runtime_snapshot',
+          action,
+          status: 'ok',
+          runtime,
+          workspace_object: {
+            type: 'runtime_state',
+            title: 'Runtime Orchestration Snapshot',
+            content: formatRuntimeSnapshot(runtime),
+            meta: runtime,
+          },
+          timestamp: ts,
         });
       }
 
@@ -101,6 +122,16 @@ export default async function handler(req, res) {
 
       case 'twilio_call': {
         const result = await executeTwilioCall(payload || {});
+        recordExecution({
+          category: 'communications',
+          title: 'Twilio outbound call',
+          status: result.status,
+          mode: result.mode,
+          direction: 'outbound',
+          provider: 'twilio',
+          detail: result.message || result.reason || 'Twilio action recorded.',
+          meta: { externalId: result.external_id || null, to: payload?.to || null },
+        });
         return res.status(result.status === 'error' ? 502 : 200).json({
           event_type: 'connector_action',
           action,
@@ -112,6 +143,16 @@ export default async function handler(req, res) {
 
       case 'sendgrid_email': {
         const result = await executeSendGridEmail(payload || {});
+        recordExecution({
+          category: 'communications',
+          title: 'SendGrid outbound email',
+          status: result.status,
+          mode: result.mode,
+          direction: 'outbound',
+          provider: 'sendgrid',
+          detail: result.message || result.reason || 'SendGrid action recorded.',
+          meta: { externalId: result.external_id || null, to: payload?.to || null, subject: payload?.subject || null },
+        });
         return res.status(result.status === 'error' ? 502 : 200).json({
           event_type: 'connector_action',
           action,
@@ -137,6 +178,25 @@ function formatConnectorStatus(cs) {
       return `${icon} ${name}: ${status} (${mode})`;
     })
     .join('\n');
+}
+
+function formatRuntimeSnapshot(runtime = {}) {
+  const inboundEvents = runtime?.inbound?.recentEvents || [];
+  const jobs = runtime?.jobs?.recent || [];
+  const groups = runtime?.groups?.recent || [];
+  return [
+    `Runtime: ${runtime?.environment?.runtime || 'unknown'}`,
+    `History store: ${runtime?.environment?.historyStore || 'unknown'}`,
+    '',
+    `Inbound events: ${inboundEvents.length}`,
+    ...inboundEvents.slice(0, 4).map((event) => `- ${event.provider}/${event.eventType}: ${event.status} (${event.mode})`),
+    '',
+    `Jobs: ${jobs.length}`,
+    ...jobs.slice(0, 4).map((job) => `- ${job.kind}: ${job.title} → ${job.status} (${job.mode})`),
+    '',
+    `Parallel groups: ${groups.length}`,
+    ...groups.slice(0, 4).map((group) => `- ${group.title}: ${group.status}`),
+  ].join('\n');
 }
 
 function resolveRuntimeConfig(payload = {}) {

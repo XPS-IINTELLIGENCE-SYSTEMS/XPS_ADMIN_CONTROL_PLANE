@@ -19,6 +19,8 @@ import { persistUiPreview, persistUiVersion, persistUiRollback } from '../../lib
 import { getGovernance, subscribeGovernance } from '../../lib/governance.js';
 import { getConnectionPrefs } from '../../lib/connectionPrefs.js';
 import { executeSendGridEmail, executeTwilioCall } from '../../lib/operatorActions.js';
+import { retryRun, recoverRun, cancelRun, getRun } from '../../lib/bytebotRuntime.js';
+import { retryBrowserJob, recoverBrowserJob, cancelBrowserJob, getJob } from '../../lib/browserJobRuntime.js';
 
 const GOLD   = '#d4a843';
 const RED    = '#ef4444';
@@ -29,16 +31,20 @@ const BRAND_LOGO = '/brand/xps-shield-wings.png';
 
 const STATUS_COLOR = {
   [RUN_STATUS.IDLE]:    'rgba(255,255,255,0.25)',
+  [RUN_STATUS.QUEUED]:  '#60a5fa',
   [RUN_STATUS.RUNNING]: GOLD,
   [RUN_STATUS.DONE]:    GREEN,
   [RUN_STATUS.ERROR]:   RED,
+  [RUN_STATUS.CANCELLED]: 'rgba(255,255,255,0.4)',
 };
 
 const STATUS_LABEL = {
   [RUN_STATUS.IDLE]:    'idle',
+  [RUN_STATUS.QUEUED]:  'queued',
   [RUN_STATUS.RUNNING]: 'running…',
   [RUN_STATUS.DONE]:    'done',
   [RUN_STATUS.ERROR]:   'error',
+  [RUN_STATUS.CANCELLED]: 'cancelled',
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -1772,6 +1778,8 @@ function ConnectorActionBody({ obj }) {
   const mode       = obj.meta?.mode || 'synthetic';
   const draft      = obj.meta?.draft || {};
   const connector  = obj.meta?.connector || null;
+  const history    = Array.isArray(obj.meta?.history) ? obj.meta.history : [];
+  const direction  = obj.meta?.direction || 'outbound';
   const [executing, setExecuting] = useState(false);
 
   const executeDraft = async () => {
@@ -1811,11 +1819,15 @@ function ConnectorActionBody({ obj }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN }} />
           <span style={{ fontSize: 11, fontWeight: 700, color: GREEN, letterSpacing: 1, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <Plug size={11} style={{ flexShrink: 0 }} /> CONNECTOR ACTION {running && '· running…'}
+            <Plug size={11} style={{ flexShrink: 0 }} /> {direction === 'inbound' ? 'INBOUND EVENT' : 'CONNECTOR ACTION'} {running && '· running…'}
           </span>
           <span style={{ marginLeft: 'auto', fontSize: 10, color: modeColor(mode), fontWeight: 600 }}>
             {mode.toUpperCase()}
           </span>
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
+          Direction: <span style={{ color: '#e2e8f0' }}>{direction}</span>
+          {obj.meta?.status && <> · Status: <span style={{ color: '#e2e8f0' }}>{obj.meta.status}</span></>}
         </div>
 
         {Object.entries(connectors).length > 0 && (
@@ -1872,6 +1884,17 @@ function ConnectorActionBody({ obj }) {
           </div>
         )}
 
+        {history.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>History</div>
+            {history.slice(0, 5).map((entry, index) => (
+              <div key={`${entry.ts || index}-${entry.status || index}`} style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>
+                {entry.ts ? new Date(entry.ts).toLocaleTimeString() : 'now'} · {entry.status || 'recorded'} · {entry.detail || ''}
+              </div>
+            ))}
+          </div>
+        )}
+
         <RenderContent content={obj.content} />
       </div>
     </div>
@@ -1881,12 +1904,15 @@ function ConnectorActionBody({ obj }) {
 // ── Agent run body ────────────────────────────────────────────────────────────
 
 function AgentRunBody({ obj }) {
+  const workspaceCtx = useWorkspace();
   const running   = obj.status === RUN_STATUS.RUNNING;
   const steps     = obj.steps || obj.meta?.steps || [];
   const artifacts = obj.meta?.artifacts || [];
   const mode      = obj.meta?.mode || 'synthetic';
   const summary   = obj.meta?.summary || '';
   const progress  = obj.progress || 0;
+  const runId     = obj.meta?.runId || obj.meta?.run_id || null;
+  const history   = obj.meta?.history || getRun(runId)?.history || [];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1916,6 +1942,20 @@ function AgentRunBody({ obj }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {runId && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => retryRun(runId, workspaceCtx)} className="xps-electric-hover" style={runtimeMiniActionStyle(GOLD)}>Retry</button>
+            <button onClick={() => recoverRun(runId, workspaceCtx)} className="xps-electric-hover" style={runtimeMiniActionStyle('#f59e0b')}>Recover</button>
+            {(obj.status === RUN_STATUS.RUNNING || obj.status === RUN_STATUS.QUEUED) && (
+              <button onClick={() => cancelRun(runId)} className="xps-electric-hover" style={runtimeMiniActionStyle(RED)}>Cancel</button>
+            )}
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <RuntimeHistoryList entries={history} />
+        )}
+
         {/* Steps */}
         {steps.length > 0 && (
           <div style={{
@@ -2101,6 +2141,33 @@ function modeColor(mode) {
   return '#fbbf24'; // synthetic
 }
 
+function runtimeMiniActionStyle(accent) {
+  return {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: `1px solid ${accent}44`,
+    background: `${accent}18`,
+    color: accent,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+  };
+}
+
+function RuntimeHistoryList({ entries = [] }) {
+  if (!entries.length) return null;
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>History</div>
+      {entries.slice(0, 6).map((entry, index) => (
+        <div key={`${entry.ts || index}-${entry.status || index}`} style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>
+          {entry.ts ? new Date(entry.ts).toLocaleTimeString() : 'now'} · {entry.status || 'recorded'} · {entry.detail || ''}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function buildRuntimeConnectorCredentials(connectionPrefs = {}) {
   return {
     twilioAccountSid: connectionPrefs.twilioAccountSid,
@@ -2114,10 +2181,13 @@ function buildRuntimeConnectorCredentials(connectionPrefs = {}) {
 // ── Phase 4: Browser / Parallel renderers ─────────────────────────────────────
 
 function BrowserSessionBody({ obj }) {
+  const workspaceCtx = useWorkspace();
   const meta   = obj.meta || {};
   const mode   = meta.mode || 'blocked';
   const status = obj.status || 'queued';
   const isBlocked = mode === 'blocked';
+  const jobId = meta.job_id || null;
+  const history = meta.history || getJob(jobId)?.history || [];
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
@@ -2141,6 +2211,15 @@ function BrowserSessionBody({ obj }) {
         {meta.action && (
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 12 }}>
             Action: <span style={{ color: GOLD }}>{meta.action}</span>
+          </div>
+        )}
+        {jobId && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            <button onClick={() => retryBrowserJob(jobId, workspaceCtx)} className="xps-electric-hover" style={runtimeMiniActionStyle('#60a5fa')}>Retry</button>
+            <button onClick={() => recoverBrowserJob(jobId, workspaceCtx)} className="xps-electric-hover" style={runtimeMiniActionStyle('#f59e0b')}>Recover</button>
+            {(status === 'queued' || status === 'running') && (
+              <button onClick={() => cancelBrowserJob(jobId)} className="xps-electric-hover" style={runtimeMiniActionStyle(RED)}>Cancel</button>
+            )}
           </div>
         )}
         {isBlocked && (
@@ -2175,6 +2254,7 @@ function BrowserSessionBody({ obj }) {
             </div>
           </div>
         )}
+        {history.length > 0 && <RuntimeHistoryList entries={history} />}
       </div>
     </div>
   );
@@ -2386,6 +2466,7 @@ function EvidenceBundleBody({ obj }) {
 function ParallelRunGroupBody({ obj }) {
   const meta = obj.meta || {};
   const jobs = meta.jobs || [];
+  const history = meta.history || [];
   const statusColor = (s) => {
     if (s === 'complete') return GREEN;
     if (s === 'error')    return RED;
@@ -2442,6 +2523,7 @@ function ParallelRunGroupBody({ obj }) {
             {meta.summary}
           </div>
         )}
+        {history.length > 0 && <RuntimeHistoryList entries={history} />}
       </div>
     </div>
   );

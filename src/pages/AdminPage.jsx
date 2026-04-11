@@ -25,6 +25,9 @@ import { useWorkspace, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngin
 import { createDefaultUiState, createHistoryEntry, normalizeUiState, validateUiState } from '../lib/uiMutations.js';
 import { requestAppShellNavigation } from '../lib/appShellEvents.js';
 import { executeSendGridEmail, executeTwilioCall, buildConnectorCredentials } from '../lib/operatorActions.js';
+import { subscribeRuns, getRunList, retryRun, recoverRun, cancelRun } from '../lib/bytebotRuntime.js';
+import { subscribeJobs, getJobList, retryBrowserJob, recoverBrowserJob, cancelBrowserJob } from '../lib/browserJobRuntime.js';
+import { subscribeGroups, getGroupList } from '../lib/parallelRunGroup.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -246,7 +249,7 @@ function SectionHeading({ children }) {
 // ── Main component ─────────────────────────────────────────────────────────
 export default function AdminPage({ activeSection: requestedSection = 'integrations', onSectionChange }) {
   const workspace = useWorkspace();
-  const [activeSection, setActiveSection] = useState(requestedSection); // 'integrations' | 'github' | 'supabase' | 'vercel' | 'google' | 'system' | 'users'
+  const [activeSection, setActiveSection] = useState(requestedSection);
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
@@ -349,6 +352,7 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
     { id: 'vercel',       label: 'Vercel',           icon: Cloud },
     { id: 'google',       label: 'Google Workspace', icon: Mail },
     { id: 'communications', label: 'Communications', icon: PhoneCall },
+    { id: 'runtime',      label: 'Runtime Ops',      icon: Workflow },
     { id: 'builder',      label: 'Builder',          icon: LayoutPanelTop },
     { id: 'system',       label: 'System',           icon: Server },
     { id: 'governance',   label: 'Governance',       icon: Shield },
@@ -523,6 +527,12 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             workspace={workspace}
           />
         )}
+        {activeSection === 'runtime' && (
+          <RuntimeSection
+            liveStatus={live}
+            workspace={workspace}
+          />
+        )}
         {activeSection === 'builder' && (
           <BuilderSection
             browserWorkerConfigured={browserWorkerConfigured}
@@ -606,6 +616,8 @@ function IntegrationsSection({
   const llmMode    = live.llm?.mode || (activeLLM === 'ollama' ? 'local' : activeLLM === 'none' ? 'synthetic' : 'live');
   const browserStatus = live.browser?.mode === 'local' || browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED;
   const ollamaConfigured = live.llm?.providers?.ollama?.configured || !!connectionPrefs?.ollamaBaseUrl;
+  const inboundTwilioStatus = live.runtimeOps?.inbound?.twilio?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL;
+  const inboundSendGridStatus = live.runtimeOps?.inbound?.sendgrid?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL;
 
   return (
     <div>
@@ -839,7 +851,7 @@ function IntegrationsSection({
         defaultOpen={false}
       >
         <CapRow icon={PhoneCall} label="Outbound call staging"                   status={deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID" />
-        <CapRow icon={Mail}      label="Inbound webhook readiness"               status={deriveStatus(twilioConfigured)} />
+        <CapRow icon={Mail}      label="Inbound webhook ingestion"               status={inboundTwilioStatus} note={live.runtimeOps?.inbound?.twilio?.verification || 'unverified'} />
         <CapRow icon={Ban}       label="AI autonomous calling"                   status={STATUS.BLOCKED} note="Execution endpoint not yet wired" />
       </CapPanel>
 
@@ -852,7 +864,7 @@ function IntegrationsSection({
       >
         <CapRow icon={Mail}      label="Outbound email staging"                  status={deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
         <CapRow icon={Workflow}  label="Template + workflow handoff"             status={deriveStatus(sendgridConfigured)} />
-        <CapRow icon={Ban}       label="Autonomous send execution"               status={STATUS.BLOCKED} note="Execution endpoint not yet wired" />
+        <CapRow icon={Mail}      label="Inbound/event webhook ingestion"         status={inboundSendGridStatus} note={live.runtimeOps?.inbound?.sendgrid?.verification || 'unverified'} />
       </CapPanel>
     </div>
   );
@@ -1613,6 +1625,7 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
 function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatus, connectionPrefs, governance, workspace }) {
   const twilio = liveStatus?.twilio || {};
   const sendgrid = liveStatus?.sendgrid || {};
+  const runtimeInbound = liveStatus?.runtimeOps?.inbound || {};
   const [twilioDraft, setTwilioDraft] = useState({ to: '', message: 'This is a live XPS operator call from the control plane.' });
   const [sendgridDraft, setSendgridDraft] = useState({ to: '', subject: 'XPS control plane message', text: 'Live operator email from the XPS control plane.' });
   const [actionNotice, setActionNotice] = useState(null);
@@ -1687,7 +1700,7 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
 
       <CapPanel icon={PhoneCall} title="Twilio Calling" subtitle="Inbound/outbound telephony surfaces" status={deriveStatus(twilioConfigured)} defaultOpen>
         <CapRow icon={PhoneCall} label="Outbound call execution" status={twilio.capabilityState === 'write-enabled' ? STATUS.LIVE : deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN" />
-        <CapRow icon={Activity}  label="Inbound webhook readiness" status={deriveStatus(twilioConfigured)} />
+        <CapRow icon={Activity}  label="Inbound webhook ingestion" status={runtimeInbound.twilio?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeInbound.twilio?.verification || 'unverified'} />
         <CapRow icon={Workflow}  label="AI call workflow handoff" status={STATUS.BLOCKED} note="Execution endpoint pending" />
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gap: 10 }}>
           <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
@@ -1715,7 +1728,7 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
       <CapPanel icon={Mail} title="SendGrid Email" subtitle="Outbound email orchestration" status={deriveStatus(sendgridConfigured)} defaultOpen={false}>
         <CapRow icon={Mail}     label="Outbound email execution" status={sendgrid.capabilityState === 'write-enabled' ? STATUS.LIVE : deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
         <CapRow icon={Workflow} label="Template + runbook handoff" status={deriveStatus(sendgridConfigured)} />
-        <CapRow icon={Ban}      label="Inbound parse webhook" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+        <CapRow icon={Mail}     label="Inbound parse / event webhooks" status={runtimeInbound.sendgrid?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeInbound.sendgrid?.verification || 'unverified'} />
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gap: 10 }}>
           <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
             Destination email
@@ -1759,6 +1772,145 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
           {actionNotice}
         </div>
       )}
+    </div>
+  );
+}
+
+function RuntimeSection({ liveStatus, workspace }) {
+  const runtimeOps = liveStatus?.runtimeOps || {};
+  const [runs, setRuns] = useState(getRunList());
+  const [jobs, setJobs] = useState(getJobList());
+  const [groups, setGroups] = useState(getGroupList());
+  const workspaceCtx = {
+    createObject: workspace.createObject,
+    patchObject: workspace.patchObject,
+    appendLog: workspace.appendLog,
+    setStatus: workspace.setStatus,
+  };
+
+  useEffect(() => subscribeRuns(setRuns), []);
+  useEffect(() => subscribeJobs(setJobs), []);
+  useEffect(() => subscribeGroups(setGroups), []);
+
+  const openWorkspace = () => requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+  const pushRuntimeSnapshot = () => {
+    workspace.createObject({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: 'Runtime Operations Snapshot',
+      content: [
+        `Runtime: ${runtimeOps.environment?.runtime || 'unknown'}`,
+        `History store: ${runtimeOps.environment?.historyStore || 'unknown'}`,
+        `Inbound events: ${runtimeOps.inbound?.recentEvents?.length || 0}`,
+        `Jobs: ${runtimeOps.jobs?.recent?.length || 0}`,
+        `Parallel groups: ${runtimeOps.groups?.recent?.length || 0}`,
+      ].join('\n'),
+      status: RUN_STATUS.DONE,
+      meta: runtimeOps,
+    });
+    openWorkspace();
+  };
+  const pushInboundEvents = () => {
+    (runtimeOps.inbound?.recentEvents || []).forEach((event) => {
+      workspace.createObject({
+        type: OBJ_TYPE.CONNECTOR_ACTION,
+        title: `${event.provider} inbound — ${event.eventType}`,
+        content: JSON.stringify(event.payload || {}, null, 2),
+        status: event.status === 'blocked' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+        meta: {
+          connector: event.provider,
+          direction: 'inbound',
+          mode: event.mode,
+          status: event.status,
+          action: event.eventType,
+          history: event.history,
+          result: event.result,
+          payload: event.payload,
+          blockedReason: event.blockedReason,
+        },
+      });
+    });
+    openWorkspace();
+  };
+
+  return (
+    <div data-testid="admin-runtime-panel">
+      <div style={{ marginBottom: 20 }}>
+        <h2 className="xps-gold-text" style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3, marginBottom: 4 }}>
+          Runtime Operations Center
+        </h2>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+          Truthful inbound events, job orchestration, parallel groups, runtime targets, and execution history.
+        </p>
+      </div>
+
+      <CapPanel icon={Workflow} title="Runtime Targets" subtitle="Local vs cloud routing, workers, and webhook targets" status={runtimeOps.environment?.runtime === 'cloud' ? STATUS.LIVE : STATUS.LOCAL} defaultOpen>
+        <InfoRow label="Runtime mode" value={runtimeOps.environment?.runtime || 'unknown'} />
+        <InfoRow label="History store" value={runtimeOps.environment?.historyStore || 'unknown'} />
+        <InfoRow label="Browser worker target" value={runtimeOps.targets?.browserWorker?.target || 'Blocked — no worker target configured'} />
+        <InfoRow label="Twilio inbound target" value={runtimeOps.targets?.webhookTargets?.twilioInbound || '/api/webhooks/twilio/inbound'} />
+        <InfoRow label="SendGrid event target" value={runtimeOps.targets?.webhookTargets?.sendgridEvents || '/api/webhooks/sendgrid/events'} />
+        {(runtimeOps.environment?.fallbackRouting || []).map((item) => (
+          <div key={item} style={{ padding: '0 16px 10px', fontSize: 11, color: 'rgba(255,255,255,0.42)' }}>• {item}</div>
+        ))}
+      </CapPanel>
+
+      <CapPanel icon={PhoneCall} title="Inbound Communication Events" subtitle="Twilio + SendGrid webhook/event visibility" status={STATUS.LIVE} defaultOpen>
+        <CapRow icon={PhoneCall} label="Twilio inbound ingestion" status={runtimeOps.inbound?.twilio?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeOps.inbound?.twilio?.verification || 'unverified'} />
+        <CapRow icon={Mail} label="SendGrid inbound/event ingestion" status={runtimeOps.inbound?.sendgrid?.status === 'configured' ? STATUS.LIVE : STATUS.LOCAL} note={runtimeOps.inbound?.sendgrid?.verification || 'unverified'} />
+        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={pushInboundEvents} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Render inbound events in workspace</button>
+          <button onClick={pushRuntimeSnapshot} className="xps-electric-hover" style={actionBtnStyle(false, '#22c55e')}>Render runtime snapshot</button>
+        </div>
+        <RuntimeRecordList
+          emptyLabel="No inbound events recorded in the active runtime yet."
+          records={runtimeOps.inbound?.recentEvents || []}
+          renderMeta={(event) => `${event.channel || 'webhook'} · ${event.mode}`}
+        />
+      </CapPanel>
+
+      <CapPanel icon={Activity} title="Job Queue / Retries / Failures" subtitle="Queued, running, failed, recovered, and blocked jobs" status={STATUS.LIVE} defaultOpen={false}>
+        <RuntimeRecordList
+          emptyLabel="No runtime jobs recorded yet."
+          records={[...runs, ...jobs].sort((a, b) => b.updatedAt - a.updatedAt)}
+          renderTitle={(record) => record.title || record.task || record.jobId || record.runId}
+          renderMeta={(record) => `${record.agent || record.action || record.kind || 'job'} · attempt ${record.attempt || 1}`}
+          renderActions={(record) => record.runId ? (
+            <>
+              <button onClick={() => retryRun(record.runId, workspaceCtx, openWorkspace)} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Retry</button>
+              <button onClick={() => recoverRun(record.runId, workspaceCtx, openWorkspace)} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Recover</button>
+              {(record.status === 'queued' || record.status === 'running') && (
+                <button onClick={() => cancelRun(record.runId)} className="xps-electric-hover" style={actionBtnStyle(false, '#ef4444')}>Cancel</button>
+              )}
+            </>
+          ) : (
+            <>
+              <button onClick={() => retryBrowserJob(record.jobId, workspaceCtx, openWorkspace)} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Retry</button>
+              <button onClick={() => recoverBrowserJob(record.jobId, workspaceCtx, openWorkspace)} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Recover</button>
+              {(record.status === 'queued' || record.status === 'running') && (
+                <button onClick={() => cancelBrowserJob(record.jobId)} className="xps-electric-hover" style={actionBtnStyle(false, '#ef4444')}>Cancel</button>
+              )}
+            </>
+          )}
+        />
+      </CapPanel>
+
+      <CapPanel icon={Zap} title="Parallel Groups" subtitle="Grouped status, partial failure truth, and history" status={groups.length ? STATUS.LIVE : STATUS.LOCAL} defaultOpen={false}>
+        <RuntimeRecordList
+          emptyLabel="No parallel groups recorded yet."
+          records={groups}
+          renderTitle={(group) => group.title}
+          renderMeta={(group) => `${group.jobs?.length || 0} job(s)`}
+        />
+      </CapPanel>
+
+      <CapPanel icon={BookOpen} title="Execution History" subtitle="Outbound + inbound runtime ledger" status={STATUS.LIVE} defaultOpen={false}>
+        <RuntimeRecordList
+          emptyLabel="No execution history recorded yet."
+          records={runtimeOps.executionHistory || []}
+          renderTitle={(record) => record.title}
+          renderMeta={(record) => `${record.category || 'runtime'} · ${record.direction || 'system'} · ${record.mode || 'unknown'}`}
+        />
+      </CapPanel>
     </div>
   );
 }
@@ -1904,6 +2056,52 @@ function InfoRow({ label, value }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
       <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', width: 180, flexShrink: 0 }}>{label}</span>
       <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>{value}</span>
+    </div>
+  );
+}
+
+function RuntimeRecordList({ records = [], emptyLabel, renderTitle, renderMeta, renderActions }) {
+  if (!records.length) {
+    return <div style={{ padding: '14px 16px', fontSize: 12, color: 'rgba(255,255,255,0.35)', fontStyle: 'italic' }}>{emptyLabel}</div>;
+  }
+  return (
+    <div style={{ padding: '8px 16px 16px', display: 'grid', gap: 10 }}>
+      {records.map((record) => {
+        const title = renderTitle ? renderTitle(record) : (record.title || record.eventType || record.jobId || record.runId || 'runtime record');
+        const status = `${record.status || 'unknown'}`.toUpperCase();
+        const history = Array.isArray(record.history) ? record.history : [];
+        return (
+          <div key={record.id || record.eventId || record.jobId || record.runId || record.groupId || title} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', flex: 1 }}>{title}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.45)', letterSpacing: 0.8 }}>{status}</div>
+            </div>
+            {renderMeta && (
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 3 }}>{renderMeta(record)}</div>
+            )}
+            {record.detail && (
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 6 }}>{record.detail}</div>
+            )}
+            {record.blockedReason && (
+              <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 6 }}>{record.blockedReason}</div>
+            )}
+            {history.length > 0 && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                {history.slice(0, 3).map((entry) => (
+                  <div key={`${entry.ts}-${entry.status}`} style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)' }}>
+                    {new Date(entry.ts).toLocaleTimeString()} · {entry.status} · {entry.detail}
+                  </div>
+                ))}
+              </div>
+            )}
+            {renderActions && (
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {renderActions(record)}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

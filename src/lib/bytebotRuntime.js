@@ -32,6 +32,7 @@ import {
 
 const API_URL = import.meta.env.API_URL || '';
 const RETRY_DELAY_BASE_MS = 600;
+const MAX_ACTIVE_RUNS = 2;
 
 // ── Run state ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,10 @@ function getRunList() {
   return [..._runs.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
+export function getRun(runId) {
+  return _runs.get(runId) || null;
+}
+
 // ── ByteBot run API ───────────────────────────────────────────────────────────
 
 /**
@@ -68,6 +73,7 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
   const { task, agent = 'bytebot', context = {} } = opts;
   const runId  = genId();
   const now    = Date.now();
+  const history = [{ ts: new Date().toISOString(), status: 'queued', detail: `Run queued for ${task}` }];
 
   const runState = {
     runId,
@@ -84,6 +90,9 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
     updatedAt: now,
     cancelled: false,
     wsObjId:   null,
+    attempt:   Number(opts.attempt || 1),
+    history,
+    runtime:   { workspaceCtx, onNavigate, opts: { task, agent, context } },
   };
   _runs.set(runId, runState);
   notify();
@@ -97,28 +106,17 @@ export async function startRun(opts, workspaceCtx, onNavigate) {
     type:    OBJ_TYPE.LOG,
     title:   `${agent} — ${task.slice(0, 45)}`,
     content: `Task: ${task}\nAgent: ${agent}\nStatus: queued…`,
-    agent,
-    status:  RUN_STATUS.QUEUED,
-    steps:   [],
-    progress: 0,
-  });
+      agent,
+      status:  RUN_STATUS.QUEUED,
+      steps:   [],
+      progress: 0,
+      meta:    { runId, attempt: runState.attempt, history },
+    });
   onNavigate?.('workspace');
 
   // Persist run start
   persistRun({ runId, agent, task, status: 'queued', mode: 'synthetic', steps: [] }).catch(() => {});
-
-  // Advance to running
-  _patchRun(runId, { status: 'running' });
-  workspaceCtx.setStatus(wsObjId, RUN_STATUS.RUNNING);
-  _emitLog(runId, workspaceCtx, `[${agent}] Starting run: ${task}`);
-
-  // Execute the run in background
-  _executeRun(runId, task, agent, context, workspaceCtx).catch(err => {
-    _patchRun(runId, { status: 'error', error: err.message });
-    workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
-    _emitLog(runId, workspaceCtx, `Error: ${err.message}`);
-    persistLog(runId, 'error', err.message).catch(() => {});
-  });
+  _processRunQueue();
 
   return runId;
 }
@@ -130,13 +128,40 @@ export function cancelRun(runId) {
   const run = _runs.get(runId);
   if (!run) return;
   run.cancelled = true;
-  _patchRun(runId, { status: 'cancelled' });
+  _patchRun(runId, { status: 'cancelled', progress: 100 });
+  _recordRunHistory(runId, 'cancelled', 'Run cancelled by operator.');
+  if (run.wsObjId) {
+    run.runtime?.workspaceCtx?.setStatus(run.wsObjId, RUN_STATUS.CANCELLED);
+    run.runtime?.workspaceCtx?.patchObject(run.wsObjId, {
+      progress: 100,
+      content: `Task: ${run.task}\nAgent: ${run.agent}\nStatus: cancelled`,
+      meta: { runId, attempt: run.attempt, history: run.history, cancelled: true },
+    });
+  }
+  persistRun({ runId, agent: run.agent, task: run.task, status: 'cancelled', mode: run.mode, steps: run.steps, error: null }).catch(() => {});
+  _processRunQueue();
 }
 
 /**
  * Get all active/recent runs.
  */
 export { getRunList };
+export async function retryRun(runId, workspaceCtx, onNavigate, overrides = {}) {
+  const run = _runs.get(runId);
+  if (!run) return null;
+  const runtime = run.runtime || {};
+  return startRun(
+    {
+      ...(runtime.opts || { task: run.task, agent: run.agent, context: {} }),
+      ...overrides,
+      attempt: (run.attempt || 1) + 1,
+    },
+    workspaceCtx || runtime.workspaceCtx,
+    onNavigate || runtime.onNavigate,
+  );
+}
+
+export const recoverRun = retryRun;
 
 // ── Internal execution ────────────────────────────────────────────────────────
 
@@ -284,12 +309,13 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
     }
 
     _patchRun(runId, { status: 'complete', progress: 100, result, mode, steps });
+    _recordRunHistory(runId, 'complete', summary);
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       steps,
       content: result,
-      meta: { agent, mode, summary, artifacts, runId },
+      meta: { agent, mode, summary, artifacts, runId, attempt: run.attempt, history: getRun(runId)?.history || [] },
     });
     _emitLog(runId, workspaceCtx, `Run complete — ${summary}`);
 
@@ -334,17 +360,19 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
     }
 
     recordStaging(runId, staging, workspaceCtx, agent);
+    _processRunQueue();
 
   } catch (err) {
     if (run.cancelled) return;
 
     const syntheticResult = buildSyntheticResult(task, agent);
     _patchRun(runId, { status: 'complete', progress: 100, result: syntheticResult, mode: 'synthetic' });
+    _recordRunHistory(runId, 'complete', 'Synthetic fallback completed.');
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content:  syntheticResult,
-      meta:     { agent, mode: 'synthetic', error: err.message },
+      meta:     { agent, mode: 'synthetic', error: err.message, attempt: run.attempt, history: getRun(runId)?.history || [] },
     });
     _emitLog(runId, workspaceCtx, `[synthetic] Backend unavailable — synthetic fallback`);
 
@@ -360,8 +388,9 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
         { step: 3, label: 'Synthetic fallback',status: 'complete' },
       ],
       progress: 100,
-      meta:     { agent, mode: 'synthetic', error: err.message },
+      meta:     { agent, mode: 'synthetic', error: err.message, attempt: run.attempt, history: getRun(runId)?.history || [] },
     }, runId);
+    _processRunQueue();
   }
 }
 
@@ -374,6 +403,19 @@ function _patchRun(runId, patch) {
   notify();
 }
 
+function _recordRunHistory(runId, status, detail) {
+  const run = _runs.get(runId);
+  if (!run) return;
+  run.history.unshift({ ts: new Date().toISOString(), status, detail });
+  if (run.history.length > 24) run.history.length = 24;
+  if (run.wsObjId) {
+    run.runtime?.workspaceCtx?.patchObject(run.wsObjId, {
+      meta: { runId, attempt: run.attempt, history: run.history, mode: run.mode },
+    });
+  }
+  notify();
+}
+
 function _emitLog(runId, workspaceCtx, line) {
   const run = _runs.get(runId);
   if (!run) return;
@@ -381,6 +423,38 @@ function _emitLog(runId, workspaceCtx, line) {
   if (run.wsObjId) workspaceCtx.appendLog(run.wsObjId, line);
   notify();
   persistLog(runId, 'info', line).catch(() => {});
+}
+
+function _activeRunCount() {
+  return [..._runs.values()].filter((run) => run.status === 'running').length;
+}
+
+function _processRunQueue() {
+  if (_activeRunCount() >= MAX_ACTIVE_RUNS) return;
+  const next = [..._runs.values()]
+    .filter((run) => run.status === 'queued' && !run.cancelled)
+    .sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (!next) return;
+  _launchRun(next.runId);
+  if (_activeRunCount() < MAX_ACTIVE_RUNS) _processRunQueue();
+}
+
+function _launchRun(runId) {
+  const run = _runs.get(runId);
+  if (!run || run.cancelled || run.status !== 'queued') return;
+  const workspaceCtx = run.runtime?.workspaceCtx;
+  _patchRun(runId, { status: 'running' });
+  _recordRunHistory(runId, 'running', `Run started (attempt ${run.attempt}).`);
+  workspaceCtx?.setStatus(run.wsObjId, RUN_STATUS.RUNNING);
+  _emitLog(runId, workspaceCtx, `[${run.agent}] Starting run: ${run.task}`);
+  _executeRun(runId, run.task, run.agent, run.runtime?.opts?.context || {}, workspaceCtx).catch(err => {
+    _patchRun(runId, { status: 'error', error: err.message, progress: 100 });
+    _recordRunHistory(runId, 'error', err.message);
+    workspaceCtx?.setStatus(run.wsObjId, RUN_STATUS.ERROR);
+    _emitLog(runId, workspaceCtx, `Error: ${err.message}`);
+    persistLog(runId, 'error', err.message).catch(() => {});
+    _processRunQueue();
+  });
 }
 
 function inferWsType(result, agentId) {

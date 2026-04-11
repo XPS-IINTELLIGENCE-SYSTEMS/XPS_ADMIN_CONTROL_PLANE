@@ -8,6 +8,7 @@ import {
 import { useWorkspace, detectObjectType, deriveTitle, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
 import { startRun, subscribeRuns, cancelRun, getRunList } from '../lib/bytebotRuntime.js';
 import { startBrowserJob, subscribeJobs, cancelBrowserJob, getJobList } from '../lib/browserJobRuntime.js';
+import { subscribeGroups, getGroupList } from '../lib/parallelRunGroup.js';
 import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPreview, persistUiVersion, persistUiRollback } from '../lib/supabasePersistence.js';
 import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState, validateUiState } from '../lib/uiMutations.js';
 import { getGovernance, subscribeGovernance } from '../lib/governance.js';
@@ -293,6 +294,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [attachments, setAttachments] = useState([]);
   const [activeRuns, setActiveRuns] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
+  const [activeGroups, setActiveGroups] = useState([]);
   const [governance, setGovernanceState] = useState(getGovernance());
   const [connectionPrefs, setConnectionPrefsState] = useState(getConnectionPrefs());
   const bottomRef = useRef(null);
@@ -316,6 +318,12 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const isActive = j => j.status === 'running' || j.status === 'queued';
     const unsub = subscribeJobs(jobs => setActiveJobs(jobs.filter(isActive)));
     setActiveJobs(getJobList().filter(isActive));
+    return unsub;
+  }, []);
+  useEffect(() => {
+    const isActive = g => g.status === 'running';
+    const unsub = subscribeGroups(groups => setActiveGroups(groups.filter(isActive)));
+    setActiveGroups(getGroupList().filter(isActive));
     return unsub;
   }, []);
 
@@ -1217,6 +1225,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       }}>
         {activeRuns.length > 0 && <ActiveRunsSummary runs={activeRuns} />}
         {activeJobs.length > 0 && <ActiveJobsSummary jobs={activeJobs} />}
+        {activeGroups.length > 0 && <ActiveGroupsSummary groups={activeGroups} />}
         {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px' }}>
@@ -1597,6 +1606,32 @@ function ActiveJobsSummary({ jobs }) {
               </div>
             </div>
           )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActiveGroupsSummary({ groups }) {
+  return (
+    <div style={{
+      background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
+      borderRadius: 10, padding: '8px 10px', marginBottom: 4,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#c084fc', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
+        Parallel Groups ({groups.length})
+      </div>
+      {groups.map(group => (
+        <div key={group.groupId} style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#c084fc', animation: 'xpsPulse 1s ease-in-out infinite' }} />
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {group.title}
+            </span>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+              {group.jobs?.length || 0} job{(group.jobs?.length || 0) === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
       ))}
     </div>
