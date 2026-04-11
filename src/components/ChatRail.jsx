@@ -40,7 +40,7 @@ function loadThread() {
       role: message?.role === 'user' ? 'user' : 'assistant',
       mode: MODE_CONFIG[message?.mode] ? message.mode : 'assistant',
       text: typeof message?.text === 'string' ? message.text : '',
-      createdAt: Number.isFinite(message?.createdAt) ? message.createdAt : Date.now() + index,
+      createdAt: Number.isFinite(message?.createdAt) ? message.createdAt : Date.now() - index,
     }));
   } catch {
     return DEFAULT_THREAD;

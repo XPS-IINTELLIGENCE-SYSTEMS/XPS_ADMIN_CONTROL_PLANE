@@ -91,7 +91,7 @@ export default function Shell() {
                   flexShrink: 0,
                 }}
               >
-                <ChatRail onNavigate={setActivePanel} />
+                <ChatRail />
               </aside>
             </div>
           </div>
