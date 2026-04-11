@@ -16,6 +16,10 @@ import { persistBrowserJob } from './supabasePersistence.js';
 const API_URL = import.meta.env.API_URL || '';
 const BROWSER_POLL_INTERVAL_MS = 1000;
 const BROWSER_MAX_POLL_ATTEMPTS = 20;
+// Browser jobs are heavier than standard runs because they may reserve a
+// worker process/browser instance. Keep this low unless the worker/runtime
+// is explicitly provisioned for higher concurrency.
+const MAX_ACTIVE_BROWSER_JOBS = 2;
 
 // ── Job state ─────────────────────────────────────────────────────────────────
 
@@ -35,6 +39,10 @@ export function getJobList() {
   return [..._jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
+export function getJob(jobId) {
+  return _jobs.get(jobId) || null;
+}
+
 // ── Browser job API ───────────────────────────────────────────────────────────
 
 /**
@@ -52,6 +60,7 @@ export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
   const { url, action = 'scrape', prompt = '', workerUrl = '' } = opts;
   const jobId = genId();
   const now   = Date.now();
+  const history = [{ ts: new Date().toISOString(), status: 'queued', detail: `Browser job queued for ${url}` }];
 
   const jobState = {
     jobId,
@@ -68,6 +77,9 @@ export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
     updatedAt: now,
     cancelled: false,
     wsObjId:   null,
+    attempt:   Number(opts.attempt || 1),
+    history,
+    runtime:   { workspaceCtx, onNavigate, opts: { url, action, prompt, workerUrl } },
   };
   _jobs.set(jobId, jobState);
   notify();
@@ -82,23 +94,12 @@ export async function startBrowserJob(opts, workspaceCtx, onNavigate) {
     title:   `Browser: ${url.slice(0, 50)}`,
     content: `URL: ${url}\nAction: ${action}\nStatus: queued…`,
     status:  RUN_STATUS.QUEUED,
-      meta:    { url, action, job_id: jobId, mode: workerUrl ? 'local' : 'queued', workerUrl: workerUrl || null },
+    meta:    { url, action, job_id: jobId, mode: workerUrl ? 'local' : 'queued', workerUrl: workerUrl || null, history, attempt: jobState.attempt },
   });
   onNavigate?.('workspace');
 
   persistBrowserJob({ jobId, url, action, status: 'queued', mode: 'queued' }).catch(() => {});
-
-  // Advance to running
-  _patchJob(jobId, { status: 'running' });
-  workspaceCtx.setStatus(wsObjId, RUN_STATUS.RUNNING);
-  _emitLog(jobId, workspaceCtx, `[browser] Starting ${action} job for ${url}`);
-
-  // Execute in background
-  _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx).catch(err => {
-    _patchJob(jobId, { status: 'error', error: err.message });
-    workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
-    _emitLog(jobId, workspaceCtx, `Error: ${err.message}`);
-  });
+  _processQueue();
 
   return jobId;
 }
@@ -110,7 +111,16 @@ export async function cancelBrowserJob(jobId) {
   const job = _jobs.get(jobId);
   if (!job) return;
   job.cancelled = true;
-  _patchJob(jobId, { status: 'cancelled' });
+  _patchJob(jobId, { status: 'cancelled', progress: 100 });
+  _recordHistory(jobId, 'cancelled', 'Browser job cancelled by operator.');
+  if (job.wsObjId) {
+    job.runtime?.workspaceCtx?.setStatus(job.wsObjId, RUN_STATUS.CANCELLED);
+    job.runtime?.workspaceCtx?.patchObject(job.wsObjId, {
+      progress: 100,
+      content: `URL: ${job.url}\nAction: ${job.action}\nStatus: cancelled\n\nCancelled by operator.`,
+      meta: { url: job.url, action: job.action, job_id: jobId, mode: job.mode, workerUrl: job.runtime?.opts?.workerUrl || null, history: job.history, attempt: job.attempt },
+    });
+  }
 
   // Notify backend if job is in-flight
   try {
@@ -120,7 +130,25 @@ export async function cancelBrowserJob(jobId) {
       body:    JSON.stringify({ job_id: jobId }),
     });
   } catch {}
+  _processQueue();
 }
+
+export async function retryBrowserJob(jobId, workspaceCtx, onNavigate, overrides = {}) {
+  const job = _jobs.get(jobId);
+  if (!job) return null;
+  const runtime = job.runtime || {};
+  return startBrowserJob(
+    {
+      ...(runtime.opts || { url: job.url, action: job.action, prompt: job.prompt, workerUrl: job.mode === 'local' ? runtime.opts?.workerUrl : '' }),
+      ...overrides,
+      attempt: (job.attempt || 1) + 1,
+    },
+    workspaceCtx || runtime.workspaceCtx,
+    onNavigate || runtime.onNavigate,
+  );
+}
+
+export const recoverBrowserJob = retryBrowserJob;
 
 // ── Internal execution ────────────────────────────────────────────────────────
 
@@ -155,24 +183,27 @@ async function _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx) 
     if (status === 'blocked') {
       // Honest blocked result
       _patchJob(jobId, { status: 'blocked', mode: 'blocked', result: data.reason, progress: 100 });
+      _recordHistory(jobId, 'blocked', data.reason || 'Browser automation blocked.');
       workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
       workspaceCtx.patchObject(wsObjId, {
         progress: 100,
         content:  `URL: ${url}\nAction: ${action}\nStatus: blocked\n\n${data.reason || 'Browser automation requires a local worker.'}`,
-        meta:     { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, reason: data.reason, instructions: data.instructions },
+        meta:     { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, reason: data.reason, instructions: data.instructions, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
       });
       _emitLog(jobId, workspaceCtx, `[browser] Blocked — ${data.reason}`);
 
       persistBrowserJob({ jobId, url, action, status: 'blocked', mode: 'blocked', result: data.reason }).catch(() => {});
+      _processQueue();
       return;
     }
 
     if (status === 'queued' || status === 'running') {
       _patchJob(jobId, { status, mode, progress: status === 'running' ? 55 : 30 });
+      _recordHistory(jobId, status, `Browser worker reported ${status}.`);
       workspaceCtx.patchObject(wsObjId, {
         progress: status === 'running' ? 55 : 30,
         content: `URL: ${url}\nAction: ${action}\nStatus: ${status}\n\nAwaiting worker completion…`,
-        meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null },
+        meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
       });
       _emitLog(jobId, workspaceCtx, `[browser] Polling worker status…`);
       const settled = await pollBrowserStatus(jobId, workerUrl, workspaceCtx, wsObjId, url, action);
@@ -184,14 +215,16 @@ async function _executeJob(jobId, url, action, prompt, workerUrl, workspaceCtx) 
   } catch (err) {
     if (job.cancelled) return;
     _patchJob(jobId, { status: 'error', error: err.message, progress: 100 });
+    _recordHistory(jobId, 'error', err.message);
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content:  `URL: ${url}\nAction: ${action}\nError: ${err.message}`,
-      meta:     { url, action, job_id: jobId, mode: 'error', error: err.message },
+      meta:     { url, action, job_id: jobId, mode: 'error', error: err.message, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
     });
     _emitLog(jobId, workspaceCtx, `Error: ${err.message}`);
     persistBrowserJob({ jobId, url, action, status: 'error', mode: 'error', result: err.message }).catch(() => {});
+    _processQueue();
   }
 }
 
@@ -201,6 +234,27 @@ function _patchJob(jobId, patch) {
   const job = _jobs.get(jobId);
   if (!job) return;
   Object.assign(job, patch, { updatedAt: Date.now() });
+  notify();
+}
+
+function _recordHistory(jobId, status, detail) {
+  const job = _jobs.get(jobId);
+  if (!job) return;
+  job.history.unshift({ ts: new Date().toISOString(), status, detail });
+  if (job.history.length > 20) job.history.length = 20;
+  if (job.wsObjId) {
+    job.runtime?.workspaceCtx?.patchObject(job.wsObjId, {
+      meta: {
+        url: job.url,
+        action: job.action,
+        job_id: jobId,
+        mode: job.mode,
+        workerUrl: job.runtime?.opts?.workerUrl || null,
+        history: job.history,
+        attempt: job.attempt,
+      },
+    });
+  }
   notify();
 }
 
@@ -229,10 +283,11 @@ async function pollBrowserStatus(jobId, workerUrl, workspaceCtx, wsObjId, url, a
     const nextStatus = data.status || 'running';
     _emitLog(jobId, workspaceCtx, `[browser] Poll ${attempt + 1}: ${nextStatus}`);
     if (nextStatus === 'queued' || nextStatus === 'running') {
+      _recordHistory(jobId, nextStatus, `Worker poll ${attempt + 1}: ${nextStatus}`);
       workspaceCtx.patchObject(wsObjId, {
         progress: Math.min(90, 40 + attempt * 3),
         content: `URL: ${url}\nAction: ${action}\nStatus: ${nextStatus}\n\nWorker poll ${attempt + 1}…`,
-        meta: { url, action, job_id: jobId, mode: data.mode || 'local', workerUrl: workerUrl || null, lastPollStatus: nextStatus },
+        meta: { url, action, job_id: jobId, mode: data.mode || 'local', workerUrl: workerUrl || null, lastPollStatus: nextStatus, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
       });
       continue;
     }
@@ -251,27 +306,31 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
 
   if (status === 'blocked') {
     _patchJob(jobId, { status: 'blocked', mode, result: data.reason, progress: 100 });
+    _recordHistory(jobId, 'blocked', data.reason || 'Browser job blocked.');
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content: `URL: ${url}\nAction: ${action}\nStatus: blocked\n\n${data.reason || 'Browser automation requires a worker.'}`,
-      meta: { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, reason: data.reason, instructions: data.instructions },
+      meta: { url, action, job_id: jobId, mode: 'blocked', workerUrl: workerUrl || null, reason: data.reason, instructions: data.instructions, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
     });
     persistBrowserJob({ jobId, url, action, status: 'blocked', mode: 'blocked', result: data.reason }).catch(() => {});
+    _processQueue();
     return data;
   }
 
   if (status === 'error') {
     const error = data.error || data.reason || 'Browser execution failed.';
     _patchJob(jobId, { status: 'error', error, progress: 100, mode });
+    _recordHistory(jobId, 'error', error);
     workspaceCtx.setStatus(wsObjId, RUN_STATUS.ERROR);
     workspaceCtx.patchObject(wsObjId, {
       progress: 100,
       content: `URL: ${url}\nAction: ${action}\nStatus: error\n\n${error}`,
-      meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, error },
+      meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, error, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
     });
     _emitLog(jobId, workspaceCtx, `[browser] Error — ${error}`);
     persistBrowserJob({ jobId, url, action, status: 'error', mode, result: error }).catch(() => {});
+    _processQueue();
     return data;
   }
 
@@ -280,11 +339,12 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
   const evidence = Array.isArray(data.evidence) ? data.evidence : [];
 
   _patchJob(jobId, { status: 'complete', mode, result: resultText, progress: 100 });
+  _recordHistory(jobId, 'complete', data.summary || 'Browser execution complete.');
   workspaceCtx.setStatus(wsObjId, RUN_STATUS.DONE);
   workspaceCtx.patchObject(wsObjId, {
     progress: 100,
     content: `URL: ${url}\nAction: ${action}\nStatus: complete\n\n${data.summary || resultText || 'Browser execution finished.'}`,
-    meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, screenshot_url: screenshotUrl },
+    meta: { url, action, job_id: jobId, mode, workerUrl: workerUrl || null, screenshot_url: screenshotUrl, history: getJob(jobId)?.history || [], attempt: getJob(jobId)?.attempt || 1 },
   });
 
   workspaceCtx.createObject({
@@ -326,5 +386,49 @@ function finalizeBrowserJob(jobId, wsObjId, url, action, data, workspaceCtx, wor
 
   _emitLog(jobId, workspaceCtx, '[browser] Browser job complete');
   persistBrowserJob({ jobId, url, action, status: 'complete', mode, result: resultText }).catch(() => {});
+  _processQueue();
   return data;
+}
+
+function _activeCount() {
+  return [..._jobs.values()].filter((job) => job.status === 'running').length;
+}
+
+function _processQueue() {
+  if (_activeCount() >= MAX_ACTIVE_BROWSER_JOBS) return;
+  const next = [..._jobs.values()]
+    .filter((job) => job.status === 'queued' && !job.cancelled)
+    .sort((a, b) => a.createdAt - b.createdAt)[0];
+  if (!next) return;
+  _launchJob(next.jobId);
+  if (_activeCount() < MAX_ACTIVE_BROWSER_JOBS) _processQueue();
+}
+
+function _launchJob(jobId) {
+  const job = _jobs.get(jobId);
+  if (!job || job.cancelled || job.status !== 'queued') return;
+  const workspaceCtx = job.runtime?.workspaceCtx;
+  _patchJob(jobId, { status: 'running' });
+  _recordHistory(jobId, 'running', `Browser job started (attempt ${job.attempt}).`);
+  workspaceCtx?.setStatus(job.wsObjId, RUN_STATUS.RUNNING);
+  workspaceCtx?.patchObject(job.wsObjId, {
+    content: `URL: ${job.url}\nAction: ${job.action}\nStatus: running…`,
+    meta: {
+      url: job.url,
+      action: job.action,
+      job_id: jobId,
+      mode: job.runtime?.opts?.workerUrl ? 'local' : 'blocked',
+      workerUrl: job.runtime?.opts?.workerUrl || null,
+      history: job.history,
+      attempt: job.attempt,
+    },
+  });
+  _emitLog(jobId, workspaceCtx, `[browser] Starting ${job.action} job for ${job.url}`);
+  _executeJob(jobId, job.url, job.action, job.prompt, job.runtime?.opts?.workerUrl || '', workspaceCtx).catch((err) => {
+    _patchJob(jobId, { status: 'error', error: err.message, progress: 100 });
+    _recordHistory(jobId, 'error', err.message);
+    workspaceCtx?.setStatus(job.wsObjId, RUN_STATUS.ERROR);
+    _emitLog(jobId, workspaceCtx, `Error: ${err.message}`);
+    _processQueue();
+  });
 }

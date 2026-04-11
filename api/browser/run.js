@@ -3,7 +3,7 @@
 // Playwright cannot run inside Vercel serverless functions.
 // In production: returns mode:'blocked' with clear explanation.
 // When BROWSER_WORKER_URL is set: proxies to a local/dedicated worker.
-import { hasLLM, llmMode } from '../_llm.js';
+import { upsertJobRecord, recordExecution } from '../_runtimeStore.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,6 +18,16 @@ export default async function handler(req, res) {
   const ts     = new Date().toISOString();
   const jobId  = job_id || `brw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const workerUrl = worker_url || process.env.BROWSER_WORKER_URL;
+  upsertJobRecord({
+    jobId,
+    kind: 'browser',
+    title: `${action} ${url}`,
+    status: 'queued',
+    mode: workerUrl ? 'local' : 'blocked',
+    source: 'api/browser/run',
+    target: workerUrl || null,
+    detail: `Browser job queued for ${url}`,
+  });
 
   // ── Local worker proxy ─────────────────────────────────────────────────────
   if (workerUrl) {
@@ -29,8 +39,38 @@ export default async function handler(req, res) {
         signal:  AbortSignal.timeout(55000),
       });
       const data = await upstream.json();
+      upsertJobRecord({
+        jobId,
+        kind: 'browser',
+        title: `${action} ${url}`,
+        status: data.status || (upstream.ok ? 'running' : 'error'),
+        mode: data.mode || 'local',
+        source: 'api/browser/run',
+        target: workerUrl,
+        detail: `Browser worker responded with ${data.status || upstream.status}`,
+      });
+      recordExecution({
+        category: 'browser',
+        title: 'Browser job dispatch',
+        status: data.status || (upstream.ok ? 'running' : 'error'),
+        mode: data.mode || 'local',
+        provider: 'browser_worker',
+        detail: `Browser job ${jobId} dispatched to worker.`,
+        meta: { jobId, url, action, target: workerUrl },
+      });
       return res.status(upstream.ok ? 200 : 502).json({ ...data, job_id: jobId, worker_mode: worker_url ? 'session' : 'backend' });
     } catch (err) {
+      upsertJobRecord({
+        jobId,
+        kind: 'browser',
+        title: `${action} ${url}`,
+        status: 'error',
+        mode: 'local',
+        source: 'api/browser/run',
+        target: workerUrl,
+        error: err.message,
+        detail: `Worker proxy error: ${err.message}`,
+      });
       return res.status(502).json({
         event_type: 'browser_job_failed',
         job_id:     jobId,
@@ -45,6 +85,25 @@ export default async function handler(req, res) {
   }
 
   // ── Serverless / blocked ───────────────────────────────────────────────────
+  upsertJobRecord({
+    jobId,
+    kind: 'browser',
+    title: `${action} ${url}`,
+    status: 'blocked',
+    mode: 'blocked',
+    source: 'api/browser/run',
+    blockedReason: 'BROWSER_WORKER_URL not configured.',
+    detail: 'Browser job blocked because no worker target exists.',
+  });
+  recordExecution({
+    category: 'browser',
+    title: 'Browser job blocked',
+    status: 'blocked',
+    mode: 'blocked',
+    provider: 'browser_worker',
+    detail: 'Browser job blocked because BROWSER_WORKER_URL is not configured.',
+    meta: { jobId, url, action },
+  });
   return res.status(200).json({
     event_type: 'browser_job_queued',
     job_id:     jobId,

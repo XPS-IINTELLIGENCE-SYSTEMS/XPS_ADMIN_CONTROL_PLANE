@@ -3,6 +3,7 @@
 // No secrets are returned; only boolean states and metadata.
 
 import { getLlmState } from './_llm.js';
+import { getRuntimeSnapshot } from './_runtimeStore.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -73,6 +74,7 @@ export default async function handler(req, res) {
     : env.NODE_ENV === 'production'
       ? 'node-production'
       : 'node-dev';
+  const runtimeSnapshot = getRuntimeSnapshot(env, req);
 
   return res.status(200).json({
     timestamp: new Date().toISOString(),
@@ -203,39 +205,44 @@ export default async function handler(req, res) {
     },
 
     twilio: {
-      configured: hasTwilio,
-      mode:       hasTwilio ? 'live' : 'blocked',
+      configured: hasTwilio || runtimeSnapshot.inbound?.twilio?.ingestion === 'live',
+      mode:       hasTwilio ? 'live' : 'ingest-only',
       capabilityState: hasTwilio
         ? (hasTwilioNumber ? 'write-enabled' : 'token-configured')
-        : 'blocked',
+        : 'ingest-only',
       accountSid: hasTwilio ? `${env.TWILIO_ACCOUNT_SID.slice(0, 6)}…` : null,
       phoneNumber: hasTwilioNumber ? env.TWILIO_PHONE_NUMBER : null,
       reason: hasTwilio
         ? (hasTwilioNumber ? null : 'TWILIO_PHONE_NUMBER not set. Calls can be staged but outbound execution is incomplete.')
-        : 'TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set.',
+        : 'Inbound webhook ingestion is available, but verified Twilio runtime credentials are not configured.',
       capabilities: {
         outbound_calls: hasTwilio && hasTwilioNumber,
-        inbound_webhooks: hasTwilio,
+        inbound_webhooks: true,
+        inbound_event_history: runtimeSnapshot.inbound?.twilio?.recentCount > 0,
+        call_status_webhooks: true,
         ai_call_orchestration: hasTwilio && hasTwilioNumber,
       },
+      webhookTarget: runtimeSnapshot.targets?.webhookTargets?.twilioInbound || null,
       envKey: 'TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN',
     },
 
     sendgrid: {
-      configured: hasSendGrid,
-      mode:       hasSendGrid ? 'live' : 'blocked',
+      configured: hasSendGrid || runtimeSnapshot.inbound?.sendgrid?.ingestion === 'live',
+      mode:       hasSendGrid ? 'live' : 'ingest-only',
       capabilityState: hasSendGrid
         ? (hasSendGridFrom ? 'write-enabled' : 'token-configured')
-        : 'blocked',
+        : 'ingest-only',
       fromEmail: hasSendGridFrom ? env.SENDGRID_FROM_EMAIL : null,
       reason: hasSendGrid
         ? (hasSendGridFrom ? null : 'SENDGRID_FROM_EMAIL not set. Outbound email can be staged but not sent from a verified address.')
-        : 'SENDGRID_API_KEY not set.',
+        : 'Inbound/event webhook ingestion is available, but verified SendGrid send credentials are not configured.',
       capabilities: {
         outbound_email: hasSendGrid && hasSendGridFrom,
         templated_email: hasSendGrid,
-        inbound_parse: false,
+        inbound_parse: true,
+        event_webhooks: true,
       },
+      webhookTarget: runtimeSnapshot.targets?.webhookTargets?.sendgridInbound || null,
       envKey: 'SENDGRID_API_KEY',
     },
 
@@ -261,8 +268,12 @@ export default async function handler(req, res) {
         parallel_groups: 'write-enabled',
         staged_exports: hasSupabase ? 'connected' : 'local-only',
         browser_jobs: hasBrowserWorker ? 'local-only' : 'blocked',
+        inbound_events: 'write-enabled',
+        job_history: 'write-enabled',
       },
     },
+
+    runtimeOps: runtimeSnapshot,
 
     blockedPassthrough: BLOCKED_PASSTHROUGH,
 
