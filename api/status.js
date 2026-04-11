@@ -261,6 +261,10 @@ export default async function handler(req, res) {
         ui_preview: 'write-enabled',
         apply_flow: 'write-enabled',
         rollback_flow: 'write-enabled',
+        page_builder: 'write-enabled',
+        feature_builder: 'write-enabled',
+        agent_builder: 'workspace-artifact',
+        runbook_generation: 'workspace-artifact',
         repo_mutation: hasGitHub ? 'token-configured' : 'blocked',
       },
       orchestration: {
