@@ -41,7 +41,7 @@ function loadThread() {
 
 function buildAssistantReply(text, mode, attachmentCount) {
   const trimmed = text.trim() || 'No prompt provided.';
-  const attachmentLine = attachmentCount ? `\n\nAttachments queued: ${attachmentCount}.` : '';
+  const attachmentLine = attachmentCount ? `\n\nAttachments included: ${attachmentCount}.` : '';
 
   if (mode === 'research') {
     return `# Research brief\n\n${trimmed}\n\n- Capture the lead objective\n- Pull the most relevant facts\n- Turn findings into a sales-ready summary${attachmentLine}`;
@@ -291,7 +291,7 @@ export default function ChatRail({ onNavigate }) {
               <Paperclip size={16} className="xps-icon" />
             </button>
             <input ref={fileInputRef} type="file" multiple hidden onChange={handleFiles} />
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Everything here stays pinned to the right rail.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chat stays visible on the right side.</div>
           </div>
 
           <button

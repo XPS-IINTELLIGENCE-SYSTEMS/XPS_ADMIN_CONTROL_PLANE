@@ -19,8 +19,8 @@ const CORE_CONNECTORS = [
     id: 'github',
     label: 'GitHub',
     fields: [
-      { key: 'githubRepoOwner', label: 'Owner', placeholder: 'XPS-IINTELLIGENCE-SYSTEMS' },
-      { key: 'githubRepoName', label: 'Repository', placeholder: 'XPS_ADMIN_CONTROL_PLANE' },
+      { key: 'githubRepoOwner', label: 'Owner', placeholder: 'your-org' },
+      { key: 'githubRepoName', label: 'Repository', placeholder: 'your-repo' },
       { key: 'githubToken', label: 'Token', placeholder: 'ghp_...', secret: true },
     ],
   },
@@ -206,7 +206,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       '- Use the quick actions above the workspace to create editable outputs.',
       '- Keep chat pinned on the right for persistent command entry.',
       '- Manage every connector from the unified section below.',
-      '- Return to the sign-in page from the access section whenever needed.',
+      '- Return to the sign-in screen from the access section whenever needed.',
     ].join('\n');
     resetWorkspace([
       {
@@ -231,7 +231,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   const activeProvider = liveStatus?.llm?.active || 'synthetic';
   const activeModel = liveStatus?.llm?.model || 'fallback';
 
-  const createWorkspaceItem = (title, content) => {
+  const createWorkspaceItem = useCallback((title, content) => {
     createObject({
       type: OBJ_TYPE.REPORT,
       title,
@@ -240,7 +240,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       agent: 'Control Center',
     });
     onNavigate?.('workspace');
-  };
+  }, [createObject, onNavigate]);
 
   const workspaceActions = useMemo(() => ([
     {
@@ -258,7 +258,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       description: 'Create a controlled deploy checklist in the workspace.',
       action: () => createWorkspaceItem('Deployment checklist', '# Deployment checklist\n\n- Confirm runtime status\n- Review connector inputs\n- Validate sign-in routes\n- Rebuild and test'),
     },
-  ]), [onNavigate]);
+  ]), [createWorkspaceItem]);
 
   const saveConnector = (connector) => {
     const patch = connectorDrafts[connector.id] || {};
