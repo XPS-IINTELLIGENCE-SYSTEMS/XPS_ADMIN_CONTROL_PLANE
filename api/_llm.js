@@ -5,7 +5,7 @@ function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GCP_GEMINI_KEY;
 }
 
-const KNOWN_MODELS = {
+const SUGGESTED_MODELS = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
@@ -23,36 +23,40 @@ function getRuntimeCredentials(env = process.env, credentials = {}) {
 
 export function getProviderCatalog(env = process.env, credentials = {}) {
   const runtime = getRuntimeCredentials(env, credentials);
+  const openaiModel = credentials.openaiModel || env.OPENAI_MODEL || 'gpt-4o-mini';
+  const groqModel = credentials.groqModel || env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+  const geminiModel = credentials.geminiModel || env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const ollamaModel = credentials.ollamaModel || env.OLLAMA_MODEL || 'llama3.1:8b';
   return {
     openai: {
       configured: !!runtime.openaiApiKey,
       mode: runtime.openaiApiKey ? 'live' : 'blocked',
-      model: credentials.openaiModel || env.OPENAI_MODEL || 'gpt-4o-mini',
-      availableModels: KNOWN_MODELS.openai,
+      model: openaiModel,
+      availableModels: Array.from(new Set([openaiModel, ...SUGGESTED_MODELS.openai])),
       envKey: 'OPENAI_API_KEY',
       reason: runtime.openaiApiKey ? null : 'OPENAI_API_KEY not set.',
     },
     groq: {
       configured: !!runtime.groqApiKey,
       mode: runtime.groqApiKey ? 'live' : 'blocked',
-      model: credentials.groqModel || env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-      availableModels: KNOWN_MODELS.groq,
+      model: groqModel,
+      availableModels: Array.from(new Set([groqModel, ...SUGGESTED_MODELS.groq])),
       envKey: 'GROQ_API_KEY',
       reason: runtime.groqApiKey ? null : 'GROQ_API_KEY not set.',
     },
     gemini: {
       configured: !!runtime.geminiApiKey,
       mode: runtime.geminiApiKey ? 'live' : 'blocked',
-      model: credentials.geminiModel || env.GEMINI_MODEL || 'gemini-1.5-flash',
-      availableModels: KNOWN_MODELS.gemini,
+      model: geminiModel,
+      availableModels: Array.from(new Set([geminiModel, ...SUGGESTED_MODELS.gemini])),
       envKey: 'GEMINI_API_KEY or GCP_GEMINI_KEY',
       reason: runtime.geminiApiKey ? null : 'GEMINI_API_KEY or GCP_GEMINI_KEY not set.',
     },
     ollama: {
       configured: !!runtime.ollamaBaseUrl,
       mode: runtime.ollamaBaseUrl ? 'local' : 'blocked',
-      model: credentials.ollamaModel || env.OLLAMA_MODEL || 'llama3.1:8b',
-      availableModels: KNOWN_MODELS.ollama,
+      model: ollamaModel,
+      availableModels: Array.from(new Set([ollamaModel, ...SUGGESTED_MODELS.ollama])),
       envKey: 'OLLAMA_BASE_URL',
       reason: runtime.ollamaBaseUrl ? null : 'OLLAMA_BASE_URL not set.',
     },

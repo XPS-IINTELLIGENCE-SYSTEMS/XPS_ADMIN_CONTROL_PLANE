@@ -7,7 +7,7 @@ const DEFAULT_MODELS = {
   ollama: 'llama3.1:8b',
 };
 
-const DEFAULT_AVAILABLE_MODELS = {
+const SUGGESTED_MODELS = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   gemini: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
@@ -31,7 +31,10 @@ function buildProvider(provider, apiProvider = {}, { sessionValue, sessionModel,
   return {
     configured,
     model: apiProvider?.model || sessionModel || envModel || DEFAULT_MODELS[provider],
-    availableModels: apiProvider?.availableModels || DEFAULT_AVAILABLE_MODELS[provider] || [DEFAULT_MODELS[provider]],
+    availableModels: apiProvider?.availableModels || Array.from(new Set([
+      apiProvider?.model || sessionModel || envModel || DEFAULT_MODELS[provider],
+      ...(SUGGESTED_MODELS[provider] || [DEFAULT_MODELS[provider]]),
+    ])),
     mode: configured ? (provider === 'ollama' ? 'local' : mode) : 'blocked',
     reason: configured ? null : missingReason,
     source,
