@@ -13,6 +13,7 @@
 import { genId, OBJ_TYPE, RUN_STATUS } from './workspaceEngine.jsx';
 import { startBrowserJob } from './browserJobRuntime.js';
 import { createRunGroup, updateGroupJobStatus } from './parallelRunGroup.js';
+import { executeSendGridEmail, executeTwilioCall } from './operatorActions.js';
 import {
   persistRun,
   persistLog,
@@ -206,8 +207,28 @@ async function _executeRun(runId, task, agent, context, workspaceCtx) {
         content: blockedCaps.map(c => `${c.capability}: ${c.reason}`).join('\n'),
         agent,
         status: RUN_STATUS.DONE,
-        meta: { blockedCaps, mode, runId },
+        meta: { blocked: blockedCaps, mode, runId },
       }, runId);
+    }
+
+    if (Array.isArray(data.connector_actions) && data.connector_actions.length) {
+      data.connector_actions.forEach((entry, index) => {
+        createWorkspaceObject(workspaceCtx, {
+          type: OBJ_TYPE.CONNECTOR_ACTION,
+          title: `${entry.connector || 'connector'} — ${entry.action || `action ${index + 1}`}`,
+          content: entry.reason || `${entry.connector || 'Connector'} action ${entry.status || 'recorded'}.`,
+          agent,
+          status: entry.status === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+          meta: {
+            connector: entry.connector || 'unknown',
+            mode: entry.action === 'blocked' ? 'blocked' : mode,
+            status: entry.status || 'complete',
+            action: entry.action || 'unknown',
+            reason: entry.reason || null,
+            runId,
+          },
+        }, runId);
+      });
     }
 
     const totalSteps = steps.length || 1;
@@ -471,12 +492,12 @@ async function executeStepAction(step, runId, task, context, workspaceCtx) {
   }
 
   if (action.includes('search') || action.includes('research')) {
-    return runSearch(stepTask, runId, workspaceCtx);
+    return runSearch(stepTask, runId, workspaceCtx, context?.credentials);
   }
 
   if (action.includes('scrape')) {
     const url = extractUrl(stepTask) || context?.url;
-    return runScrape(url, stepTask, runId, workspaceCtx);
+    return runScrape(url, stepTask, runId, workspaceCtx, context?.credentials);
   }
 
   if (action.includes('browser')) {
@@ -485,7 +506,7 @@ async function executeStepAction(step, runId, task, context, workspaceCtx) {
       _emitLog(runId, workspaceCtx, '[browser] No URL provided for browser step.');
       return null;
     }
-    return startBrowserJob({ url, action: 'scrape', prompt: stepTask }, workspaceCtx);
+    return startBrowserJob({ url, action: 'scrape', prompt: stepTask, workerUrl: context?.browserWorkerUrl }, workspaceCtx);
   }
 
   if (action.includes('connector') || action.includes('status')) {
@@ -532,33 +553,37 @@ async function executeStepAction(step, runId, task, context, workspaceCtx) {
   }
 
   if (action.includes('email') || action.includes('sendgrid')) {
-    const sendgridReady = isConnectorReady(context, 'sendgrid');
+    const parsed = parseSendGridTask(stepTask);
+    const result = await executeSendGridEmail({
+      ...parsed,
+      credentials: context?.credentials || {},
+    });
     createWorkspaceObject(workspaceCtx, {
       type: OBJ_TYPE.CONNECTOR_ACTION,
-      title: sendgridReady ? 'SendGrid Email Runbook' : 'SendGrid Blocked',
-      content: sendgridReady
-        ? `Email orchestration staged.\n\nTask: ${stepTask}\n\nCapability state: substitute-path\nNext action: route through a verified SendGrid execution endpoint when server-side send is implemented.`
-        : `Email orchestration blocked.\n\nTask: ${stepTask}\n\nReason: ${getConnectorReason(context, 'sendgrid', 'Configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.')}`,
+      title: result.workspaceObject?.title || 'SendGrid Email Action',
+      content: result.workspaceObject?.content || result.message,
       agent: stepAgent,
-      status: RUN_STATUS.DONE,
-      meta: { connector: 'sendgrid', mode: sendgridReady ? 'substitute-path' : 'blocked', runId },
+      status: result.status === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+      meta: { ...(result.workspaceObject?.meta || {}), connector: 'sendgrid', runId },
     }, runId);
-    return null;
+    return result.raw;
   }
 
   if (action.includes('call') || action.includes('twilio') || action.includes('phone')) {
-    const twilioReady = isConnectorReady(context, 'twilio');
+    const parsed = parseTwilioTask(stepTask);
+    const result = await executeTwilioCall({
+      ...parsed,
+      credentials: context?.credentials || {},
+    });
     createWorkspaceObject(workspaceCtx, {
       type: OBJ_TYPE.CONNECTOR_ACTION,
-      title: twilioReady ? 'Twilio Call Runbook' : 'Twilio Blocked',
-      content: twilioReady
-        ? `Call orchestration staged.\n\nTask: ${stepTask}\n\nCapability state: substitute-path\nNext action: wire the staged runbook to a Twilio execution endpoint for outbound or inbound call control.`
-        : `Call orchestration blocked.\n\nTask: ${stepTask}\n\nReason: ${getConnectorReason(context, 'twilio', 'Configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.')}`,
+      title: result.workspaceObject?.title || 'Twilio Call Action',
+      content: result.workspaceObject?.content || result.message,
       agent: stepAgent,
-      status: RUN_STATUS.DONE,
-      meta: { connector: 'twilio', mode: twilioReady ? 'substitute-path' : 'blocked', runId },
+      status: result.status === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+      meta: { ...(result.workspaceObject?.meta || {}), connector: 'twilio', runId },
     }, runId);
-    return null;
+    return result.raw;
   }
 
   if (action.includes('image')) {
@@ -628,11 +653,11 @@ async function runSubAgent(stepAgent, stepTask, runId, context, workspaceCtx) {
   return data;
 }
 
-async function runSearch(query, runId, workspaceCtx) {
+async function runSearch(query, runId, workspaceCtx, credentials = {}) {
   const res = await fetch(`${API_URL}/api/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, runId }),
+    body: JSON.stringify({ query, runId, credentials }),
   });
   if (!res.ok) throw new Error(`Search returned ${res.status}`);
   const data = await res.json();
@@ -650,7 +675,7 @@ async function runSearch(query, runId, workspaceCtx) {
   return data;
 }
 
-async function runScrape(url, prompt, runId, workspaceCtx) {
+async function runScrape(url, prompt, runId, workspaceCtx, credentials = {}) {
   if (!url) {
     _emitLog(runId, workspaceCtx, '[scrape] No URL provided for scrape step.');
     return null;
@@ -658,7 +683,7 @@ async function runScrape(url, prompt, runId, workspaceCtx) {
   const res = await fetch(`${API_URL}/api/scrape`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, prompt, runId }),
+    body: JSON.stringify({ url, prompt, runId, credentials }),
   });
   if (!res.ok) throw new Error(`Scrape returned ${res.status}`);
   const data = await res.json();
@@ -699,6 +724,19 @@ function getMediaReason(context, type, fallback) {
   const moduleState = context?.operatorModules?.media?.[type === 'video' ? 'video_generation' : 'image_generation'];
   if (moduleState) return `Capability state: ${moduleState}`;
   return fallback;
+}
+
+function parseSendGridTask(task) {
+  const to = task.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '';
+  const subject = task.match(/subject(?:\s*:|\s+)(.+?)(?:\n|$)/i)?.[1]?.trim() || 'XPS control plane message';
+  const body = task.match(/body(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || task;
+  return { to, subject, text: body };
+}
+
+function parseTwilioTask(task) {
+  const to = task.match(/\+?[0-9][0-9()\-\s]{7,}/)?.[0]?.trim() || '';
+  const message = task.match(/(?:say|message)(?:\s*:|\s+)([\s\S]+)/i)?.[1]?.trim() || task;
+  return { to, message };
 }
 
 function recordStaging(runId, staging, workspaceCtx, agent) {

@@ -12,12 +12,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { url, action = 'scrape', prompt, job_id } = req.body || {};
+  const { url, action = 'scrape', prompt, job_id, worker_url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'url is required' });
 
   const ts     = new Date().toISOString();
   const jobId  = job_id || `brw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const workerUrl = process.env.BROWSER_WORKER_URL;
+  const workerUrl = worker_url || process.env.BROWSER_WORKER_URL;
 
   // ── Local worker proxy ─────────────────────────────────────────────────────
   if (workerUrl) {
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
         signal:  AbortSignal.timeout(55000),
       });
       const data = await upstream.json();
-      return res.status(upstream.ok ? 200 : 502).json({ ...data, job_id: jobId });
+      return res.status(upstream.ok ? 200 : 502).json({ ...data, job_id: jobId, worker_mode: worker_url ? 'session' : 'backend' });
     } catch (err) {
       return res.status(502).json({
         event_type: 'browser_job_failed',
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     action,
     status:     'blocked',
     mode:       'blocked',
-    reason:     'Playwright browser automation requires a persistent worker process. Vercel serverless functions have no filesystem and cannot run Chromium. To enable live browser jobs: set BROWSER_WORKER_URL to a local or cloud worker that runs Playwright.',
+    reason:     'Playwright browser automation requires a persistent worker process. Vercel serverless functions have no filesystem and cannot run Chromium. To enable live browser jobs: set BROWSER_WORKER_URL or provide a session worker URL that runs Playwright.',
     instructions: [
       'Run: npx playwright install chromium',
       'Start local worker: node scripts/browser-worker.js',

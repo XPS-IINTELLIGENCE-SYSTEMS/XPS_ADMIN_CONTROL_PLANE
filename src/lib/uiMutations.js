@@ -147,3 +147,42 @@ export function createDefaultUiState() {
   base.components = base.components.map(component => ({ ...component, id: genId() }));
   return base;
 }
+
+export function validateUiState(state) {
+  const next = normalizeUiState(state);
+  const issues = [];
+
+  if (!next.site.pageTitle?.trim()) {
+    issues.push('Page title is required.');
+  }
+  if (!next.site.route?.trim() || !next.site.route.startsWith('/')) {
+    issues.push('Route must start with /.');
+  }
+  if (!Array.isArray(next.components) || next.components.length === 0) {
+    issues.push('At least one component is required.');
+  }
+
+  next.components.forEach((component, index) => {
+    if (!component?.id) {
+      issues.push(`Component ${index + 1} is missing an id.`);
+    }
+    if (!component?.type) {
+      issues.push(`Component ${index + 1} is missing a type.`);
+    }
+    if (component?.type === 'button' && !component?.label?.trim()) {
+      issues.push(`Button ${index + 1} is missing a label.`);
+    }
+    if ((component?.type === 'card' || component?.type === 'section') && !component?.title?.trim()) {
+      issues.push(`${component.type === 'card' ? 'Card' : 'Section'} ${index + 1} is missing a title.`);
+    }
+    if (component?.type === 'tabs' && (!Array.isArray(component.tabs) || component.tabs.length === 0)) {
+      issues.push(`Tabs component ${index + 1} needs at least one tab.`);
+    }
+  });
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    summary: issues.length === 0 ? 'Validation passed.' : `${issues.length} validation issue${issues.length === 1 ? '' : 's'} found.`,
+  };
+}

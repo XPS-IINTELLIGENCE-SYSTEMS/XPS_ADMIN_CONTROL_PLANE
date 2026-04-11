@@ -8,10 +8,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { job_id } = req.query || {};
+  const { job_id, worker_url } = req.query || {};
   if (!job_id) return res.status(400).json({ error: 'job_id is required' });
 
-  const workerUrl = process.env.BROWSER_WORKER_URL;
+  const workerUrl = worker_url || process.env.BROWSER_WORKER_URL;
   const ts = new Date().toISOString();
 
   if (workerUrl) {
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     job_id,
     status:     'blocked',
     mode:       'blocked',
-    reason:     'No browser worker configured. Set BROWSER_WORKER_URL.',
+    reason:     'No browser worker configured. Set BROWSER_WORKER_URL or provide a session worker URL.',
     timestamp:  ts,
   });
 }

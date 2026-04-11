@@ -21,6 +21,10 @@ import {
 import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
 import { DEFAULT_GOVERNANCE, getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
+import { useWorkspace, OBJ_TYPE, RUN_STATUS, genId } from '../lib/workspaceEngine.jsx';
+import { createDefaultUiState, createHistoryEntry, normalizeUiState, validateUiState } from '../lib/uiMutations.js';
+import { requestAppShellNavigation } from '../lib/appShellEvents.js';
+import { executeSendGridEmail, executeTwilioCall, buildConnectorCredentials } from '../lib/operatorActions.js';
 
 const API_URL = import.meta.env.API_URL || '';
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -241,6 +245,7 @@ function SectionHeading({ children }) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 export default function AdminPage({ activeSection: requestedSection = 'integrations', onSectionChange }) {
+  const workspace = useWorkspace();
   const [activeSection, setActiveSection] = useState(requestedSection); // 'integrations' | 'github' | 'supabase' | 'vercel' | 'google' | 'system' | 'users'
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -513,6 +518,9 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             twilioConfigured={twilioConfigured}
             sendgridConfigured={sendgridConfigured}
             liveStatus={live}
+            connectionPrefs={connectionPrefs}
+            governance={governance}
+            workspace={workspace}
           />
         )}
         {activeSection === 'builder' && (
@@ -522,6 +530,8 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
             geminiConfigured={geminiConfigured}
             ghConfigured={ghConfigured}
             liveStatus={live}
+            governance={governance}
+            workspace={workspace}
           />
         )}
         {activeSection === 'system'    && (
@@ -1600,9 +1610,69 @@ function GoogleSection({ configured, geminiConfigured, liveStatus }) {
   );
 }
 
-function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatus }) {
+function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatus, connectionPrefs, governance, workspace }) {
   const twilio = liveStatus?.twilio || {};
   const sendgrid = liveStatus?.sendgrid || {};
+  const [twilioDraft, setTwilioDraft] = useState({ to: '', message: 'This is a live XPS operator call from the control plane.' });
+  const [sendgridDraft, setSendgridDraft] = useState({ to: '', subject: 'XPS control plane message', text: 'Live operator email from the XPS control plane.' });
+  const [actionNotice, setActionNotice] = useState(null);
+  const [busyAction, setBusyAction] = useState(null);
+
+  const createWorkspaceResult = (result) => {
+    const wsObj = result?.workspaceObject;
+    if (!wsObj) return;
+    const id = genId();
+    workspace.createObject({
+      id,
+      type: wsObj.type || OBJ_TYPE.CONNECTOR_ACTION,
+      title: wsObj.title,
+      content: wsObj.content,
+      status: result.status === 'error' ? RUN_STATUS.ERROR : RUN_STATUS.DONE,
+      meta: wsObj.meta || {},
+    });
+    workspace.setActive(id);
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+  };
+
+  const handleTwilioAction = async () => {
+    if (!(governance.communicationActions && governance.connectorPermissions)) {
+      setActionNotice('Twilio execution is blocked by governance.');
+      return;
+    }
+    setBusyAction('twilio');
+    try {
+      const result = await executeTwilioCall({
+        ...twilioDraft,
+        credentials: buildConnectorCredentials(connectionPrefs),
+      });
+      createWorkspaceResult(result);
+      setActionNotice(result.message);
+    } catch (err) {
+      setActionNotice(err.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleSendGridAction = async () => {
+    if (!(governance.communicationActions && governance.connectorPermissions)) {
+      setActionNotice('SendGrid execution is blocked by governance.');
+      return;
+    }
+    setBusyAction('sendgrid');
+    try {
+      const result = await executeSendGridEmail({
+        ...sendgridDraft,
+        credentials: buildConnectorCredentials(connectionPrefs),
+      });
+      createWorkspaceResult(result);
+      setActionNotice(result.message);
+    } catch (err) {
+      setActionNotice(err.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   return (
     <div data-testid="admin-communications-panel">
@@ -1611,20 +1681,66 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
           Communications Orchestration
         </h2>
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
-          Token-driven control surfaces for calling and email. Execution remains truthful: staged where supported, blocked where not yet wired.
+          Token-driven control surfaces for calling and email. Buttons below use the strongest live app-side execution path available and stay blocked when the runtime cannot support direct delivery.
         </p>
       </div>
 
       <CapPanel icon={PhoneCall} title="Twilio Calling" subtitle="Inbound/outbound telephony surfaces" status={deriveStatus(twilioConfigured)} defaultOpen>
-        <CapRow icon={PhoneCall} label="Outbound call staging" status={deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN" />
+        <CapRow icon={PhoneCall} label="Outbound call execution" status={twilio.capabilityState === 'write-enabled' ? STATUS.LIVE : deriveStatus(twilioConfigured)} note="TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN" />
         <CapRow icon={Activity}  label="Inbound webhook readiness" status={deriveStatus(twilioConfigured)} />
         <CapRow icon={Workflow}  label="AI call workflow handoff" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gap: 10 }}>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+            Destination number
+            <input value={twilioDraft.to} onChange={(e) => setTwilioDraft((prev) => ({ ...prev, to: e.target.value }))} placeholder="+15551234567" style={actionInputStyle} />
+          </label>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+            Spoken message
+            <textarea value={twilioDraft.message} onChange={(e) => setTwilioDraft((prev) => ({ ...prev, message: e.target.value }))} rows={4} placeholder="Say: this is the XPS operator control plane…" style={{ ...actionInputStyle, resize: 'vertical', minHeight: 90 }} />
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={handleTwilioAction} disabled={busyAction === 'twilio'} className="xps-electric-hover" style={actionBtnStyle(busyAction === 'twilio', '#22c55e')}>
+              {busyAction === 'twilio' ? 'Placing call…' : 'Place live call'}
+            </button>
+            <button onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'workspace' })} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>
+              Open workspace actions
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>
+            Runtime truth: {twilio.reason || 'Live Twilio call execution is available from this panel.'}
+          </div>
+        </div>
       </CapPanel>
 
       <CapPanel icon={Mail} title="SendGrid Email" subtitle="Outbound email orchestration" status={deriveStatus(sendgridConfigured)} defaultOpen={false}>
-        <CapRow icon={Mail}     label="Outbound email staging" status={deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
+        <CapRow icon={Mail}     label="Outbound email execution" status={sendgrid.capabilityState === 'write-enabled' ? STATUS.LIVE : deriveStatus(sendgridConfigured)} note="SENDGRID_API_KEY" />
         <CapRow icon={Workflow} label="Template + runbook handoff" status={deriveStatus(sendgridConfigured)} />
-        <CapRow icon={Ban}      label="Autonomous send execution" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+        <CapRow icon={Ban}      label="Inbound parse webhook" status={STATUS.BLOCKED} note="Execution endpoint pending" />
+        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gap: 10 }}>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+            Destination email
+            <input value={sendgridDraft.to} onChange={(e) => setSendgridDraft((prev) => ({ ...prev, to: e.target.value }))} placeholder="operator@example.com" style={actionInputStyle} />
+          </label>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+            Subject
+            <input value={sendgridDraft.subject} onChange={(e) => setSendgridDraft((prev) => ({ ...prev, subject: e.target.value }))} placeholder="Subject" style={actionInputStyle} />
+          </label>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+            Body
+            <textarea value={sendgridDraft.text} onChange={(e) => setSendgridDraft((prev) => ({ ...prev, text: e.target.value }))} rows={5} placeholder="Email body" style={{ ...actionInputStyle, resize: 'vertical', minHeight: 110 }} />
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={handleSendGridAction} disabled={busyAction === 'sendgrid'} className="xps-electric-hover" style={actionBtnStyle(busyAction === 'sendgrid', '#22c55e')}>
+              {busyAction === 'sendgrid' ? 'Sending…' : 'Send live email'}
+            </button>
+            <button onClick={() => requestAppShellNavigation({ page: 'workspace', panel: 'workspace' })} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>
+              Open workspace actions
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>
+            Runtime truth: {sendgrid.reason || 'Live SendGrid send execution is available from this panel.'}
+          </div>
+        </div>
       </CapPanel>
 
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -1633,17 +1749,110 @@ function CommunicationsSection({ twilioConfigured, sendgridConfigured, liveStatu
         </div>
         <InfoRow label="Twilio state" value={twilio.capabilityState || (twilioConfigured ? 'token-configured' : 'blocked')} />
         <InfoRow label="Twilio number" value={twilio.phoneNumber || 'Not configured'} />
+        <InfoRow label="Twilio session SID" value={connectionPrefs.twilioAccountSid ? maskSecret(connectionPrefs.twilioAccountSid) : 'Not set'} />
         <InfoRow label="SendGrid state" value={sendgrid.capabilityState || (sendgridConfigured ? 'token-configured' : 'blocked')} />
         <InfoRow label="From email" value={sendgrid.fromEmail || 'Not configured'} />
+        <InfoRow label="SendGrid session sender" value={connectionPrefs.sendgridFromEmail || 'Not set'} />
       </div>
+      {actionNotice && (
+        <div style={{ marginTop: 14, fontSize: 12, color: 'rgba(255,255,255,0.6)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '12px 14px', whiteSpace: 'pre-wrap' }}>
+          {actionNotice}
+        </div>
+      )}
     </div>
   );
 }
 
-function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfigured, ghConfigured, liveStatus }) {
+function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfigured, ghConfigured, liveStatus, governance, workspace }) {
   const media = liveStatus?.operatorModules?.media || {};
   const siteMutation = liveStatus?.operatorModules?.siteMutation || {};
   const orchestration = liveStatus?.operatorModules?.orchestration || {};
+  const [builderNotice, setBuilderNotice] = useState(null);
+
+  const ensureUiEditor = () => {
+    const existing = workspace.objects.find((item) => item.type === OBJ_TYPE.UI && item.meta?.uiEditor);
+    if (existing) return existing;
+    const initial = createDefaultUiState();
+    const created = {
+      id: genId(),
+      type: OBJ_TYPE.UI,
+      title: 'UI Editor Canvas',
+      content: 'Editable UI canvas',
+      status: RUN_STATUS.IDLE,
+      meta: { uiEditor: true, uiState: initial, history: [createHistoryEntry(initial, 'Initial UI state', 'seed')] },
+    };
+    workspace.createObject(created);
+    return created;
+  };
+
+  const openBuilderCanvas = () => {
+    const target = ensureUiEditor();
+    workspace.setActive(target.id);
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice('Builder canvas opened in the workspace.');
+  };
+
+  const applyPendingPreview = () => {
+    const target = ensureUiEditor();
+    const preview = target.meta?.preview;
+    if (!preview?.state) {
+      setBuilderNotice('No pending preview is available to apply.');
+      return;
+    }
+    if (governance.previewOnly || governance.requireApproval) {
+      setBuilderNotice('Apply is blocked by governance (preview-only or approval required).');
+      return;
+    }
+    if (preview.validation && !preview.validation.valid) {
+      setBuilderNotice(`Apply is blocked by validation. ${preview.validation.issues.join(' ')}`);
+      return;
+    }
+    const nextState = normalizeUiState(preview.state);
+    const history = Array.isArray(target.meta?.history) ? [...target.meta.history] : [];
+    history.push(createHistoryEntry(nextState, preview.summary || 'Apply preview', 'admin'));
+    workspace.patchObject(target.id, { meta: { ...target.meta, uiState: nextState, history, preview: null } });
+    workspace.createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Apply — ${preview.summary || 'Apply preview'}`,
+      content: `Applied governed mutation from admin.\n\nSummary: ${preview.summary || 'Apply preview'}\nValidation: ${preview.validation?.summary || 'Validation passed.'}`,
+      status: RUN_STATUS.DONE,
+      meta: { stage: 'apply', summary: preview.summary || 'Apply preview', source: 'admin', validation: preview.validation || { valid: true, issues: [] }, targetId: target.id },
+    });
+    workspace.setActive(target.id);
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice('Pending preview applied. Rollback remains available.');
+  };
+
+  const stageRollbackPreview = () => {
+    const target = ensureUiEditor();
+    const history = Array.isArray(target.meta?.history) ? target.meta.history : [];
+    if (history.length < 2) {
+      setBuilderNotice('No prior version is available for rollback.');
+      return;
+    }
+    const previous = history[history.length - 2];
+    const nextState = normalizeUiState(previous.state);
+    const validation = validateUiState(nextState);
+    const preview = {
+      id: genId(),
+      summary: `Rollback to ${previous.summary || previous.id}`,
+      source: 'admin-rollback',
+      createdAt: new Date().toISOString(),
+      state: nextState,
+      validation,
+    };
+    workspace.patchObject(target.id, { meta: { ...target.meta, preview } });
+    workspace.createObject({
+      type: OBJ_TYPE.SITE_MUTATION,
+      title: `Site Mutation Rollback Preview — ${previous.summary || previous.id}`,
+      content: `Rollback preview prepared.\n\nSummary: ${preview.summary}\nValidation: ${validation.summary}${validation.issues.length ? `\n${validation.issues.map(issue => `- ${issue}`).join('\n')}` : ''}`,
+      status: validation.valid ? RUN_STATUS.DONE : RUN_STATUS.ERROR,
+      meta: { stage: 'rollback-preview', summary: preview.summary, source: 'admin', validation, targetId: target.id, previewId: preview.id },
+    });
+    workspace.setActive(target.id);
+    requestAppShellNavigation({ page: 'workspace', panel: 'workspace' });
+    setBuilderNotice('Rollback preview created in the workspace.');
+  };
 
   return (
     <div data-testid="admin-builder-panel">
@@ -1660,6 +1869,11 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
         <CapRow icon={LayoutPanelTop} label="UI preview + apply flow" status={STATUS.LIVE} note={siteMutation.ui_preview || 'write-enabled'} />
         <CapRow icon={RefreshCw}      label="Rollback flow"           status={STATUS.LIVE} note={siteMutation.rollback_flow || 'write-enabled'} />
         <CapRow icon={GitBranch}      label="Repo-linked mutation path" status={deriveStatus(ghConfigured)} note={siteMutation.repo_mutation || 'blocked'} />
+        <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={openBuilderCanvas} className="xps-electric-hover" style={actionBtnStyle(false, '#60a5fa')}>Open builder canvas</button>
+          <button onClick={applyPendingPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#22c55e')}>Apply pending preview</button>
+          <button onClick={stageRollbackPreview} className="xps-electric-hover" style={actionBtnStyle(false, '#f59e0b')}>Create rollback preview</button>
+        </div>
       </CapPanel>
 
       <CapPanel icon={Clapperboard} title="Media Surfaces" subtitle="Image/video generation and editing truth" status={openaiConfigured || geminiConfigured ? STATUS.SYNTHETIC : STATUS.BLOCKED} defaultOpen={false}>
@@ -1675,6 +1889,11 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
         <CapRow icon={Package}  label="Staged exports"    status={liveStatus?.supabase?.configured ? STATUS.LIVE : STATUS.LOCAL} note={orchestration.staged_exports || 'local-only'} />
         <CapRow icon={Globe}    label="Browser jobs"      status={browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED} note={orchestration.browser_jobs || 'blocked'} />
       </CapPanel>
+      {builderNotice && (
+        <div style={{ marginTop: 14, fontSize: 12, color: 'rgba(255,255,255,0.6)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '12px 14px', whiteSpace: 'pre-wrap' }}>
+          {builderNotice}
+        </div>
+      )}
     </div>
   );
 }
@@ -1733,6 +1952,18 @@ function actionBtnStyle(disabled, accent = '#d4a843') {
     cursor: disabled ? 'not-allowed' : 'pointer',
   };
 }
+
+const actionInputStyle = {
+  width: '100%',
+  marginTop: 6,
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 8,
+  color: '#e2e8f0',
+  fontSize: 12,
+  padding: '10px 12px',
+  outline: 'none',
+};
 // ── System section ─────────────────────────────────────────────────────────
 function SystemSection({ openaiConfigured, groqConfigured, sbConfigured, browserWorkerConfigured }) {
   const services = [
