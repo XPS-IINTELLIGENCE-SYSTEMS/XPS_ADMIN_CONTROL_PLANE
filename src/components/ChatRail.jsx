@@ -12,6 +12,7 @@ import { persistSearchJob, persistScrapeJob, persistWorkspaceObject, persistUiPr
 import { DEFAULT_UI_STATE, normalizeUiState, applyUiPatch, summarizeUiPatch, createHistoryEntry, createDefaultUiState } from '../lib/uiMutations.js';
 import { getGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, subscribeConnectionPrefs } from '../lib/connectionPrefs.js';
+import { resolveClientProviderState } from '../lib/providerState.js';
 
 const gold = '#d4a843';
 const API_URL = import.meta.env.API_URL || '';
@@ -30,92 +31,6 @@ function useProviderState() {
   }, []);
 
   return providerState;
-}
-
-function buildFallbackState(connectionPrefs = {}) {
-  const env = import.meta.env;
-  const hasOpenAI = !!(env.OPENAI_API_KEY || connectionPrefs.openaiApiKey);
-  const hasGroq = !!(env.GROQ_API_KEY || connectionPrefs.groqApiKey);
-  const hasGemini = !!(env.GEMINI_API_KEY || connectionPrefs.geminiApiKey);
-  const hasOllama = !!(env.OLLAMA_BASE_URL || connectionPrefs.ollamaBaseUrl);
-  const active = hasOpenAI ? 'openai' : hasGroq ? 'groq' : hasGemini ? 'gemini' : hasOllama ? 'ollama' : 'none';
-  return {
-    llm: {
-      active,
-      model: active === 'openai'
-        ? (connectionPrefs.openaiModel || 'gpt-4o-mini')
-        : active === 'groq'
-          ? (connectionPrefs.groqModel || 'llama-3.3-70b-versatile')
-          : active === 'gemini'
-            ? (connectionPrefs.geminiModel || 'gemini-1.5-flash')
-            : active === 'ollama'
-              ? (connectionPrefs.ollamaModel || 'llama3.1:8b')
-              : null,
-      mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
-      providers: {
-        openai: { configured: hasOpenAI, model: connectionPrefs.openaiModel || 'gpt-4o-mini' },
-        groq: { configured: hasGroq, model: connectionPrefs.groqModel || 'llama-3.3-70b-versatile' },
-        gemini: { configured: hasGemini, model: connectionPrefs.geminiModel || 'gemini-1.5-flash' },
-        ollama: { configured: hasOllama, model: connectionPrefs.ollamaModel || 'llama3.1:8b' },
-      },
-    },
-  };
-}
-
-function mergeProviderState(apiState, connectionPrefs) {
-  const fallback = buildFallbackState(connectionPrefs);
-  if (!apiState?.llm) return fallback;
-
-  const providers = {
-    openai: {
-      configured: !!(apiState.llm.providers?.openai?.configured || connectionPrefs.openaiApiKey),
-      model: apiState.llm.providers?.openai?.model || connectionPrefs.openaiModel || 'gpt-4o-mini',
-    },
-    groq: {
-      configured: !!(apiState.llm.providers?.groq?.configured || connectionPrefs.groqApiKey),
-      model: apiState.llm.providers?.groq?.model || connectionPrefs.groqModel || 'llama-3.3-70b-versatile',
-    },
-    gemini: {
-      configured: !!(apiState.llm.providers?.gemini?.configured || connectionPrefs.geminiApiKey),
-      model: apiState.llm.providers?.gemini?.model || connectionPrefs.geminiModel || 'gemini-1.5-flash',
-    },
-    ollama: {
-      configured: !!(apiState.llm.providers?.ollama?.configured || connectionPrefs.ollamaBaseUrl),
-      model: apiState.llm.providers?.ollama?.model || connectionPrefs.ollamaModel || 'llama3.1:8b',
-    },
-  };
-
-  let active = apiState.llm.active || 'none';
-  if (active === 'none') {
-    active = providers.openai.configured
-      ? 'openai'
-      : providers.groq.configured
-        ? 'groq'
-        : providers.gemini.configured
-          ? 'gemini'
-          : providers.ollama.configured
-            ? 'ollama'
-            : 'none';
-  }
-
-  return {
-    ...apiState,
-    llm: {
-      ...apiState.llm,
-      active,
-      model: active === 'openai'
-        ? providers.openai.model
-        : active === 'groq'
-          ? providers.groq.model
-          : active === 'gemini'
-            ? providers.gemini.model
-            : active === 'ollama'
-              ? providers.ollama.model
-              : null,
-      mode: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
-      providers,
-    },
-  };
 }
 
 // ── Provider indicator bar ────────────────────────────────────────────────
@@ -149,13 +64,13 @@ function ProviderIndicator({ providerState }) {
         {meta.label}
       </span>
       {model && (
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
           {model}
         </span>
       )}
       <span style={{
         marginLeft: 'auto', fontSize: 10, fontWeight: 600,
-        color: 'rgba(255,255,255,0.25)', letterSpacing: 0.5,
+        color: 'rgba(255,255,255,0.58)', letterSpacing: 0.5,
       }}>
         {meta.mode.toUpperCase()}
       </span>
@@ -181,7 +96,7 @@ function buildProviderOptions(state) {
       model: activeModel || 'auto',
       status: active === 'ollama' ? 'local' : active === 'none' ? 'synthetic' : 'live',
       available: true,
-      note: active === 'none' ? 'No provider configured' : `Uses ${active}`,
+      note: active === 'none' ? (state?.llm?.reason || 'No provider configured') : `Uses ${active} (${providers[active]?.source || 'backend'})`,
     },
     {
       id: 'openai',
@@ -189,7 +104,7 @@ function buildProviderOptions(state) {
       model: providers.openai?.model || 'gpt-4o-mini',
       status: providers.openai?.configured ? 'live' : 'blocked',
       available: !!providers.openai?.configured,
-      note: providers.openai?.configured ? 'Backend or session OpenAI API key configured' : 'Missing OPENAI API key',
+      note: providers.openai?.configured ? `OpenAI ready via ${providers.openai?.source || 'backend'}` : (providers.openai?.reason || 'Missing OPENAI API key'),
     },
     {
       id: 'groq',
@@ -197,7 +112,7 @@ function buildProviderOptions(state) {
       model: providers.groq?.model || 'llama-3.3-70b-versatile',
       status: providers.groq?.configured ? 'live' : 'blocked',
       available: !!providers.groq?.configured,
-      note: providers.groq?.configured ? 'Backend or session Groq key configured' : 'Missing GROQ API key',
+      note: providers.groq?.configured ? `Groq ready via ${providers.groq?.source || 'backend'}` : (providers.groq?.reason || 'Missing GROQ API key'),
     },
     {
       id: 'gemini',
@@ -205,7 +120,7 @@ function buildProviderOptions(state) {
       model: providers.gemini?.model || 'gemini-1.5-flash',
       status: providers.gemini?.configured ? 'live' : 'blocked',
       available: !!providers.gemini?.configured,
-      note: providers.gemini?.configured ? 'GEMINI_API_KEY' : 'Missing GEMINI_API_KEY',
+      note: providers.gemini?.configured ? `Gemini ready via ${providers.gemini?.source || 'backend'}` : (providers.gemini?.reason || 'Missing GEMINI_API_KEY'),
     },
     {
       id: 'ollama',
@@ -213,7 +128,7 @@ function buildProviderOptions(state) {
       model: providers.ollama?.model || 'llama3.1:8b',
       status: providers.ollama?.configured ? 'local' : 'blocked',
       available: !!providers.ollama?.configured,
-      note: providers.ollama?.configured ? 'Backend or session Ollama base URL configured' : 'Missing OLLAMA_BASE_URL',
+      note: providers.ollama?.configured ? `Ollama ready via ${providers.ollama?.source || 'backend'}` : (providers.ollama?.reason || 'Missing OLLAMA_BASE_URL'),
     },
     {
       id: 'synthetic',
@@ -400,7 +315,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
   const selectedAgent = AGENTS.find(a => a.id === agent) || AGENTS[0];
   const selectedMode  = MODES.find(m => m.id === mode)   || MODES[0];
-  const resolvedProviderState = mergeProviderState(providerState, connectionPrefs);
+  const resolvedProviderState = resolveClientProviderState(providerState, connectionPrefs);
   const providerOptions = buildProviderOptions(resolvedProviderState);
   const providerMap = Object.fromEntries(providerOptions.map(opt => [opt.id, opt]));
   const selectedProviderOption = providerMap[selectedProvider] || providerMap.auto;
@@ -443,6 +358,23 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     onNavigate?.('workspace');
     persistWorkspaceObject({ type, title, content, agent: agentId, meta }).catch(() => {});
   }, [createObject, onNavigate]);
+
+  const pushRuntimeMessage = useCallback((content, mode = 'synthetic', meta = {}) => {
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content,
+      agent,
+      mode,
+      synthetic: mode === 'synthetic',
+      profileLabel: selectedModelProfile?.label,
+    }]);
+    commitToWorkspace({
+      type: OBJ_TYPE.RUNTIME_STATE,
+      title: mode === 'blocked' ? 'Provider Blocked' : 'Runtime State',
+      content,
+      meta,
+    }, agent, content);
+  }, [agent, commitToWorkspace, selectedModelProfile?.label]);
 
   const ensureUiEditor = useCallback(() => {
     const existing = objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor);
@@ -706,25 +638,19 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     }
 
     if (selectedProvider === 'synthetic') {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Provider set to synthetic — no live call executed.', agent, mode: 'synthetic' }]);
+      pushRuntimeMessage('Provider set to synthetic — no live call executed.', 'synthetic', { provider: 'synthetic', profileId: selectedModelProfile?.id || null });
       setLoading(false);
       return;
     }
 
     if (selectedProvider !== 'auto' && !selectedProviderOption?.available) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, agent, mode: 'synthetic' }]);
+      pushRuntimeMessage(`Provider blocked: ${selectedProviderOption?.note || 'Not configured'}.`, 'blocked', { provider: selectedProvider, reason: selectedProviderOption?.note || 'Not configured' });
       setLoading(false);
       return;
     }
 
     if (selectedModelProfile && !selectedModelProfile.available) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Model profile blocked: ${selectedModelProfile.truth}`,
-        agent,
-        mode: 'synthetic',
-        profileLabel: selectedModelProfile.label,
-      }]);
+      pushRuntimeMessage(`Model profile blocked: ${selectedModelProfile.truth}`, 'blocked', { provider: selectedModelProfile.provider, profileId: selectedModelProfile.id, reason: selectedModelProfile.truth });
       setLoading(false);
       return;
     }
@@ -802,7 +728,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
         }
         persistSearchJob({ query: prompt, context: contextLabel, status: 'complete', summary: data.summary, sources: data.sources || [], mode: data.mode || 'synthetic' }).catch(() => {});
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Research request failed: ${err.message}`, agent, synthetic: true }]);
+        pushRuntimeMessage(`Research request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
       }
       return;
     }
@@ -837,7 +763,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
           persistScrapeJob({ url, prompt, status: 'complete', result: data.summary, rawContent: null, mode: data.mode || 'synthetic' }).catch(() => {});
         }
       } catch (err) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Scrape request failed: ${err.message}`, agent, synthetic: true }]);
+        pushRuntimeMessage(`Scrape request failed: ${err.message}`, 'blocked', { provider: effectiveProvider, model: effectiveModel, reason: err.message });
       }
       return;
     }
@@ -883,14 +809,31 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       setMessages(prev => [...prev, {
         role: 'assistant', content: reply, agent, mode: evtMode, synthetic: evtMode === 'synthetic', profileLabel: selectedModelProfile?.label,
       }]);
-      setStatus(wsObjId, evtType === 'run_failed' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
+      patchObject(wsObjId, {
+        content: reply,
+        progress: 100,
+        steps: data.steps || [],
+        meta: {
+          provider: data.provider || effectiveProvider,
+          model: data.model || effectiveModel,
+          mode: evtMode,
+          eventType: evtType,
+          blockedReason: data.blocked_reason || null,
+        },
+      });
+      setStatus(wsObjId, evtType === 'run_failed' || evtType === 'run_blocked' ? RUN_STATUS.ERROR : RUN_STATUS.DONE);
 
       if (evtType !== 'run_failed' && wsObj) {
         commitToWorkspace(wsObj, agent, prompt);
       } else if (evtType !== 'run_failed') {
         commitToWorkspace({ type: detectObjectType(reply, agent), title: deriveTitle(reply, agent) || prompt.slice(0, 55), content: reply }, agent, prompt);
       }
-    } catch {
+    } catch (err) {
+      patchObject(wsObjId, {
+        content: `Request failed before a backend response was returned.\n\n${err.message}`,
+        progress: 100,
+        meta: { provider: effectiveProvider, model: effectiveModel, mode: 'synthetic', error: err.message },
+      });
       setStatus(wsObjId, RUN_STATUS.ERROR);
       const syntheticReplies = {
         orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
@@ -1463,8 +1406,18 @@ function ActiveJobsSummary({ jobs }) {
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   const agentInfo = AGENTS.find(a => a.id === msg.agent);
-  const modeColor = msg.mode === 'live' ? '#4ade80' : msg.mode === 'synthetic' || msg.synthetic ? '#fbbf24' : 'rgba(255,255,255,0.25)';
-  const modeLabel = msg.mode === 'live' ? 'live' : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
+  const modeColor = msg.mode === 'live'
+    ? '#4ade80'
+    : msg.mode === 'local'
+      ? '#60a5fa'
+      : msg.mode === 'blocked'
+        ? '#ef4444'
+        : msg.mode === 'synthetic' || msg.synthetic
+          ? '#fbbf24'
+          : 'rgba(255,255,255,0.25)';
+  const modeLabel = ['live', 'local', 'blocked'].includes(msg.mode)
+    ? msg.mode
+    : (msg.synthetic || msg.mode === 'synthetic') ? 'synthetic' : null;
   const ModeInfo = msg.mode ? MODES.find(m => m.id === msg.mode) : null;
 
   if (isUser) {

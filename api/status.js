@@ -2,6 +2,8 @@
 // Returns comprehensive connector status — server-side truth only.
 // No secrets are returned; only boolean states and metadata.
 
+import { getLlmState } from './_llm.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -11,20 +13,14 @@ export default async function handler(req, res) {
   const env = process.env;
 
   // ── LLM provider detection ─────────────────────────────────────────────
-  const hasOpenAI  = !!(env.OPENAI_API_KEY);
-  const hasGroq    = !!(env.GROQ_API_KEY);
-  const hasOllama  = !!(env.OLLAMA_BASE_URL);
-  const hasGemini  = !!(env.GEMINI_API_KEY || env.GCP_GEMINI_KEY);
+  const llmState = getLlmState(env);
+  const hasOpenAI  = llmState.providers.openai.configured;
+  const hasGroq    = llmState.providers.groq.configured;
+  const hasOllama  = llmState.providers.ollama.configured;
+  const hasGemini  = llmState.providers.gemini.configured;
   const hasHubSpot = !!(env.HUBSPOT_API_KEY);
   const hasAirtable = !!(env.AIRTABLE_API_KEY && env.AIRTABLE_BASE_ID);
   const hasBrowserWorker = !!(env.BROWSER_WORKER_URL);
-
-  let activeLLM = 'none';
-  let llmModel  = null;
-  if (hasOpenAI)       { activeLLM = 'openai';  llmModel = env.OPENAI_MODEL || 'gpt-4o-mini'; }
-  else if (hasGroq)    { activeLLM = 'groq';    llmModel = env.GROQ_MODEL || 'llama3-8b-8192'; }
-  else if (hasGemini)  { activeLLM = 'gemini';  llmModel = env.GEMINI_MODEL || 'gemini-1.5-flash'; }
-  else if (hasOllama)  { activeLLM = 'ollama';  llmModel = env.OLLAMA_MODEL || 'llama3'; }
 
   // ── GitHub ─────────────────────────────────────────────────────────────
   const hasGitHub = !!(env.GITHUB_TOKEN || env.GITHUB_API_TOKEN);
@@ -79,21 +75,18 @@ export default async function handler(req, res) {
     runtime: runtimeEnv,
 
     llm: {
-      active:   activeLLM,
-      model:    llmModel,
-      mode:     activeLLM === 'none' ? 'synthetic' : activeLLM === 'ollama' ? 'local' : 'live',
-      providers: {
-        openai:  { configured: hasOpenAI,  model: env.OPENAI_MODEL || 'gpt-4o-mini', envKey: 'OPENAI_API_KEY' },
-        groq:    { configured: hasGroq,    model: env.GROQ_MODEL || 'llama3-8b-8192', envKey: 'GROQ_API_KEY' },
-        gemini:  { configured: hasGemini,  model: env.GEMINI_MODEL || 'gemini-1.5-flash', envKey: 'GEMINI_API_KEY' },
-        ollama:  { configured: hasOllama,  model: env.OLLAMA_MODEL || 'llama3', envKey: 'OLLAMA_BASE_URL' },
-      },
+      active:   llmState.active,
+      model:    llmState.model,
+      mode:     llmState.mode,
+      reason:   llmState.reason,
+      providers: llmState.providers,
     },
 
     github: {
       configured: hasGitHub,
       mode:       hasGitHub ? 'live' : 'blocked',
       org:        githubOrg,
+      reason:     hasGitHub ? null : 'GITHUB_TOKEN or GITHUB_API_TOKEN not set.',
       capabilities: {
         repos:       hasGitHub,
         issues:      hasGitHub,
@@ -111,6 +104,7 @@ export default async function handler(req, res) {
       configured: hasSupabase,
       mode:       hasSupabase ? 'live' : 'blocked',
       projectUrl: supabaseUrl ? supabaseUrl.replace(/^https?:\/\//, '').split('.')[0] + '.supabase.co' : null,
+      reason:     hasSupabase ? null : 'SUPABASE_URL and SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY must be set.',
       capabilities: {
         database:   hasSupabase,
         auth:       hasSupabase,
@@ -131,6 +125,7 @@ export default async function handler(req, res) {
       configured: hasVercel,
       mode:       hasVercel ? 'live' : 'blocked',
       teamId:     vercelTeam,
+      reason:     hasVercel ? null : 'VERCEL_TOKEN or VERCEL_ACCESS_TOKEN not set.',
       capabilities: {
         deployments:   hasVercel,
         env_vars:      hasVercel,
@@ -145,7 +140,8 @@ export default async function handler(req, res) {
       configured: hasGCP,
       mode:       hasGCP ? 'live' : 'blocked',
       project:    gcpProject,
-      gemini:     { configured: hasGemini, mode: hasGemini ? 'live' : 'blocked' },
+      reason:     hasGCP ? null : 'GCP_SA_KEY or GCP_PROJECT_ID not set.',
+      gemini:     { configured: hasGemini, mode: hasGemini ? 'live' : 'blocked', reason: llmState.providers.gemini.reason },
       capabilities: {
         drive:    false,
         gmail:    hasGCP,
@@ -162,6 +158,7 @@ export default async function handler(req, res) {
     hubspot: {
       configured: hasHubSpot,
       mode:       hasHubSpot ? 'live' : 'blocked',
+      reason:     hasHubSpot ? null : 'HUBSPOT_API_KEY not set.',
       capabilities: {
         crm_read:   hasHubSpot,
         crm_write:  hasHubSpot,
@@ -177,6 +174,7 @@ export default async function handler(req, res) {
       configured: hasAirtable,
       mode:       hasAirtable ? 'live' : 'blocked',
       baseId:     env.AIRTABLE_BASE_ID || null,
+      reason:     hasAirtable ? null : 'AIRTABLE_API_KEY and AIRTABLE_BASE_ID must be set.',
       capabilities: {
         bases:    hasAirtable,
         tables:   hasAirtable,
@@ -190,6 +188,7 @@ export default async function handler(req, res) {
       configured: hasBrowserWorker,
       mode:       hasBrowserWorker ? 'local' : 'blocked',
       workerUrl:  hasBrowserWorker ? env.BROWSER_WORKER_URL : null,
+      reason:     hasBrowserWorker ? null : 'BROWSER_WORKER_URL not set.',
       capabilities: {
         browser_jobs: hasBrowserWorker,
         screenshots:  hasBrowserWorker,
@@ -203,7 +202,7 @@ export default async function handler(req, res) {
     summary: {
       connectedSystems:  [hasOpenAI && 'openai', hasGroq && 'groq', hasGemini && 'gemini', hasOllama && 'ollama', hasGitHub && 'github', hasSupabase && 'supabase', hasVercel && 'vercel', hasGCP && 'google', hasHubSpot && 'hubspot', hasAirtable && 'airtable', hasBrowserWorker && 'browser_worker'].filter(Boolean),
       blockedSystems:    [!hasOpenAI && 'openai', !hasGroq && 'groq', !hasGemini && 'gemini', !hasGitHub && 'github', !hasSupabase && 'supabase', !hasVercel && 'vercel', !hasHubSpot && 'hubspot', !hasAirtable && 'airtable', !hasBrowserWorker && 'browser_worker'].filter(Boolean),
-      chatPassthrough:   'blocked — use OpenAI API or Groq API instead',
+      chatPassthrough:   'blocked — use OpenAI API, Groq API, Gemini API, or Ollama instead',
       copilotPassthrough:'blocked — use GitHub REST API instead',
     },
   });

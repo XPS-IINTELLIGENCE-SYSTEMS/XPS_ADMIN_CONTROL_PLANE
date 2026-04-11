@@ -348,14 +348,14 @@ export default function AdminPage({ activeSection: requestedSection = 'integrati
 
   // Resolve live vs build-time statuses
   const live = liveStatus || {};
-  const ghConfigured      = live.github?.configured  ?? GITHUB_CONFIGURED;
-  const sbConfigured      = live.supabase?.configured ?? SUPABASE_CONFIGURED;
-  const openaiConfigured  = live.llm?.providers?.openai?.configured ?? OPENAI_CONFIGURED;
-  const groqConfigured    = live.llm?.providers?.groq?.configured   ?? GROQ_CONFIGURED;
-  const vercelConfigured  = live.vercel?.configured   ?? VERCEL_CONFIGURED;
-  const googleConfigured  = live.google?.configured   ?? GOOGLE_CONFIGURED;
-  const geminiConfigured  = live.google?.gemini?.configured ?? GEMINI_CONFIGURED;
-  const hubspotConfigured = live.hubspot?.configured  ?? HUBSPOT_CONFIGURED;
+  const ghConfigured      = !!(live.github?.configured || connectionPrefs.githubToken || GITHUB_CONFIGURED);
+  const sbConfigured      = !!(live.supabase?.configured || (connectionPrefs.supabaseUrl && connectionPrefs.supabaseAnonKey) || SUPABASE_CONFIGURED);
+  const openaiConfigured  = !!(live.llm?.providers?.openai?.configured || connectionPrefs.openaiApiKey || OPENAI_CONFIGURED);
+  const groqConfigured    = !!(live.llm?.providers?.groq?.configured || connectionPrefs.groqApiKey || GROQ_CONFIGURED);
+  const vercelConfigured  = !!(live.vercel?.configured || connectionPrefs.vercelToken || VERCEL_CONFIGURED);
+  const googleConfigured  = !!(live.google?.configured || GOOGLE_CONFIGURED);
+  const geminiConfigured  = !!(live.google?.gemini?.configured || connectionPrefs.geminiApiKey || GEMINI_CONFIGURED);
+  const hubspotConfigured = !!(live.hubspot?.configured || connectionPrefs.hubspotApiKey || HUBSPOT_CONFIGURED);
   const airtableConfigured = live.airtable?.configured ?? AIRTABLE_CONFIGURED;
   const browserWorkerConfigured = live.browser?.configured ?? BROWSER_WORKER_CONFIGURED;
 
@@ -550,9 +550,24 @@ function IntegrationsSection({
   onResetConnectionPrefs,
 }) {
   const live = liveStatus || {};
-  const activeLLM  = live.llm?.active || (openaiConfigured ? 'openai' : groqConfigured ? 'groq' : 'none');
-  const llmModel   = live.llm?.model  || null;
-  const llmMode    = live.llm?.mode   || (activeLLM === 'none' ? 'synthetic' : 'live');
+  const activeLLM  = live.llm?.active && live.llm.active !== 'none'
+    ? live.llm.active
+    : openaiConfigured
+      ? 'openai'
+      : groqConfigured
+        ? 'groq'
+        : geminiConfigured
+          ? 'gemini'
+          : (!!connectionPrefs?.ollamaBaseUrl || live.llm?.providers?.ollama?.configured)
+            ? 'ollama'
+            : 'none';
+  const llmModel   = live.llm?.model
+    || (activeLLM === 'openai' ? connectionPrefs?.openaiModel : null)
+    || (activeLLM === 'groq' ? connectionPrefs?.groqModel : null)
+    || (activeLLM === 'gemini' ? connectionPrefs?.geminiModel : null)
+    || (activeLLM === 'ollama' ? connectionPrefs?.ollamaModel : null)
+    || null;
+  const llmMode    = live.llm?.mode || (activeLLM === 'ollama' ? 'local' : activeLLM === 'none' ? 'synthetic' : 'live');
   const browserStatus = live.browser?.mode === 'local' || browserWorkerConfigured ? STATUS.LOCAL : STATUS.BLOCKED;
   const ollamaConfigured = live.llm?.providers?.ollama?.configured || !!connectionPrefs?.ollamaBaseUrl;
 
@@ -589,8 +604,8 @@ function IntegrationsSection({
           </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
             {activeLLM === 'none'
-              ? 'Set OPENAI_API_KEY or GROQ_API_KEY to enable live AI inference.'
-              : `Mode: ${llmMode} — Chat Completions API routed through backend. No consumer product passthrough.`}
+              ? 'Set a backend credential or save a session key below to enable live AI inference.'
+              : `Mode: ${llmMode} — routed through ${live.llm?.active && live.llm.active !== 'none' ? 'backend runtime' : 'session/build fallback'}. No consumer product passthrough.`}
           </div>
         </div>
         <StatusPill status={activeLLM === 'none' ? STATUS.SYNTHETIC : llmMode === 'local' ? STATUS.LOCAL : STATUS.LIVE} />
