@@ -3,39 +3,20 @@ import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 import CenterWorkspace from '../CenterWorkspace.jsx';
 import ChatRail from '../ChatRail.jsx';
-import HomePage from '../HomePage.jsx';
 import LoginPage from '../LoginPage.jsx';
 import { WorkspaceProvider } from '../../lib/workspaceEngine.jsx';
 import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
-const APP_PANELS = new Set([
-  'workspace',
-  'dashboard',
-  'crm',
-  'leads',
-  'research',
-  'outreach',
-  'proposals',
-  'analytics',
-  'knowledge',
-  'competition',
-  'connectors',
-  'admin',
-  'settings',
-]);
+const APP_SECTIONS = new Set(['overview', 'workspace', 'connectors', 'access']);
 
 export default function Shell() {
   const [page, setPage] = useState('login');
-  const [activePanel, setActivePanel] = useState('workspace');
+  const [activePanel, setActivePanel] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const enterApp = useCallback((panel = 'workspace') => {
+  const enterApp = useCallback((panel = 'overview') => {
     setPage('app');
-    setActivePanel(APP_PANELS.has(panel) ? panel : 'workspace');
-  }, []);
-
-  const openHome = useCallback(() => {
-    setPage('home');
+    setActivePanel(APP_SECTIONS.has(panel) ? panel : 'overview');
   }, []);
 
   const openLogin = useCallback(() => {
@@ -49,16 +30,7 @@ export default function Shell() {
         setPage('login');
         return;
       }
-      if (detail.page === 'home') {
-        setPage('home');
-        return;
-      }
-      if (detail.page === 'admin') {
-        setPage('app');
-        setActivePanel('admin');
-        return;
-      }
-      if (detail.panel && APP_PANELS.has(detail.panel)) {
+      if (detail.panel && APP_SECTIONS.has(detail.panel)) {
         setPage('app');
         setActivePanel(detail.panel);
       }
@@ -71,9 +43,7 @@ export default function Shell() {
   return (
     <WorkspaceProvider>
       {page === 'login' ? (
-        <LoginPage onContinue={() => enterApp('workspace')} />
-      ) : page === 'home' ? (
-        <HomePage onEnterApp={enterApp} onBackToLogin={openLogin} />
+        <LoginPage onContinue={() => enterApp('overview')} />
       ) : (
         <div
           style={{
@@ -101,15 +71,14 @@ export default function Shell() {
           >
             <Header
               activePanel={activePanel}
-              onGoHome={openHome}
-              onOpenAdmin={() => setActivePanel('admin')}
+              onOpenLogin={openLogin}
               onNavigate={setActivePanel}
               onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
               sidebarVisible
             />
             <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
               <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <CenterWorkspace activePanel={activePanel} />
+                <CenterWorkspace activePanel={activePanel} onNavigate={setActivePanel} onOpenLogin={openLogin} />
               </main>
               <aside
                 style={{

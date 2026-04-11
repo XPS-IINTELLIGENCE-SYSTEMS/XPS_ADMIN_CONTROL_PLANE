@@ -1,47 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Blocks, House, LayoutDashboard, PanelLeft, Plug, Search, Settings, Shield } from 'lucide-react';
+import { Blocks, KeyRound, LayoutDashboard, PanelLeft, Plug } from 'lucide-react';
 import { userContext } from '../../data/synthetic.js';
 import { getConnectionPrefs, subscribeConnectionPrefs } from '../../lib/connectionPrefs.js';
 import { resolveClientProviderState } from '../../lib/providerState.js';
 
 const panelLabels = {
+  overview: 'Overview',
   workspace: 'Workspace',
-  dashboard: 'Dashboard',
-  crm: 'CRM',
-  leads: 'Leads',
-  research: 'Research Lab',
-  outreach: 'Outreach',
-  proposals: 'Proposals',
-  analytics: 'Analytics',
-  knowledge: 'Knowledge Base',
-  competition: 'Competition',
   connectors: 'Connectors',
-  admin: 'Admin',
-  settings: 'Settings',
+  access: 'Access',
 };
 
 const panelDescriptions = {
-  workspace: 'Interactive editor canvas with live workspace objects.',
-  dashboard: 'Daily revenue, pipeline, and account priorities.',
-  crm: 'Pipeline visibility and customer relationship activity.',
-  leads: 'Lead scoring, qualification, and territory coverage.',
-  research: 'Market intelligence and company research workspace.',
-  outreach: 'Sequencing, cadence performance, and follow-up prep.',
-  proposals: 'Proposal progress, approvals, and active opportunities.',
-  analytics: 'Performance metrics and revenue intelligence.',
-  knowledge: 'Indexed documentation and internal reference material.',
-  competition: 'Competitive monitoring and signal review.',
-  connectors: 'Live system status and routing preferences.',
-  admin: 'Focused controls for runtime, access, and governance.',
-  settings: 'Workspace defaults and credential readiness.',
+  overview: 'Single operational surface for runtime, workspace, connectors, and sign-in access.',
+  workspace: 'Interactive center surface with editable outputs and working quick actions.',
+  connectors: 'One place to add, modify, remove, and review connector inputs.',
+  access: 'Direct routes back to the sign-in screen and real external sign-in pages.',
 };
 
 const topNavItems = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'workspace', label: 'Workspace', icon: Blocks },
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'connectors', label: 'Connectors', icon: Plug },
-  { id: 'admin', label: 'Admin', icon: Shield },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'access', label: 'Access', icon: KeyRound },
 ];
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
@@ -68,8 +49,7 @@ function BrandLogo() {
   );
 }
 
-export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate, onToggleSidebar, sidebarVisible }) {
-  const [search, setSearch] = useState('');
+export default function Header({ activePanel, onOpenLogin, onNavigate, onToggleSidebar, sidebarVisible }) {
   const [apiStatus, setApiStatus] = useState(null);
   const [connectionPrefs, setConnectionPrefs] = useState(getConnectionPrefs());
   const label = panelLabels[activePanel] || 'XPS Intelligence';
@@ -100,11 +80,11 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
     return subscribeConnectionPrefs(setConnectionPrefs);
   }, []);
 
-  const placeholder = useMemo(() => {
-    if (activePanel === 'workspace') return 'Search workspace tabs, outputs, or editor objects…';
-    if (activePanel === 'connectors') return 'Search connectors, providers, or deployment targets…';
-    if (activePanel === 'admin') return 'Search controls, governance, or access settings…';
-    return 'Search accounts, leads, proposals, or territories…';
+  const sectionNote = useMemo(() => {
+    if (activePanel === 'connectors') return 'Connector CRUD and runtime inputs are centralized below.';
+    if (activePanel === 'access') return 'Use the header button or access panel for the real sign-in entry points.';
+    if (activePanel === 'workspace') return 'Use quick actions in the center to create and edit outputs.';
+    return 'Keep the chat on the right and everything operational in the center.';
   }, [activePanel]);
 
   return (
@@ -130,7 +110,7 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
             XPS INTELLIGENCE
           </span>
           <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 10, letterSpacing: 2, whiteSpace: 'nowrap', marginTop: 3 }}>
-            PREMIUM SALES WORKFLOW
+            CONTROL CENTER
           </span>
         </div>
       </div>
@@ -157,30 +137,11 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
         </button>
       )}
 
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{label}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }} className="truncate">
           {description}
         </div>
-      </div>
-
-      <div style={{ flex: 1, maxWidth: 520, position: 'relative', marginLeft: 8 }}>
-        <Search size={13} className="xps-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={placeholder}
-          style={{
-            width: '100%',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: '9px 14px 9px 34px',
-            color: 'var(--text-primary)',
-            fontSize: 14,
-            outline: 'none',
-          }}
-        />
       </div>
 
       <div
@@ -209,7 +170,7 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
           return (
             <button
               key={item.id}
-              onClick={() => (item.id === 'admin' ? onOpenAdmin() : onNavigate?.(item.id))}
+              onClick={() => onNavigate?.(item.id)}
               className="xps-electric-hover"
               data-active={isActive ? 'true' : undefined}
               style={{
@@ -234,29 +195,12 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
         })}
       </div>
 
-      <button
-        onClick={onGoHome}
-        className="xps-electric-hover"
-        style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '8px 12px',
-          borderRadius: 8,
-          border: '1px solid var(--border)',
-          background: 'var(--bg-card)',
-          color: 'var(--text-primary)',
-          fontSize: 13,
-          fontWeight: 600,
-        }}
-      >
-        <House size={14} className="xps-icon" />
-        Home
-      </button>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 240 }} className="truncate">
+        {sectionNote}
+      </div>
 
       <button
-        onClick={onOpenAdmin}
+        onClick={onOpenLogin}
         className="xps-electric-hover"
         style={{
           position: 'relative',
@@ -272,8 +216,8 @@ export default function Header({ activePanel, onGoHome, onOpenAdmin, onNavigate,
           fontWeight: 600,
         }}
       >
-        <Shield size={14} className="xps-icon" />
-        Admin
+        <KeyRound size={14} className="xps-icon" />
+        Sign In
       </button>
 
       <div
