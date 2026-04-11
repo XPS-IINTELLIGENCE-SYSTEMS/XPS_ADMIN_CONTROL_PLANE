@@ -270,7 +270,7 @@ export default function AdminPage() {
         <SummaryCard label="Approval mode" value={governance.requireApproval ? 'On' : 'Off'} note={`Autonomy: ${governance.autonomyLevel}`} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)', gap: 18, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(320px, 1fr)', gap: 18, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Panel title="Core connectors" subtitle="Keep only the systems that support the intended app experience">
             <div>
