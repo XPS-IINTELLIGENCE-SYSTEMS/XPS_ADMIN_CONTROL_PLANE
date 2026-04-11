@@ -625,6 +625,15 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     return null;
   };
 
+  const findBuilderPage = (rawLabel) => {
+    const label = `${rawLabel || ''}`.trim().toLowerCase();
+    if (!label) return null;
+    const uiState = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE);
+    return uiState.site.pages.find((page) =>
+      [page.title, page.navLabel, page.route].some((value) => `${value || ''}`.toLowerCase() === label)
+    ) || null;
+  };
+
   const parseUiCommand = (prompt) => {
     const lower = prompt.toLowerCase();
     if (/rollback|revert|undo/.test(lower)) return { intent: 'rollback' };
@@ -644,9 +653,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
     const pageVisibilityMatch = prompt.match(/(show|hide)\s+page\s+["“]?([^"\n”]+)["”]?/i);
     if (pageVisibilityMatch) {
       const action = pageVisibilityMatch[1].toLowerCase();
-      const label = pageVisibilityMatch[2].trim();
-      const target = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE)
-        .site.pages.find((page) => [page.title, page.navLabel, page.route].some((value) => value?.toLowerCase() === label.toLowerCase()));
+      const target = findBuilderPage(pageVisibilityMatch[2]);
       if (target) {
         return {
           intent: 'preview',
@@ -658,8 +665,7 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
 
     const navLabelMatch = prompt.match(/nav(?:igation)? label for ["“]?([^"\n”]+)["”]?(?: to)? ["“]?([^"\n”]+)["”]?/i);
     if (navLabelMatch) {
-      const target = normalizeUiState((objects.find(o => o.type === OBJ_TYPE.UI && o.meta?.uiEditor)?.meta?.uiState) || DEFAULT_UI_STATE)
-        .site.pages.find((page) => [page.title, page.navLabel, page.route].some((value) => value?.toLowerCase() === navLabelMatch[1].trim().toLowerCase()));
+      const target = findBuilderPage(navLabelMatch[1]);
       if (target) {
         return {
           intent: 'preview',

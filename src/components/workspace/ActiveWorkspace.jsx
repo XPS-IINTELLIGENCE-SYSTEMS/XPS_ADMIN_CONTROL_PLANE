@@ -1602,8 +1602,8 @@ function UiCanvas({ state, selectedId, onSelect, previewMode }) {
     : (site.navItems || []).map((item, index) => ({ id: `${item}-${index}`, label: item }));
   const moduleToggles = site.moduleToggles || {};
   const capabilityToggles = site.capabilityToggles || {};
-  const headingScale = Number(theme.headingScale || 1.2);
-  const bodyScale = Number(theme.bodyScale || 1);
+  const headingScale = Math.max(0.9, Math.min(2.4, Number(theme.headingScale || 1.2)));
+  const bodyScale = Math.max(0.85, Math.min(1.6, Number(theme.bodyScale || 1)));
   return (
     <div style={{
       background: theme.surface,

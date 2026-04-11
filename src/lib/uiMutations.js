@@ -12,6 +12,22 @@ function createDefaultPage(overrides = {}) {
   };
 }
 
+function generateRouteFromTitle(title) {
+  const slug = `${title || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return `/${slug || 'new-page'}`;
+}
+
+function ensureUniqueRoute(route, pages = []) {
+  const existing = new Set((pages || []).map((page) => page?.route).filter(Boolean));
+  if (!existing.has(route)) return route;
+  let suffix = 2;
+  while (existing.has(`${route}-${suffix}`)) suffix += 1;
+  return `${route}-${suffix}`;
+}
+
 export const DEFAULT_UI_STATE = {
   site: {
     pageTitle: 'XPS Operator Workspace',
@@ -222,7 +238,7 @@ export function applyUiPatch(state, patch) {
       ? { title: patch.addPage }
       : (patch.addPage || {});
     const title = pagePatch.title || 'New Page';
-    const route = pagePatch.route || `/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'new-page'}`;
+    const route = ensureUniqueRoute(pagePatch.route || generateRouteFromTitle(title), normalizePages(next.site));
     const page = createDefaultPage({
       title,
       route,

@@ -2009,7 +2009,7 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
     return created;
   };
 
-  const getBuilderState = () => {
+  const getOrCreateBuilderState = () => {
     const target = ensureUiEditor();
     const appliedState = normalizeUiState(target.meta?.uiState || DEFAULT_UI_STATE);
     const previewState = target.meta?.preview?.state ? normalizeUiState(target.meta.preview.state) : null;
@@ -2025,7 +2025,7 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
       setBuilderNotice('Builder mutation is blocked because site mutations are disabled in governance.');
       return;
     }
-    const { target, appliedState } = getBuilderState();
+    const { target, appliedState } = getOrCreateBuilderState();
     const nextState = normalizeUiState(applyUiPatch(appliedState, patch));
     const validation = validateUiState(nextState);
     const preview = {
@@ -2152,14 +2152,22 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
   };
 
   const stageNewPage = () => {
-    const { state } = getBuilderState();
+    const { state } = getOrCreateBuilderState();
     const pageTitle = `Admin Page ${state.site.pages.length + 1}`;
     stageBuilderPreview({ addPage: { title: pageTitle, navLabel: pageTitle } }, `Create page ${pageTitle}`, 'admin-page-create');
   };
 
   const stagePageVisibilityToggle = () => {
-    const { state } = getBuilderState();
-    const targetPage = [...(state.site.pages || [])].reverse().find((page) => page.visible !== false) || state.site.pages?.[0];
+    const { state } = getOrCreateBuilderState();
+    let targetPage = null;
+    const pages = state.site.pages || [];
+    for (let index = pages.length - 1; index >= 0; index -= 1) {
+      if (pages[index]?.visible !== false) {
+        targetPage = pages[index];
+        break;
+      }
+    }
+    targetPage = targetPage || pages[0];
     if (!targetPage) {
       setBuilderNotice('No governed page is available to toggle.');
       return;
@@ -2172,7 +2180,7 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
   };
 
   const stageModuleToggle = () => {
-    const { state } = getBuilderState();
+    const { state } = getOrCreateBuilderState();
     const enabled = state.site.moduleToggles?.deploymentPanel !== false;
     stageBuilderPreview(
       { site: { moduleToggles: { deploymentPanel: !enabled } } },
@@ -2182,7 +2190,7 @@ function BuilderSection({ browserWorkerConfigured, openaiConfigured, geminiConfi
   };
 
   const generateBuilderArtifact = (kind) => {
-    const { target, state, previewState } = getBuilderState();
+    const { target, state, previewState } = getOrCreateBuilderState();
     const pages = state.site.pages || [];
     const visiblePages = pages.filter((page) => page.visible !== false);
     if (kind === 'agent-builder') {
