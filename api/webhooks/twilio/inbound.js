@@ -1,5 +1,7 @@
 import { recordInboundEvent } from '../../_runtimeStore.js';
 
+const INBOUND_TWIML_MESSAGE = 'Inbound Twilio call received. Event recorded by the XPS runtime. Operator continuation remains governed by the active runtime path.';
+
 function parseBody(req) {
   if (typeof req.body === 'string') {
     return Object.fromEntries(new URLSearchParams(req.body));
@@ -30,5 +32,5 @@ export default async function handler(req, res) {
   });
 
   res.setHeader('Content-Type', 'text/xml; charset=utf-8');
-  return res.status(200).send(twiml('Inbound Twilio call received. Event recorded by the XPS runtime. Operator continuation remains governed by the active runtime path.'));
+  return res.status(200).send(twiml(INBOUND_TWIML_MESSAGE));
 }

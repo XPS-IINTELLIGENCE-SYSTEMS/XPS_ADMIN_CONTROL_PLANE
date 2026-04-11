@@ -111,7 +111,7 @@ export function updateGroupJobStatus(groupId, jobId, status, workspaceCtx) {
   if (group.history.length > 20) group.history.length = 20;
 
   if (allDone) {
-    group.status = anyError || anyBlocked || anyCancelled ? 'partial_failure' : 'complete';
+    group.status = anyError || anyBlocked || anyCancelled ? 'partial-failure' : 'complete';
 
     if (group.wsObjId) {
       const completed = group.jobs.filter(j => j.status === 'complete').length;

@@ -245,7 +245,7 @@ export function getRuntimeSnapshot(env = process.env, req = null) {
     environment: {
       runtime: runtimeEnv,
       baseUrl,
-      historyStore: env.SUPABASE_URL ? 'supabase-or-client-ledger' : 'ephemeral-process-memory',
+      historyStore: env.SUPABASE_URL ? 'persistence-configured' : 'ephemeral-process-memory',
       fallbackRouting: [
         browserWorkerUrl
           ? 'Browser jobs route to configured worker target.'
