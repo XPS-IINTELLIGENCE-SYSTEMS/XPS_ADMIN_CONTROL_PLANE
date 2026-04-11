@@ -82,6 +82,8 @@ const SIGN_IN_LINKS = [
   { id: 'supabase', label: 'Supabase dashboard', note: 'Open the Supabase dashboard sign-in page.', url: 'https://supabase.com/dashboard' },
 ];
 
+const CHAT_RAIL_AGENTS = new Set(['Assistant', 'Research', 'Connectors']);
+
 function loadCustomConnectors() {
   if (typeof window === 'undefined') return [];
   try {
@@ -147,6 +149,12 @@ function readLiveStatus(liveStatus, connectorId) {
   return 'blocked';
 }
 
+function isLegacyChatWorkspaceObject(item) {
+  if (!item) return false;
+  if (item.meta?.source === 'chat-rail') return true;
+  return Boolean(item.meta?.mode && CHAT_RAIL_AGENTS.has(item.agent));
+}
+
 function inputStyle() {
   return {
     width: '100%',
@@ -198,6 +206,11 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   }, []);
 
   useEffect(() => {
+    const filteredObjects = objects.filter((item) => !isLegacyChatWorkspaceObject(item));
+    if (filteredObjects.length !== objects.length) {
+      resetWorkspace(filteredObjects);
+      return;
+    }
     const hasLegacyWorkspace = objects.some((item) => item.type === OBJ_TYPE.UI || item.title === 'UI Editor Canvas' || item.meta?.uiEditor);
     if (objects.length > 0 && !hasLegacyWorkspace) return;
     const content = [
