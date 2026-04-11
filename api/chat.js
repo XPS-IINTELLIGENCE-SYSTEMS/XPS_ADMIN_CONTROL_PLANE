@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       workspace_object: {
         type:    'runtime_state',
         title:   'Synthetic Fallback',
-        content: `[Synthetic] ${agent} — no live provider is configured.\n\nSet OPENAI_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL, or add a session credential in Admin → Overview.`,
+        content: `[Synthetic] ${agent} — no live provider is configured.\n\nSet GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL, or add a session credential in Admin → Overview.`,
         meta:    { provider: routing.provider, model: routing.model, mode: 'synthetic', reason: routing.reason },
       },
       steps: [

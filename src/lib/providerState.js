@@ -7,6 +7,8 @@ const DEFAULT_MODELS = {
   ollama: 'llama3.1:8b',
 };
 
+const DEFAULT_PROVIDER_ORDER = ['groq', 'openai', 'gemini', 'ollama'];
+
 const SUGGESTED_MODELS = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
@@ -83,7 +85,7 @@ export function resolveClientProviderState(apiState = null, connectionPrefs = {}
   const activeFromApi = apiState?.llm?.active;
   const resolvedActive = activeFromApi && activeFromApi !== 'none' && providers[activeFromApi]?.configured
     ? activeFromApi
-    : ['openai', 'groq', 'gemini', 'ollama'].find((key) => providers[key].configured) || 'none';
+    : DEFAULT_PROVIDER_ORDER.find((key) => providers[key].configured) || 'none';
 
   return {
     llm: {

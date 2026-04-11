@@ -146,6 +146,16 @@ function buildModelProfiles(providerMap) {
   const hasAnyLive = ['openai', 'groq', 'gemini', 'ollama'].some((key) => providerMap[key]?.available);
   return [
     {
+      id: 'groq',
+      label: 'Groq · Llama 3.3 70B',
+      provider: 'groq',
+      backendModel: 'llama-3.3-70b-versatile',
+      available: !!providerMap.groq?.available,
+      truth: 'Groq primary live lane.',
+      status: providerMap.groq?.available ? 'live' : 'blocked',
+      systemHint: 'Use concise, fast, reasoning-oriented responses optimized for a Groq-hosted model.',
+    },
+    {
       id: 'chatgpt',
       label: 'ChatGPT · GPT-4o Mini',
       provider: 'openai',
@@ -164,16 +174,6 @@ function buildModelProfiles(providerMap) {
       truth: 'Direct GitHub Copilot product-session passthrough is unsupported. This uses the active live provider as a truthful substitute.',
       status: hasAnyLive ? 'live' : 'blocked',
       systemHint: 'Operate like a code-focused Copilot-style assistant, but be explicit that this is a substitute API path rather than a direct Copilot session.',
-    },
-    {
-      id: 'groq',
-      label: 'Groq · Llama 3.3 70B',
-      provider: 'groq',
-      backendModel: 'llama-3.3-70b-versatile',
-      available: !!providerMap.groq?.available,
-      truth: 'Groq API path.',
-      status: providerMap.groq?.available ? 'live' : 'blocked',
-      systemHint: 'Use concise, fast, reasoning-oriented responses optimized for a Groq-hosted model.',
     },
     {
       id: 'gemini',
@@ -309,13 +309,13 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
   const [providerOpen, setProviderOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState('auto');
   const [modelOpen, setModelOpen] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState('chatgpt');
+  const [selectedProfileId, setSelectedProfileId] = useState('groq');
   const [selectedModel, setSelectedModel] = useState('');
-  const [messages, setMessages] = useState([{
-    role: 'assistant',
-    content: '— awaiting configuration —\n\nSelect an agent and configure your API key to begin live orchestration. Running in synthetic mode.',
-    agent: 'orchestrator',
-  }]);
+    const [messages, setMessages] = useState([{
+      role: 'assistant',
+      content: 'Groq is the primary live lane.\n\nSelect an agent and start a prompt. Synthetic fallback only appears if no live provider is available.',
+      agent: 'orchestrator',
+    }]);
   const [input, setInput]         = useState('');
   const [loading, setLoading]     = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -1288,10 +1288,10 @@ export default function ChatRail({ onWorkspaceAction, onNavigate }) {
       });
       setStatus(wsObjId, RUN_STATUS.ERROR);
       const syntheticReplies = {
-        orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add OPENAI_API_KEY to enable live responses.`,
+        orchestrator: `[Synthetic] XPS Orchestrator received: "${prompt}". No live API configured — running in synthetic mode. Add GROQ_API_KEY to enable live responses.`,
         research:     `[Synthetic] Research Agent: Query queued for "${prompt}". No live backend — synthetic mode active.`,
         scraper:      `[Synthetic] Scraper Agent: Target queued. Use the Scraper panel to run live scrape jobs.`,
-        default:      `[Synthetic] Agent offline — set OPENAI_API_KEY to enable live responses.`,
+        default:      `[Synthetic] Agent offline — set GROQ_API_KEY to enable live responses.`,
       };
       const syntheticContent = syntheticReplies[agent] || syntheticReplies.default;
       setMessages(prev => [...prev, { role: 'assistant', content: syntheticContent, agent, synthetic: true, profileLabel: selectedModelProfile?.label }]);

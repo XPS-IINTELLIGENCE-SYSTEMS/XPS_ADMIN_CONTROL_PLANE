@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, RefreshCw, Shield, UserRoundCheck, Wand2 } from 'lucide-react';
 import Panel from '../components/ui/Panel.jsx';
-import { supabase, signInWithProvider, signInWithEmail, signOut, getSession } from '../lib/supabaseClient.js';
+import { getSession, getSupabaseClient, signInWithProvider, signInWithEmail, signOut } from '../lib/supabaseClient.js';
 import { getGovernance, setGovernance, subscribeGovernance } from '../lib/governance.js';
 import { getConnectionPrefs, subscribeConnectionPrefs, maskSecret } from '../lib/connectionPrefs.js';
 
@@ -59,6 +59,39 @@ function ToggleRow({ label, value, note, onToggle }) {
   );
 }
 
+function buildAccountEntries(liveStatus) {
+  return [
+    {
+      id: 'supabase',
+      label: 'Supabase',
+      url: liveStatus?.supabase?.projectUrl ? `https://${liveStatus.supabase.projectUrl}` : 'https://supabase.com/dashboard',
+      mode: liveStatus?.supabase?.mode || 'blocked',
+      note: liveStatus?.supabase?.configured ? 'Project login and auth callbacks live here.' : 'Supabase project is not yet configured in runtime.',
+    },
+    {
+      id: 'github',
+      label: 'GitHub',
+      url: 'https://github.com/login',
+      mode: liveStatus?.github?.mode || 'blocked',
+      note: liveStatus?.github?.configured ? `Repo target ${liveStatus.github.repo || 'connected'} is available.` : 'Open GitHub sign-in for repo account access.',
+    },
+    {
+      id: 'vercel',
+      label: 'Vercel',
+      url: 'https://vercel.com/login',
+      mode: liveStatus?.vercel?.mode || 'blocked',
+      note: liveStatus?.vercel?.configured ? `Project ${liveStatus.vercel.projectId || 'connected'} is wired.` : 'Open Vercel sign-in to access deployment controls.',
+    },
+    {
+      id: 'google-workspace',
+      label: 'Google Workspace',
+      url: 'https://accounts.google.com/',
+      mode: liveStatus?.google?.mode || 'blocked',
+      note: liveStatus?.google?.configured ? `Project ${liveStatus.google.project || 'connected'} is installed.` : 'Open Google sign-in for Workspace and Cloud account access.',
+    },
+  ];
+}
+
 export default function AdminPage() {
   const [liveStatus, setLiveStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -92,12 +125,12 @@ export default function AdminPage() {
     getSession().then((nextSession) => {
       if (mounted) setSession(nextSession);
     }).catch(() => {});
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = getSupabaseClient().auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
     });
     return () => {
       mounted = false;
-      listener?.subscription?.unsubscribe?.();
+      authListener?.subscription?.unsubscribe?.();
     };
   }, []);
 
@@ -136,6 +169,7 @@ export default function AdminPage() {
     { key: 'connectorPermissions', label: 'Enable connector actions', note: 'Allow connected systems to be used inside workflows.' },
     { key: 'browserExecution', label: 'Browser execution', note: 'Only enable when a browser worker is configured.' },
   ];
+  const accountEntries = useMemo(() => buildAccountEntries(liveStatus), [liveStatus]);
 
   const handleOAuth = async (provider) => {
     setAuthStatus('');
@@ -243,6 +277,9 @@ export default function AdminPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Panel title="Access" subtitle="Keep admin entry simple and readable">
             <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Workspace entry stays click-through. Connected auth here is optional and only used for linked admin actions.
+              </div>
               <button data-testid="auth-google-btn" onClick={() => handleOAuth('google')} style={authButtonStyle()}>
                 <UserRoundCheck size={14} />
                 Continue with Google
@@ -262,6 +299,22 @@ export default function AdminPage() {
                 </button>
               </div>
               {authStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{authStatus}</div> : null}
+            </div>
+          </Panel>
+
+          <Panel title="Connected account entry" subtitle="Typical website sign-in paths for linked systems">
+            <div style={{ display: 'grid', gap: 10 }}>
+              {accountEntries.map((entry) => (
+                <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center', padding: '10px 12px', background: 'var(--bg-card-alt)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{entry.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{entry.note}</div>
+                  </div>
+                  <button onClick={() => window.open(entry.url, '_blank', 'noopener,noreferrer')} style={authButtonStyle(entry.mode === 'live')}>
+                    Open sign-in
+                  </button>
+                </div>
+              ))}
             </div>
           </Panel>
 

@@ -47,8 +47,8 @@ const DEFAULTS = {
   genericWebhookUrl: '',
   repoTarget: '',
   deploymentTarget: 'preview',
-  providerPreference: 'auto',
-  bytebotProvider: 'auto',
+  providerPreference: 'groq',
+  bytebotProvider: 'groq',
 };
 
 function getStorage(scope) {
