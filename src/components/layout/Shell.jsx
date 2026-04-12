@@ -4,6 +4,7 @@ import Header from './Header.jsx';
 import CenterWorkspace from '../CenterWorkspace.jsx';
 import ChatRail from '../ChatRail.jsx';
 import LoginPage from '../LoginPage.jsx';
+import HomePage from '../HomePage.jsx';
 import { WorkspaceProvider } from '../../lib/workspaceEngine.jsx';
 import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
@@ -17,7 +18,7 @@ function getViewportWidth() {
 }
 
 export default function Shell() {
-  const [page, setPage] = useState('login');
+  const [page, setPage] = useState('landing');
   const [activePanel, setActivePanel] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(getViewportWidth);
@@ -49,6 +50,11 @@ export default function Shell() {
 
   const openLogin = useCallback(() => {
     setPage('login');
+    setMobileNavOpen(false);
+  }, []);
+
+  const openLanding = useCallback(() => {
+    setPage('landing');
     setMobileNavOpen(false);
   }, []);
 
@@ -92,7 +98,9 @@ export default function Shell() {
   return (
     <WorkspaceProvider>
       {page === 'login' ? (
-        <LoginPage onContinue={() => enterApp('overview')} />
+        <LoginPage onContinue={() => enterApp('overview')} onBack={openLanding} />
+      ) : page === 'landing' ? (
+        <HomePage onStartSignIn={openLogin} onEnterApp={enterApp} />
       ) : (
         <div
           style={{
@@ -165,6 +173,7 @@ export default function Shell() {
                   onNavigate={navigateToPanel}
                   onOpenDashboard={() => setDashboardOpen(true)}
                   dashboardOpen={dashboardOpen}
+                  isMobile={isMobile}
                 />
               </main>
 
@@ -202,19 +211,20 @@ export default function Shell() {
                   zIndex: 40,
                 }}
               />
-              <aside
-                data-testid="dashboard-drawer"
-                style={{
-                  position: 'fixed',
-                  inset: 'calc(var(--header-h) + 8px) 8px 8px 8px',
-                  zIndex: 41,
-                  border: '1px solid var(--border)',
-                  borderRadius: 18,
-                  background: 'var(--bg-sidebar)',
-                  overflow: 'hidden',
-                  boxShadow: 'var(--shadow-lg)',
-                }}
-              >
+               <aside
+                 data-testid="dashboard-drawer"
+                 style={{
+                   position: 'fixed',
+                   inset: 'auto 0 0 0',
+                   height: 'min(78vh, 720px)',
+                   zIndex: 41,
+                   borderTop: '1px solid var(--border)',
+                   borderRadius: '22px 22px 0 0',
+                   background: 'var(--bg-sidebar)',
+                   overflow: 'hidden',
+                   boxShadow: 'var(--shadow-lg)',
+                 }}
+               >
                 <CenterWorkspace activePanel={activePanel} onNavigate={navigateToPanel} onOpenLogin={openLogin} />
               </aside>
             </>

@@ -109,7 +109,7 @@ function attachmentQueueText(attachments) {
   return `\n\nAttachment queue:\n${attachments.map((item) => `- ${item.name} (${item.sizeLabel})`).join('\n')}`;
 }
 
-export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, dashboardOpen }) {
+export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, dashboardOpen, isMobile = false }) {
   const [thread, setThread] = useState(loadThread);
   const [mode, setMode] = useState('assistant');
   const [composer, setComposer] = useState('');
@@ -285,11 +285,11 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--bg-root)' }}>
-      <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(180deg, rgba(17,19,24,0.95) 0%, rgba(8,9,12,0.92) 100%)' }}>
+      <div style={{ padding: isMobile ? '16px 14px 14px' : '20px 20px 16px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(180deg, rgba(17,19,24,0.95) 0%, rgba(8,9,12,0.92) 100%)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: 'var(--text-muted)' }}>PRIMARY CHAT</div>
-            <div className="xps-gold-text" style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>Operational AI agent</div>
+            <div className="xps-gold-text" style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, marginTop: 4 }}>Operational AI agent</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6, maxWidth: 780 }}>
               {MODE_CONFIG[mode].note}
             </div>
@@ -323,7 +323,7 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${isMobile ? 148 : 180}px, 1fr))`, gap: 12, marginTop: 16 }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Conversation mode</span>
             <select
@@ -390,11 +390,11 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
                 fontWeight: 700,
               }}
             >
-              <span>{dashboardOpen ? 'Dashboard open' : 'Open dashboard'}</span>
-              <ChevronRight size={15} className="xps-icon" />
-            </button>
+                <span>{dashboardOpen ? 'Dashboard open' : isMobile ? 'Pull dashboard' : 'Open dashboard'}</span>
+                <ChevronRight size={15} className="xps-icon" />
+              </button>
+            </div>
           </div>
-        </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
           {QUICK_PROMPTS.map((preset) => (
@@ -419,7 +419,7 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px', display: 'grid', gap: 14 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '14px' : '20px', display: 'grid', gap: 14 }}>
         {thread.map((message) => {
           const isAssistant = message.role === 'assistant';
           const metaTone = getProviderTone(message.meta?.mode);
@@ -475,10 +475,10 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
         <div ref={threadEndRef} />
       </div>
 
-      <div style={{ padding: '18px 20px 20px', borderTop: '1px solid var(--border)', background: 'rgba(12,13,17,0.88)' }}>
+      <div style={{ padding: isMobile ? '14px 14px 18px' : '18px 20px 20px', borderTop: '1px solid var(--border)', background: 'rgba(12,13,17,0.88)' }}>
         {!llmState.providers.groq?.configured ? (
           <div style={{ marginBottom: 12, borderRadius: 14, border: '1px solid rgba(234,179,8,0.28)', background: 'rgba(234,179,8,0.08)', padding: '12px 14px', color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.6 }}>
-            Groq is not configured yet. Open the dashboard drawer → Connectors and add a Groq API key to make the chat fully live.
+            Groq full LLM is not configured yet. Open the dashboard drawer → Connectors and add a Groq API key to make the chat fully live.
           </div>
         ) : null}
 
@@ -504,7 +504,7 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
           placeholder={`Message ${MODE_CONFIG[mode].label}…`}
           style={{
             width: '100%',
-            minHeight: 126,
+            minHeight: isMobile ? 112 : 126,
             resize: 'vertical',
             background: 'var(--bg-card)',
             border: '1px solid var(--border)',

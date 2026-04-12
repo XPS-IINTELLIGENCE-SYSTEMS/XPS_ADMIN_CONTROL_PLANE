@@ -1,142 +1,116 @@
 import React from 'react';
-import { ArrowRight, BarChart2, Blocks, FileText, FlaskConical, LayoutDashboard, Plug, Send, Settings, Shield, Target, Users, BookOpen, Eye } from 'lucide-react';
+import { ArrowRight, Bot, LayoutDashboard, MenuSquare, ShieldCheck, Sparkles } from 'lucide-react';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4af52';
 
-const featureCards = [
-  { panel: 'workspace', title: 'Workspace', note: 'Interactive editor canvas with live artifacts and generated UI.', icon: Blocks },
-  { panel: 'dashboard', title: 'Dashboard', note: 'Daily revenue, pipeline, and territory priorities.', icon: LayoutDashboard },
-  { panel: 'crm', title: 'CRM', note: 'Customer relationship activity and open opportunities.', icon: Users },
-  { panel: 'leads', title: 'Leads', note: 'Qualification, scoring, and lead routing.', icon: Target },
-  { panel: 'research', title: 'Research Lab', note: 'Account research and competitive intelligence.', icon: FlaskConical },
-  { panel: 'outreach', title: 'Outreach', note: 'Sequences, replies, and follow-up timing.', icon: Send },
-  { panel: 'proposals', title: 'Proposals', note: 'Proposal progress, approvals, and close support.', icon: FileText },
-  { panel: 'knowledge', title: 'Knowledge Base', note: 'Documentation, product notes, and internal references.', icon: BookOpen },
-  { panel: 'competition', title: 'Competition', note: 'Competitive signals and market watch placeholders.', icon: Eye },
-  { panel: 'analytics', title: 'Analytics', note: 'Revenue performance and activity trends.', icon: BarChart2 },
-  { panel: 'connectors', title: 'Connectors', note: 'Provider status and routing defaults.', icon: Plug },
-  { panel: 'admin', title: 'Admin', note: 'Focused runtime, access, and governance controls.', icon: Shield },
-  { panel: 'settings', title: 'Settings', note: 'Workspace defaults and credential readiness.', icon: Settings },
+const showcase = [
+  {
+    title: 'Mobile-first command view',
+    note: 'Primary chat stays in focus while the dashboard slides in when you need it.',
+    image: '/screenshots/ai-assistant.png',
+  },
+  {
+    title: 'Operations dashboard',
+    note: 'Review connector readiness, workspace outputs, and runtime health in one pullout.',
+    image: '/screenshots/dashboard.png',
+  },
+  {
+    title: 'Admin and connector controls',
+    note: 'Route Groq, credentials, and production checks from the same system.',
+    image: '/screenshots/connectors.png',
+  },
 ];
 
-const highlights = [
-  { value: '0', label: 'LOCATIONS' },
-  { value: '0', label: 'SALES STAFF' },
-  { value: '0', label: 'LEADS' },
-  { value: '0', label: 'AI SUPPORT' },
+const capabilities = [
+  { icon: Bot, title: 'Groq-first chat', note: 'Production chat routes to Groq first with the full 70B model default when credentials exist.' },
+  { icon: LayoutDashboard, title: 'Live dashboard drawer', note: 'Pull the dashboard over the chat instead of losing your current conversation.' },
+  { icon: MenuSquare, title: 'Slide-out mobile menu', note: 'Open the side navigation from the header on small screens without breaking layout.' },
+  { icon: ShieldCheck, title: 'Production posture', note: 'Keep connector status, sign-in access, and workspace artifacts in the same shell.' },
 ];
 
-export default function HomePage({ onEnterApp, onBackToLogin }) {
+export default function HomePage({ onStartSignIn, onEnterApp }) {
   return (
     <div
       style={{
         minHeight: '100vh',
-        background: 'radial-gradient(circle at top left, rgba(212,175,82,0.16), transparent 30%), radial-gradient(circle at bottom right, rgba(212,175,82,0.1), transparent 28%), #070707',
         color: '#fff',
+        background: 'radial-gradient(circle at top left, rgba(212,175,82,0.18), transparent 28%), radial-gradient(circle at bottom right, rgba(212,175,82,0.12), transparent 28%), #060606',
       }}
     >
-      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '32px 32px 48px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div className="xps-logo xps-brand-logo-glow" style={{ width: 56, height: 56, borderRadius: 16 }}>
-              <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      <div style={{ maxWidth: 1380, margin: '0 auto', padding: 'clamp(22px, 4vw, 36px)' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="xps-logo xps-brand-logo-glow" style={{ width: 56, height: 56, borderRadius: 18 }}>
+              <img src={BRAND_LOGO} alt="XPS" />
             </div>
             <div>
-              <div style={{ fontSize: 14, letterSpacing: 2.8, color: 'rgba(255,255,255,0.58)' }}>XPS INTELLIGENCE</div>
-              <div className="xps-gold-text" style={{ fontSize: 30, fontWeight: 800, marginTop: 4 }}>Sales Command Center</div>
+              <div className="xps-silver-text" style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1.6 }}>XPS INTELLIGENCE</div>
+              <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2.4, marginTop: 2 }}>PRODUCTION COMMAND CENTER</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button
-              onClick={onBackToLogin}
+              type="button"
+              onClick={onStartSignIn}
               style={{
                 border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(255,255,255,0.02)',
+                background: 'rgba(255,255,255,0.03)',
                 color: '#fff',
-                borderRadius: 12,
+                borderRadius: 14,
                 padding: '12px 18px',
-                fontWeight: 600,
+                fontWeight: 700,
               }}
             >
-              Back to Login
+              Sign in
             </button>
             <button
-              onClick={() => onEnterApp('workspace')}
+              type="button"
+              onClick={() => onEnterApp('overview')}
               style={{
                 border: 'none',
                 background: GOLD,
                 color: '#090909',
-                borderRadius: 12,
-                padding: '12px 20px',
+                borderRadius: 14,
+                padding: '12px 18px',
                 fontWeight: 800,
               }}
             >
-              Open Platform
+              Open chat shell
             </button>
           </div>
-        </div>
+        </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(0, 1.1fr)', gap: 28, alignItems: 'stretch' }}>
-          <section
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+            gap: 24,
+            alignItems: 'stretch',
+          }}
+        >
+          <div
             style={{
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 28,
-              padding: '40px 36px',
-              background: 'linear-gradient(180deg, rgba(15,15,15,0.96), rgba(9,9,9,0.96))',
-              boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
+              padding: 'clamp(24px, 5vw, 40px)',
+              background: 'linear-gradient(180deg, rgba(16,16,16,0.96), rgba(8,8,8,0.98))',
+              boxShadow: '0 30px 90px rgba(0,0,0,0.45)',
             }}
           >
-            <div className="xps-logo xps-brand-logo-glow" style={{ width: 72, height: 72, borderRadius: 20, marginBottom: 28 }}>
-              <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            </div>
-
-            <h1 style={{ fontSize: 'clamp(34px, 4vw, 58px)', lineHeight: 1.05, marginBottom: 18 }}>
-              XPS Intelligence
+            <div className="xps-gold-text" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2.4 }}>LANDING PAGE</div>
+            <h1 style={{ fontSize: 'clamp(42px, 7vw, 78px)', lineHeight: 0.98, marginTop: 16 }}>
+              Mobile-ready AI sales operations.
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.64)', fontSize: 20, lineHeight: 1.55, maxWidth: 560 }}>
-              AI-powered sales command center for Xtreme Polishing Systems.
+            <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.68)', lineHeight: 1.7, marginTop: 18, maxWidth: 620 }}>
+              Launch into a polished landing page, move through a simple sign-in, and land in a chat-first production shell with a side menu and dashboard drawer.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18, marginTop: 40 }}>
-              {highlights.map((item) => (
-                <div
-                  key={item.label}
-                  style={{
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 18,
-                    padding: '22px 18px',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ color: GOLD, fontSize: 38, fontWeight: 800, lineHeight: 1 }}>{item.value}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 13, letterSpacing: 1.2, marginTop: 10 }}>{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section
-            style={{
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 28,
-              padding: '32px 28px',
-              background: 'linear-gradient(180deg, rgba(11,11,11,0.98), rgba(8,8,8,0.96))',
-              boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-              <div>
-                <div className="xps-gold-text" style={{ fontSize: 14, fontWeight: 800, letterSpacing: 2 }}>HOME</div>
-                <h2 style={{ fontSize: 38, marginTop: 8 }}>Choose where to go next</h2>
-                <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: 15, marginTop: 10, maxWidth: 560 }}>
-                  The login page opens this portal, and every remaining XPS page stays one click away.
-                </p>
-              </div>
-
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 26 }}>
               <button
-                onClick={() => onEnterApp('workspace')}
+                type="button"
+                onClick={onStartSignIn}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -144,42 +118,82 @@ export default function HomePage({ onEnterApp, onBackToLogin }) {
                   border: 'none',
                   background: GOLD,
                   color: '#090909',
-                  borderRadius: 12,
-                  padding: '13px 18px',
+                  borderRadius: 14,
+                  padding: '14px 18px',
                   fontWeight: 800,
                 }}
               >
-                  Launch Workspace
+                Continue to sign in
                 <ArrowRight size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onEnterApp('overview')}
+                style={{
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: 'rgba(255,255,255,0.03)',
+                  color: '#fff',
+                  borderRadius: 14,
+                  padding: '14px 18px',
+                  fontWeight: 700,
+                }}
+              >
+                Preview the app
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
-              {featureCards.map(({ panel, title, note, icon: Icon }) => (
-                <button
-                  key={panel}
-                  onClick={() => onEnterApp(panel)}
-                  className="xps-electric-hover"
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginTop: 32 }}>
+              {capabilities.map(({ icon: Icon, title, note }) => (
+                <div
+                  key={title}
                   style={{
-                    position: 'relative',
                     border: '1px solid rgba(255,255,255,0.08)',
                     borderRadius: 18,
-                    background: 'rgba(255,255,255,0.025)',
-                    padding: '18px 18px 20px',
-                    textAlign: 'left',
-                    color: '#fff',
+                    padding: '18px 16px',
+                    background: 'rgba(255,255,255,0.02)',
                   }}
                 >
-                  <div style={{ width: 42, height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(212,175,82,0.12)', marginBottom: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(212,175,82,0.12)', marginBottom: 12 }}>
                     <Icon size={18} color={GOLD} />
                   </div>
-                  <div style={{ fontSize: 17, fontWeight: 700 }}>{title}</div>
-                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.56)', marginTop: 8, lineHeight: 1.6 }}>{note}</div>
-                </button>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+                  <div style={{ marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.58)', lineHeight: 1.6 }}>{note}</div>
+                </div>
               ))}
             </div>
-          </section>
-        </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 18 }}>
+            {showcase.map((item, index) => (
+              <article
+                key={item.title}
+                style={{
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 24,
+                  overflow: 'hidden',
+                  background: 'linear-gradient(180deg, rgba(15,15,15,0.96), rgba(8,8,8,0.96))',
+                  boxShadow: '0 26px 80px rgba(0,0,0,0.38)',
+                }}
+              >
+                <div style={{ aspectRatio: index === 0 ? '16 / 10' : '16 / 9', background: '#090909' }}>
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                </div>
+                <div style={{ padding: '18px 18px 20px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 999, padding: '6px 10px', background: 'rgba(212,175,82,0.1)', color: GOLD, fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>
+                    <Sparkles size={12} color={GOLD} />
+                    XPS EXPERIENCE
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 800, marginTop: 12 }}>{item.title}</div>
+                  <div style={{ marginTop: 8, fontSize: 14, color: 'rgba(255,255,255,0.58)', lineHeight: 1.7 }}>{item.note}</div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

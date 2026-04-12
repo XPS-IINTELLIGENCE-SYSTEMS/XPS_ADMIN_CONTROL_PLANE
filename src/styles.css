@@ -58,7 +58,8 @@ html, body, #root {
 }
 
 body {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Scrollbar */
@@ -291,5 +292,9 @@ svg.xps-icon {
 @media (max-width: 960px) {
   :root {
     --header-h: 72px;
+  }
+
+  html, body, #root {
+    min-height: 100%;
   }
 }
