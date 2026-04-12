@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">XPS Intelligence</title>
+  <desc id="desc">Gold and silver XPS app icon</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c0d11"/>
+      <stop offset="100%" stop-color="#161820"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c6a24f"/>
+      <stop offset="50%" stop-color="#eef3f8"/>
+      <stop offset="100%" stop-color="#c6a24f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <path d="M136 150h72l48 67 48-67h72l-84 111 92 121h-73l-55-76-55 76h-73l92-121-84-111Z" fill="url(#metal)"/>
+  <path d="M114 108h284" stroke="#c6a24f" stroke-opacity=".45" stroke-width="14" stroke-linecap="round"/>
+  <path d="M114 404h284" stroke="#c6a24f" stroke-opacity=".45" stroke-width="14" stroke-linecap="round"/>
+</svg>

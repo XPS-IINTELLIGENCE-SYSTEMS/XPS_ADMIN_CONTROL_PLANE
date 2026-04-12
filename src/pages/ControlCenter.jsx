@@ -1,5 +1,5 @@
-import React, { createRef, useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CirclePlus, KeyRound, LayoutDashboard, Pencil, Plug, RefreshCw, Trash2, Wand2 } from 'lucide-react';
+import React, { createRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, CheckCircle2, ChevronRight, CirclePlus, DatabaseZap, Download, FolderUp, KeyRound, LayoutDashboard, Pencil, Plug, RefreshCw, Trash2, Upload, Wand2 } from 'lucide-react';
 import Panel from '../components/ui/Panel.jsx';
 import ActiveWorkspace from '../components/workspace/ActiveWorkspace.jsx';
 import { useWorkspace, OBJ_TYPE, RUN_STATUS } from '../lib/workspaceEngine.jsx';
@@ -7,6 +7,9 @@ import { getConnectionPrefs, subscribeConnectionPrefs, updateConnectionPrefs, re
 
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 const CUSTOM_CONNECTORS_STORAGE_KEY = 'xps.custom-connectors.v1';
+const INGESTION_QUEUE_STORAGE_KEY = 'xps.ingestion.queue.v1';
+const BYTES_PER_KB = 1024;
+const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
 const sectionRefs = {
   overview: createRef(),
   workspace: createRef(),
@@ -15,6 +18,14 @@ const sectionRefs = {
 };
 
 const CORE_CONNECTORS = [
+  {
+    id: 'groq',
+    label: 'Groq runtime',
+    fields: [
+      { key: 'groqApiKey', label: 'API key', placeholder: 'gsk_...', secret: true },
+      { key: 'groqModel', label: 'Model', placeholder: 'llama-3.3-70b-versatile' },
+    ],
+  },
   {
     id: 'github',
     label: 'GitHub',
@@ -42,7 +53,7 @@ const CORE_CONNECTORS = [
   },
   {
     id: 'google',
-    label: 'Google Workspace',
+    label: 'Google Drive',
     fields: [
       { key: 'googleWorkspaceAdminEmail', label: 'Admin email', placeholder: 'admin@company.com' },
       { key: 'googleCloudProjectId', label: 'Cloud project', placeholder: 'xps-intelligence' },
@@ -72,6 +83,22 @@ const CORE_CONNECTORS = [
       { key: 'runtimeTarget', label: 'Runtime target', placeholder: 'local or cloud' },
     ],
   },
+  {
+    id: 'hubspot',
+    label: 'HubSpot',
+    fields: [
+      { key: 'hubspotApiKey', label: 'Private app token', placeholder: 'pat-...', secret: true },
+      { key: 'repoTarget', label: 'Sync target', placeholder: 'contacts, companies, deals' },
+    ],
+  },
+  {
+    id: 'airtable',
+    label: 'Airtable',
+    fields: [
+      { key: 'airtableApiKey', label: 'Personal access token', placeholder: 'pat...', secret: true },
+      { key: 'airtableBaseId', label: 'Base ID', placeholder: 'app...' },
+    ],
+  },
 ];
 
 const SIGN_IN_LINKS = [
@@ -99,6 +126,23 @@ function loadCustomConnectors() {
 function saveCustomConnectors(next) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(CUSTOM_CONNECTORS_STORAGE_KEY, JSON.stringify(next));
+}
+
+function loadIngestionQueue() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(INGESTION_QUEUE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIngestionQueue(next) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(INGESTION_QUEUE_STORAGE_KEY, JSON.stringify(next));
 }
 
 function emptyCustomConnector() {
@@ -137,15 +181,20 @@ function buildConnectorDrafts(connectionPrefs) {
   );
 }
 
-function readLiveStatus(liveStatus, connectorId) {
-  if (!liveStatus) return 'blocked';
-  if (connectorId === 'github') return liveStatus.github?.mode || 'blocked';
-  if (connectorId === 'supabase') return liveStatus.supabase?.mode || 'blocked';
-  if (connectorId === 'vercel') return liveStatus.vercel?.mode || 'blocked';
-  if (connectorId === 'google') return liveStatus.google?.mode || 'blocked';
-  if (connectorId === 'twilio') return liveStatus.twilio?.mode || 'blocked';
-  if (connectorId === 'sendgrid') return liveStatus.sendgrid?.mode || 'blocked';
-  if (connectorId === 'browser') return liveStatus.browser?.mode || 'blocked';
+function readLiveStatus(liveStatus, connectorId, connectionPrefs = {}) {
+  const status = liveStatus || {};
+  const googleConfigured = Boolean(connectionPrefs.googleWorkspaceAdminEmail || connectionPrefs.googleCloudProjectId);
+  const airtableConfigured = Boolean(connectionPrefs.airtableApiKey && connectionPrefs.airtableBaseId);
+  if (connectorId === 'groq') return status.groq?.mode || (connectionPrefs.groqApiKey ? 'live' : 'blocked');
+  if (connectorId === 'github') return status.github?.mode || 'blocked';
+  if (connectorId === 'supabase') return status.supabase?.mode || 'blocked';
+  if (connectorId === 'vercel') return status.vercel?.mode || 'blocked';
+  if (connectorId === 'google') return status.google?.mode || (googleConfigured ? 'ingest-only' : 'blocked');
+  if (connectorId === 'twilio') return status.twilio?.mode || 'blocked';
+  if (connectorId === 'sendgrid') return status.sendgrid?.mode || 'blocked';
+  if (connectorId === 'browser') return status.browser?.mode || 'blocked';
+  if (connectorId === 'hubspot') return status.hubspot?.mode || (connectionPrefs.hubspotApiKey ? 'ingest-only' : 'blocked');
+  if (connectorId === 'airtable') return status.airtable?.mode || (airtableConfigured ? 'ingest-only' : 'blocked');
   return 'blocked';
 }
 
@@ -178,6 +227,8 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   const [customDraft, setCustomDraft] = useState(emptyCustomConnector());
   const [editingCustomId, setEditingCustomId] = useState(null);
   const [connectorMessage, setConnectorMessage] = useState('');
+  const [ingestionQueue, setIngestionQueue] = useState(loadIngestionQueue);
+  const ingestionInputRef = useRef(null);
 
   const fetchStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -217,8 +268,8 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       '# Operations board',
       '',
       '- Use the quick actions above the workspace to create editable outputs.',
-      '- Keep chat pinned on the right for persistent command entry.',
-      '- Manage every connector from the unified section below.',
+      '- Keep the primary chat surface open for live operator work.',
+      '- Pull over the dashboard drawer for ingestion and connector setup.',
       '- Return to the sign-in screen from the access section whenever needed.',
     ].join('\n');
     resetWorkspace([
@@ -243,6 +294,15 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   const blockedCount = liveStatus?.summary?.blockedSystems?.length || 0;
   const activeProvider = liveStatus?.llm?.active || 'synthetic';
   const activeModel = liveStatus?.llm?.model || 'fallback';
+  const groqReady = Boolean(connectionPrefs.groqApiKey || liveStatus?.groq?.configured);
+
+  const pushIngestionItems = useCallback((items) => {
+    setIngestionQueue((current) => {
+      const next = [...items, ...current].slice(0, 12);
+      saveIngestionQueue(next);
+      return next;
+    });
+  }, []);
 
   const createWorkspaceItem = useCallback((title, content) => {
     createObject({
@@ -317,12 +377,104 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
     setConnectorMessage('Custom connector deleted.');
   };
 
+  const queueAttachmentIngestion = (event) => {
+    const next = Array.from(event.target.files || []).map((file) => ({
+      id: `attachment-${Date.now()}-${file.name}`,
+      label: file.name,
+      source: 'Attachment',
+      detail: file.size > BYTES_PER_MB
+        ? `${(file.size / BYTES_PER_MB).toFixed(1)} MB ready for ingestion`
+        : `${Math.max(1, Math.round(file.size / BYTES_PER_KB))} KB ready for ingestion`,
+      status: 'Queued',
+    }));
+    if (next.length) {
+      pushIngestionItems(next);
+      setConnectorMessage(`${next.length} attachment${next.length === 1 ? '' : 's'} queued for ingestion.`);
+    }
+    event.target.value = '';
+  };
+
+  const queueConnectorIngestion = (source, detail, panel = 'connectors') => {
+    pushIngestionItems([{
+      id: `${source}-${Date.now()}`,
+      label: source,
+      source,
+      detail,
+      status: 'Ready',
+    }]);
+    onNavigate?.(panel);
+  };
+
+  const downloadTemplate = () => {
+    if (typeof window === 'undefined') return;
+    const template = {
+      company: '',
+      contact: '',
+      email: '',
+      phone: '',
+      notes: '',
+      source: 'attachment',
+    };
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+    link.href = url;
+    link.download = 'xps-ingestion-template.json';
+    link.click();
+    window.URL.revokeObjectURL(url);
+    pushIngestionItems([{
+      id: `download-${Date.now()}`,
+      label: 'Template download',
+      source: 'Download',
+      detail: 'JSON ingestion template downloaded for offline prep.',
+      status: 'Ready',
+    }]);
+  };
+
+  const ingestionCards = [
+    {
+      title: 'Upload attachments',
+      note: 'Queue CSV, PDF, or spreadsheet files for staged ingestion.',
+      icon: Upload,
+      actionLabel: 'Choose files',
+      onClick: () => ingestionInputRef.current?.click(),
+    },
+    {
+      title: 'Download template',
+      note: 'Start from a zeroed JSON template before importing records.',
+      icon: Download,
+      actionLabel: 'Download',
+      onClick: downloadTemplate,
+    },
+    {
+      title: 'Google Drive',
+      note: 'Prepare a Drive-based ingest path and jump straight into connector setup.',
+      icon: FolderUp,
+      actionLabel: 'Connect Drive',
+      onClick: () => queueConnectorIngestion('Google Drive', 'Drive ingest handoff created — complete the connector fields to go live.'),
+    },
+    {
+      title: 'HubSpot',
+      note: 'Stage HubSpot ingestion and map records to your sales workflow.',
+      icon: DatabaseZap,
+      actionLabel: 'Connect HubSpot',
+      onClick: () => queueConnectorIngestion('HubSpot', 'HubSpot ingest handoff created — add the private app token to continue.'),
+    },
+    {
+      title: 'Airtable',
+      note: 'Set up Airtable sync for lightweight table-based ingestion.',
+      icon: Bot,
+      actionLabel: 'Connect Airtable',
+      onClick: () => queueConnectorIngestion('Airtable', 'Airtable ingest handoff created — add token and base ID to continue.'),
+    },
+  ];
+
   return (
     <div data-testid="control-center" style={{ display: 'grid', gap: 22, paddingBottom: 28 }}>
       <section ref={sectionRefs.overview} style={{ scrollMarginTop: 84 }}>
         <Panel
           title="Overview"
-          subtitle="One operational screen with the center workspace, unified connectors, access, and persistent chat"
+          subtitle="Zeroed ingestion dashboard with Groq readiness, source handoff, and production checks"
           actions={(
             <button
               type="button"
@@ -345,18 +497,74 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
             </button>
           )}
         >
+          <input ref={ingestionInputRef} type="file" multiple hidden onChange={queueAttachmentIngestion} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-            <SummaryCard label="Active provider" value={String(activeProvider).toUpperCase()} note={activeModel} icon={Wand2} />
-            <SummaryCard label="Connected systems" value={String(connectedCount)} note="Live connectors reporting ready" icon={CheckCircle2} />
-            <SummaryCard label="Blocked systems" value={String(blockedCount)} note="Needs credentials or runtime input" icon={Plug} />
-            <SummaryCard label="Workspace tabs" value={String(objects.length)} note="Editable outputs in the center workspace" icon={LayoutDashboard} />
+            <SummaryCard label="Records ingested" value="0" note="Dashboard starts clean until data is attached or connected." icon={LayoutDashboard} />
+            <SummaryCard label="Datasets live" value="0" note="No synthetic business metrics — waiting for your real inputs." icon={CheckCircle2} />
+            <SummaryCard label="Queue ready" value={String(ingestionQueue.length)} note="Attachment, download, and connector handoff queue." icon={FolderUp} />
+            <SummaryCard label="Groq runtime" value={groqReady ? 'READY' : 'BLOCKED'} note={groqReady ? (activeProvider === 'groq' ? activeModel : 'Configured and ready for live chat') : 'Add a Groq API key in connectors to activate live reasoning.'} icon={Wand2} />
           </div>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 18 }}>
-            <ActionButton icon={LayoutDashboard} onClick={() => onNavigate?.('workspace')}>Open workspace</ActionButton>
+            <ActionButton icon={Upload} onClick={() => ingestionInputRef.current?.click()}>Attach files</ActionButton>
+            <ActionButton icon={Download} onClick={downloadTemplate}>Download template</ActionButton>
             <ActionButton icon={Plug} onClick={() => onNavigate?.('connectors')}>Open connectors</ActionButton>
-            <ActionButton icon={KeyRound} onClick={() => onNavigate?.('access')}>Open access</ActionButton>
             <ActionButton icon={KeyRound} onClick={onOpenLogin}>Return to sign-in</ActionButton>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 18 }}>
+            {ingestionCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div key={card.title} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(198,162,79,0.12)' }}>
+                      <Icon size={18} className="xps-icon" />
+                    </div>
+                    <ChevronRight size={16} className="xps-icon" />
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 800, marginTop: 14 }}>{card.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>{card.note}</div>
+                  <div style={{ marginTop: 14 }}>
+                    <ActionButton icon={Icon} onClick={card.onClick}>{card.actionLabel}</ActionButton>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>Ingestion queue</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Zero-state launchpad for attachments, downloads, Google Drive, HubSpot, and Airtable.
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Live connectors: {connectedCount} · Blocked systems: {blockedCount}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {ingestionQueue.length === 0 ? (
+                <div style={{ border: '1px dashed var(--border)', borderRadius: 14, padding: 18, color: 'var(--text-secondary)', fontSize: 13 }}>
+                  Nothing queued yet. Add an attachment, download the template, or connect a source to start ingestion.
+                </div>
+              ) : ingestionQueue.map((item) => (
+                <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{item.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>{item.detail}</div>
+                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '5px 10px', background: 'rgba(34,197,94,0.14)', color: '#22c55e', fontSize: 12, fontWeight: 700 }}>
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {statusError ? <div style={{ marginTop: 14, color: '#fca5a5', fontSize: 12 }}>{statusError}</div> : null}
@@ -395,7 +603,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       </section>
 
       <section ref={sectionRefs.connectors} style={{ scrollMarginTop: 84 }}>
-        <Panel title="Unified connectors" subtitle="All connector inputs live here, with working add, modify, and delete actions">
+        <Panel title="Unified connectors" subtitle="Groq-first runtime setup plus Google Drive, HubSpot, Airtable, and runtime inputs">
           <div style={{ display: 'grid', gap: 16 }}>
             {CORE_CONNECTORS.map((connector) => (
               <div key={connector.id} style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16 }}>
@@ -406,7 +614,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
                       Keep runtime truth and connector input on the same screen.
                     </div>
                   </div>
-                  <ConnectorStatusPill status={readLiveStatus(liveStatus, connector.id)} />
+                  <ConnectorStatusPill status={readLiveStatus(liveStatus, connector.id, connectionPrefs)} />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -449,7 +657,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
               <ActionButton icon={CirclePlus} onClick={() => { setEditingCustomId(null); setCustomDraft(emptyCustomConnector()); }}>Add connector</ActionButton>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div style={{ display: 'grid', gap: 10 }}>
                 {customConnectors.length === 0 ? (
                   <div style={{ border: '1px dashed var(--border)', borderRadius: 14, padding: 18, color: 'var(--text-secondary)', fontSize: 13 }}>

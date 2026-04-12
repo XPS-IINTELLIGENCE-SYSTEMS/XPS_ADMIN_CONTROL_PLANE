@@ -13,6 +13,11 @@ async function signIn(page) {
   await page.goto('/');
   await page.waitForSelector('text=Welcome back');
   await page.getByRole('button', { name: 'Sign In' }).click();
+  await expect(page.getByTestId('chat-input')).toBeVisible();
+}
+
+async function openDashboard(page) {
+  await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
   await expect(page.getByTestId('control-center')).toBeVisible();
 }
 
@@ -32,17 +37,21 @@ test.describe('XPS Intelligence simplified control center', () => {
     await screenshot(page, 'login-front-door');
   });
 
-  test('sign in opens the single-screen control center with persistent chat', async ({ page }) => {
+  test('sign in opens the chat-first shell with a dashboard drawer', async ({ page }) => {
     await signIn(page);
-    await expect(page.getByTestId('control-center').getByText('Unified connectors', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('control-center').getByText('Access and sign-in', { exact: true })).toBeVisible();
+    await expect(page.getByText('Primary chat is live.')).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
     await expect(page.getByTestId('chat-input')).toBeVisible();
-    await expect(page.getByText('Persistent chat is live on the right.')).toBeVisible();
+    await openDashboard(page);
+    await expect(page.getByTestId('control-center').getByText('Ingestion queue', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('control-center').getByText('Unified connectors', { exact: true })).toBeVisible();
     await screenshot(page, 'control-center-shell');
   });
 
   test('workspace quick actions create editable outputs', async ({ page }) => {
     await signIn(page);
+    await openDashboard(page);
+    await page.getByRole('banner').getByRole('button', { name: 'Workspace' }).click();
     await page.getByRole('button', { name: /Daily brief Create a short editable status brief for today\./ }).click();
     await expect(page.getByText('Review the hottest leads')).toBeVisible();
     await expect(page.getByText('Confirm connector health')).toBeVisible();
@@ -51,7 +60,8 @@ test.describe('XPS Intelligence simplified control center', () => {
 
   test('connectors are centralized and support add modify delete', async ({ page }) => {
     await signIn(page);
-    await page.locator('aside').getByRole('button', { name: 'Connectors' }).click();
+    await openDashboard(page);
+    await page.getByRole('banner').getByRole('button', { name: 'Connectors' }).click();
 
     await page.getByTestId('custom-connector-name').fill('Slack Alerts');
     await page.getByTestId('custom-connector-endpoint').fill('https://hooks.slack.test/services/initial');
@@ -69,8 +79,10 @@ test.describe('XPS Intelligence simplified control center', () => {
     await screenshot(page, 'connectors-crud');
   });
 
-  test('chat stays in the right rail and does not replace the center workspace', async ({ page }) => {
+  test('chat stays primary and does not replace workspace artifacts', async ({ page }) => {
     await signIn(page);
+    await openDashboard(page);
+    await page.getByRole('banner').getByRole('button', { name: 'Workspace' }).click();
     await expect(page.getByTestId('workspace-tab-bar')).toContainText('Operations board');
     await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
 
@@ -78,13 +90,14 @@ test.describe('XPS Intelligence simplified control center', () => {
     await page.getByTestId('chat-input').fill('Show me the connector changes I need to make today.');
     await page.getByRole('button', { name: 'Send' }).click();
 
-    await expect(page.getByText('I’ll keep connector guidance in this chat while the center stays on your control surfaces.')).toBeVisible();
+    await expect(page.getByText(/No live provider is configured/i)).toBeVisible();
     await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
   });
 
   test('access actions return to sign in and open real external sign-in pages', async ({ page }) => {
     await signIn(page);
-    await page.locator('aside').getByRole('button', { name: 'Access' }).click();
+    await openDashboard(page);
+    await page.getByRole('banner').getByRole('button', { name: 'Access' }).click();
 
     const [popup] = await Promise.all([
       page.waitForEvent('popup'),
@@ -101,5 +114,14 @@ test.describe('XPS Intelligence simplified control center', () => {
     await signIn(page);
     await page.getByRole('banner').getByRole('button', { name: 'Sign In' }).click();
     await expect(page.getByText('Welcome back')).toBeVisible();
+  });
+
+  test('mobile opens the dashboard drawer over the primary chat', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
+    await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
+    await expect(page.getByTestId('control-center')).toBeVisible();
+    await expect(page.getByText('Ingestion queue')).toBeVisible();
   });
 });
