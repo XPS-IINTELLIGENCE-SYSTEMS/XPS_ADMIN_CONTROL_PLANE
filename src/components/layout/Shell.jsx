@@ -36,9 +36,16 @@ export default function Shell() {
   }, [viewportWidth]);
 
   const enterApp = useCallback((panel = 'overview') => {
+    const width = getViewportWidth();
     setPage('app');
-    navigateToPanel(panel);
-  }, [navigateToPanel]);
+    setActivePanel(APP_SECTIONS.has(panel) ? panel : 'overview');
+    setMobileNavOpen(false);
+    if (width < MOBILE_BREAKPOINT) {
+      setDashboardOpen(false);
+    } else if (width >= WIDE_DRAWER_BREAKPOINT) {
+      setDashboardOpen(true);
+    }
+  }, []);
 
   const openLogin = useCallback(() => {
     setPage('login');

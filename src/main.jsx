@@ -21,7 +21,7 @@ class ErrorBoundary extends React.Component {
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           minHeight: '100vh', background: '#08090c', color: '#e2e8f0',
-          fontFamily: "'Inter', sans-serif", padding: 40,
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", padding: 40,
         }}>
           <div style={{ maxWidth: 520, width: '100%' }}>
             <div style={{ marginBottom: 12 }}><AlertTriangle size={28} color="#ef4444" /></div>

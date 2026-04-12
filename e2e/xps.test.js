@@ -17,7 +17,7 @@ async function signIn(page) {
 }
 
 async function openDashboard(page) {
-  await page.getByRole('button', { name: /show dashboard drawer|open dashboard/i }).click();
+  await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
   await expect(page.getByTestId('control-center')).toBeVisible();
 }
 
@@ -40,7 +40,7 @@ test.describe('XPS Intelligence simplified control center', () => {
   test('sign in opens the chat-first shell with a dashboard drawer', async ({ page }) => {
     await signIn(page);
     await expect(page.getByText('Primary chat is live.')).toBeVisible();
-    await expect(page.getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
     await expect(page.getByTestId('chat-input')).toBeVisible();
     await openDashboard(page);
     await expect(page.getByTestId('control-center').getByText('Ingestion queue', { exact: true })).toBeVisible();
@@ -119,8 +119,8 @@ test.describe('XPS Intelligence simplified control center', () => {
   test('mobile opens the dashboard drawer over the primary chat', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page);
-    await expect(page.getByRole('button', { name: 'Show dashboard drawer' })).toBeVisible();
-    await page.getByRole('button', { name: 'Show dashboard drawer' }).click();
+    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
+    await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
     await expect(page.getByTestId('control-center')).toBeVisible();
     await expect(page.getByText('Ingestion queue')).toBeVisible();
   });

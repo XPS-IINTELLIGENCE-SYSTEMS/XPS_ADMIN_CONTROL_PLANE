@@ -4,6 +4,7 @@ import { getConnectionPrefs, subscribeConnectionPrefs } from '../lib/connectionP
 import { resolveClientProviderState } from '../lib/providerState.js';
 
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
+const LEGACY_THREAD_STORAGE_KEY = 'xps.chat.thread.v3';
 const THREAD_STORAGE_KEY = 'xps.chat.thread.v4';
 
 const MODE_CONFIG = {
@@ -45,7 +46,8 @@ const QUICK_PROMPTS = [
 function loadThread() {
   if (typeof window === 'undefined') return DEFAULT_THREAD;
   try {
-    const raw = window.localStorage.getItem(THREAD_STORAGE_KEY);
+    const currentThreadRaw = window.localStorage.getItem(THREAD_STORAGE_KEY);
+    const raw = currentThreadRaw || window.localStorage.getItem(LEGACY_THREAD_STORAGE_KEY);
     if (!raw) return DEFAULT_THREAD;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_THREAD;
@@ -102,7 +104,7 @@ function buildCredentials(connectionPrefs) {
   };
 }
 
-function attachmentSummary(attachments) {
+function attachmentQueueText(attachments) {
   if (!attachments.length) return '';
   return `\n\nAttachment queue:\n${attachments.map((item) => `- ${item.name} (${item.sizeLabel})`).join('\n')}`;
 }
@@ -225,7 +227,7 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
       messages: [
         { role: 'system', content: buildSystemPrompt(mode, activePanel) },
         ...recentMessages,
-        { role: 'user', content: `${userText}${attachmentSummary(queuedAttachments)}` },
+        { role: 'user', content: `${userText}${attachmentQueueText(queuedAttachments)}` },
       ],
     };
 
@@ -240,8 +242,13 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
-      if (!response.ok && !data?.reply) throw new Error(`HTTP ${response.status}`);
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+      if (!response.ok && !data?.reply) throw new Error(data?.error || `Chat API request failed with HTTP ${response.status}`);
       const reply = data.reply || data.error || 'No response returned.';
       setThread((current) => [...current, {
         id: `assistant-${Date.now()}`,
@@ -291,7 +298,7 @@ export default function ChatRail({ activePanel, onNavigate, onOpenDashboard, das
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '7px 12px', background: `${runtimeTone.color}14`, border: `1px solid ${runtimeTone.color}24`, color: runtimeTone.color, fontSize: 12, fontWeight: 700 }}>
               <Activity size={13} />
-              {llmState.active === 'none' ? 'Synthetic fallback' : `${String(llmState.active).toUpperCase()} ready`}
+              {llmState.active === 'none' ? 'Synthetic fallback' : `${providerLabel(llmState.active)} ready`}
             </div>
             <button
               type="button"

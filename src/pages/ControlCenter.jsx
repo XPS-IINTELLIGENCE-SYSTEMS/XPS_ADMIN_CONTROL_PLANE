@@ -8,6 +8,8 @@ import { getConnectionPrefs, subscribeConnectionPrefs, updateConnectionPrefs, re
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 const CUSTOM_CONNECTORS_STORAGE_KEY = 'xps.custom-connectors.v1';
 const INGESTION_QUEUE_STORAGE_KEY = 'xps.ingestion.queue.v1';
+const BYTES_PER_KB = 1024;
+const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
 const sectionRefs = {
   overview: createRef(),
   workspace: createRef(),
@@ -181,16 +183,18 @@ function buildConnectorDrafts(connectionPrefs) {
 
 function readLiveStatus(liveStatus, connectorId, connectionPrefs = {}) {
   const status = liveStatus || {};
+  const googleConfigured = Boolean(connectionPrefs.googleWorkspaceAdminEmail || connectionPrefs.googleCloudProjectId);
+  const airtableConfigured = Boolean(connectionPrefs.airtableApiKey && connectionPrefs.airtableBaseId);
   if (connectorId === 'groq') return status.groq?.mode || (connectionPrefs.groqApiKey ? 'live' : 'blocked');
   if (connectorId === 'github') return status.github?.mode || 'blocked';
   if (connectorId === 'supabase') return status.supabase?.mode || 'blocked';
   if (connectorId === 'vercel') return status.vercel?.mode || 'blocked';
-  if (connectorId === 'google') return status.google?.mode || ((connectionPrefs.googleWorkspaceAdminEmail || connectionPrefs.googleCloudProjectId) ? 'ingest-only' : 'blocked');
+  if (connectorId === 'google') return status.google?.mode || (googleConfigured ? 'ingest-only' : 'blocked');
   if (connectorId === 'twilio') return status.twilio?.mode || 'blocked';
   if (connectorId === 'sendgrid') return status.sendgrid?.mode || 'blocked';
   if (connectorId === 'browser') return status.browser?.mode || 'blocked';
   if (connectorId === 'hubspot') return status.hubspot?.mode || (connectionPrefs.hubspotApiKey ? 'ingest-only' : 'blocked');
-  if (connectorId === 'airtable') return status.airtable?.mode || ((connectionPrefs.airtableApiKey && connectionPrefs.airtableBaseId) ? 'ingest-only' : 'blocked');
+  if (connectorId === 'airtable') return status.airtable?.mode || (airtableConfigured ? 'ingest-only' : 'blocked');
   return 'blocked';
 }
 
@@ -378,9 +382,9 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       id: `attachment-${Date.now()}-${file.name}`,
       label: file.name,
       source: 'Attachment',
-      detail: file.size > 1024 * 1024
-        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB ready for ingestion`
-        : `${Math.max(1, Math.round(file.size / 1024))} KB ready for ingestion`,
+      detail: file.size > BYTES_PER_MB
+        ? `${(file.size / BYTES_PER_MB).toFixed(1)} MB ready for ingestion`
+        : `${Math.max(1, Math.round(file.size / BYTES_PER_KB))} KB ready for ingestion`,
       status: 'Queued',
     }));
     if (next.length) {
