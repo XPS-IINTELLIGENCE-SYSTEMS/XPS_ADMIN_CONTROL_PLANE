@@ -19,7 +19,8 @@ const capabilities = [
   { icon: ShieldCheck, label: 'Mobile PWA shell' },
 ];
 
-const showcase = snapshotCatalog.slice(0, 4);
+const MAX_SHOWCASE_ITEMS = 4;
+const showcase = snapshotCatalog.slice(0, MAX_SHOWCASE_ITEMS);
 const includedPages = snapshotCatalog.map((item) => item.title);
 
 export default function HomePage({ onStartSignIn, onEnterApp }) {

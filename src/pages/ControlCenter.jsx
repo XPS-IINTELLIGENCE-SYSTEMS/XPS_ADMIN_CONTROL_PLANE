@@ -219,6 +219,8 @@ const ingestionTrendChart = [
   { name: 'Sun', files: 0 },
 ];
 
+const SNAPSHOT_WORKSPACE_NOTE = 'This repo snapshot is included in the centered dashboard gallery so the production reference stays visible while the live shell remains interactive.';
+
 export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }) {
   const { objects, createObject, resetWorkspace } = useWorkspace();
   const [liveStatus, setLiveStatus] = useState(null);
@@ -320,7 +322,7 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   const openSnapshotWorkspaceItem = useCallback((snapshot) => {
     createWorkspaceItem(
       `${snapshot.title} snapshot`,
-      `# ${snapshot.title}\n\n- Category: ${snapshot.category}\n- Reference image: ${snapshot.image}\n- Note: ${snapshot.note}\n\nThis repo snapshot is included in the centered dashboard gallery so the production reference stays visible while the live shell remains interactive.`,
+      `# ${snapshot.title}\n\n- Category: ${snapshot.category}\n- Reference image: ${snapshot.image}\n- Note: ${snapshot.note}\n\n${SNAPSHOT_WORKSPACE_NOTE}`,
     );
   }, [createWorkspaceItem]);
 

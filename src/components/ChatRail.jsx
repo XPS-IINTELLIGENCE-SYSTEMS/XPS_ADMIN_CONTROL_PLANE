@@ -109,6 +109,11 @@ function getProviderTone(mode) {
   return { label: 'Synthetic', color: '#eab308' };
 }
 
+function getBrowserWorkerMode(apiStatus, connectionPrefs) {
+  if (apiStatus?.browser?.mode) return apiStatus.browser.mode;
+  return connectionPrefs.browserWorkerUrl?.trim() ? 'local' : 'blocked';
+}
+
 function buildCredentials(connectionPrefs) {
   return {
     openaiApiKey: connectionPrefs.openaiApiKey,
@@ -200,7 +205,7 @@ export default function ChatRail({ activePanel, onNavigate, isMobile = false }) 
   }, [llmState.providers.groq?.configured, selectedProvider]);
 
   const runtimeTone = getProviderTone(llmState.mode);
-  const browserWorkerMode = apiStatus?.browser?.mode || (connectionPrefs.browserWorkerUrl ? 'local' : 'blocked');
+  const browserWorkerMode = getBrowserWorkerMode(apiStatus, connectionPrefs);
   const browserWorkerReady = browserWorkerMode === 'live' || browserWorkerMode === 'local';
   const providerOptions = useMemo(() => ([
     { value: 'auto', label: 'Groq-first auto' },
