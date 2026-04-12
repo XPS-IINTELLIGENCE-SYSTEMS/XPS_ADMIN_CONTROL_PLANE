@@ -9,15 +9,17 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(SCREENSHOTS, `${name}.png`), fullPage: false });
 }
 
-async function signIn(page) {
+async function signIn(page, options = {}) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.waitForSelector('text=Welcome back');
-  await page.getByRole('textbox', { name: 'Email' }).fill('alex@xpsxpress.com');
-  await page.getByLabel(/password/i).fill('demo-password');
+  await page.getByPlaceholder('you@xpsxpress.com').fill('alex@xpsxpress.com');
+  await page.getByPlaceholder('Any password works').fill('demo-password');
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await expect(page.getByTestId('control-center')).toBeVisible();
-  await expect(page.getByTestId('chat-rail')).toBeVisible();
+  if (!options.mobile) {
+    await expect(page.getByTestId('chat-rail')).toBeVisible();
+  }
 }
 
 test.describe('XPS Intelligence control plane shell', () => {
@@ -30,7 +32,7 @@ test.describe('XPS Intelligence control plane shell', () => {
 
   test('landing page restores the branded front door', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('XPS Intelligence')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'XPS Intelligence' })).toBeVisible();
     await expect(page.getByText('Locations')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
     await screenshot(page, 'landing-front-door');
@@ -80,7 +82,7 @@ test.describe('XPS Intelligence control plane shell', () => {
       buffer: Buffer.from('xps queue test'),
     });
 
-    await expect(page.getByText('xps-queue.pdf')).toBeVisible();
+    await expect(page.getByTestId('chat-rail-panel').getByText('xps-queue.pdf')).toBeVisible();
     await expect(page.getByTestId('control-center').getByText('xps-queue.pdf')).toBeVisible();
     await expect(page.getByTestId('control-center').getByText('Queue ready')).toBeVisible();
   });
@@ -108,7 +110,7 @@ test.describe('XPS Intelligence control plane shell', () => {
 
   test('mobile opens the chat rail over the centered dashboard', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await signIn(page);
+    await signIn(page, { mobile: true });
     await expect(page.getByRole('banner').getByRole('button', { name: /show chat rail/i })).toBeVisible();
     await page.getByRole('banner').getByRole('button', { name: /show chat rail/i }).click();
     await expect(page.getByTestId('chat-rail').getByTestId('chat-input')).toBeVisible();
