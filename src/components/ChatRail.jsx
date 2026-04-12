@@ -572,7 +572,7 @@ ${error.message}`,
               <Link2 size={14} className="xps-icon" />
               Connectors
             </button>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PDF, Docs, XLS, CSV, text · Enter to send</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PDF, Word docs, Google Docs, XLS, CSV, text · Enter to send</div>
           </div>
 
           <button
