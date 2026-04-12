@@ -1,15 +1,18 @@
 import React, { createRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, CheckCircle2, ChevronRight, CirclePlus, DatabaseZap, Download, FolderUp, KeyRound, LayoutDashboard, Pencil, Plug, RefreshCw, Trash2, Upload, Wand2 } from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import Panel from '../components/ui/Panel.jsx';
 import ActiveWorkspace from '../components/workspace/ActiveWorkspace.jsx';
 import { useWorkspace, OBJ_TYPE, RUN_STATUS } from '../lib/workspaceEngine.jsx';
 import { getConnectionPrefs, subscribeConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs } from '../lib/connectionPrefs.js';
 import { loadIngestionQueue, prependIngestionQueue, subscribeIngestionQueue } from '../lib/ingestionQueue.js';
+import { snapshotCatalog } from '../data/snapshotCatalog.js';
 
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 const CUSTOM_CONNECTORS_STORAGE_KEY = 'xps.custom-connectors.v1';
 const BYTES_PER_KB = 1024;
 const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
+const CHART_GOLD = '#d4af52';
 const sectionRefs = {
   overview: createRef(),
   workspace: createRef(),
@@ -75,14 +78,14 @@ const CORE_CONNECTORS = [
       { key: 'sendgridFromEmail', label: 'From email', placeholder: 'ops@company.com' },
     ],
   },
-  {
-    id: 'browser',
-    label: 'Browser worker',
-    fields: [
-      { key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'https://worker.example.com' },
-      { key: 'runtimeTarget', label: 'Runtime target', placeholder: 'local or cloud' },
-    ],
-  },
+    {
+      id: 'browser',
+      label: 'Playwright browser worker',
+      fields: [
+        { key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'https://worker.example.com' },
+        { key: 'runtimeTarget', label: 'Runtime target', placeholder: 'headful (local debug) or cloud' },
+      ],
+    },
   {
     id: 'hubspot',
     label: 'HubSpot',
@@ -199,6 +202,25 @@ function inputStyle() {
   };
 }
 
+const leadFunnelChart = [
+  { name: 'New', leads: 0 },
+  { name: 'Qualified', leads: 0 },
+  { name: 'Proposal', leads: 0 },
+  { name: 'Won', leads: 0 },
+];
+
+const ingestionTrendChart = [
+  { name: 'Mon', files: 0 },
+  { name: 'Tue', files: 0 },
+  { name: 'Wed', files: 0 },
+  { name: 'Thu', files: 0 },
+  { name: 'Fri', files: 0 },
+  { name: 'Sat', files: 0 },
+  { name: 'Sun', files: 0 },
+];
+
+const SNAPSHOT_WORKSPACE_EXPLANATION = 'This repo snapshot is included in the centered dashboard gallery so the production reference stays visible while the live shell remains interactive.';
+
 export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }) {
   const { objects, createObject, resetWorkspace } = useWorkspace();
   const [liveStatus, setLiveStatus] = useState(null);
@@ -297,6 +319,18 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
     onNavigate?.('workspace');
   }, [createObject, onNavigate]);
 
+  const openSnapshotWorkspaceItem = useCallback((snapshot) => {
+    const safeSnapshot = snapshotCatalog.find((item) => item.id === snapshot.id) || snapshotCatalog[0];
+    const title = safeSnapshot.title;
+    const category = safeSnapshot.category;
+    const image = safeSnapshot.image;
+    const note = safeSnapshot.note;
+    createWorkspaceItem(
+      `${title} snapshot`,
+      `# ${title}\n\n- Category: ${category}\n- Reference image: ${image}\n- Note: ${note}\n\n${SNAPSHOT_WORKSPACE_EXPLANATION}`,
+    );
+  }, [createWorkspaceItem]);
+
   const workspaceActions = useMemo(() => ([
     {
       label: 'Daily brief',
@@ -312,6 +346,11 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       label: 'Deployment checklist',
       description: 'Create a controlled deploy checklist in the workspace.',
       action: () => createWorkspaceItem('Deployment checklist', '# Deployment checklist\n\n- Confirm runtime status\n- Review connector inputs\n- Validate sign-in routes\n- Rebuild and test'),
+    },
+    {
+      label: 'Snapshot review',
+      description: 'Create an editable note for the repo snapshot pages.',
+      action: () => createWorkspaceItem('Snapshot review', `# Snapshot review\n\n${snapshotCatalog.map((item) => `- ${item.title} — ${item.category}`).join('\n')}`),
     },
   ]), [createWorkspaceItem]);
 
@@ -494,6 +533,56 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
             <ActionButton icon={KeyRound} onClick={onOpenLogin}>Return to sign-in</ActionButton>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginTop: 18 }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16, minHeight: 300 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Lead funnel</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                Zeroed chart stays visible until real lead data is attached.
+              </div>
+              <div style={{ height: 220, marginTop: 16 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={leadFunnelChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(212,175,82,0.06)' }}
+                      contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }}
+                    />
+                    <Bar dataKey="leads" fill={CHART_GOLD} radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16, minHeight: 300 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Ingestion trend</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                Center dashboard keeps ingestion activity honest at zero until files or connectors are added.
+              </div>
+              <div style={{ height: 220, marginTop: 16 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={ingestionTrendChart} margin={{ left: -18, right: 6, top: 8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="ingestionArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={CHART_GOLD} stopOpacity={0.24} />
+                        <stop offset="95%" stopColor={CHART_GOLD} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ stroke: CHART_GOLD, strokeOpacity: 0.3 }}
+                      contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12 }}
+                    />
+                    <Area type="monotone" dataKey="files" stroke={CHART_GOLD} fill="url(#ingestionArea)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 18 }}>
             {ingestionCards.map((card) => {
               const Icon = card.icon;
@@ -545,6 +634,40 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
                     </span>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 18, border: '1px solid var(--border)', borderRadius: 16, background: 'var(--bg-card-alt)', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>Snapshot page coverage</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Every snapshot bundled in the repo is surfaced here so landing, sign-in, dashboard, admin, and all supporting pages stay visible in the production shell.
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {snapshotCatalog.length} snapshot references included
+              </div>
+            </div>
+
+            <div data-testid="snapshot-gallery" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginTop: 16 }}>
+              {snapshotCatalog.map((snapshot) => (
+                <article key={snapshot.id} style={{ border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ aspectRatio: '16 / 9', background: '#090909' }}>
+                    <img src={snapshot.image} alt={snapshot.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </div>
+                  <div style={{ padding: 14 }}>
+                    <div className="xps-gold-text" style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.6 }}>{snapshot.category.toUpperCase()}</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, marginTop: 8 }}>{snapshot.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 8 }}>{snapshot.note}</div>
+                    <div style={{ marginTop: 12 }}>
+                      <ActionButton icon={LayoutDashboard} onClick={() => openSnapshotWorkspaceItem(snapshot)}>
+                        Open in workspace
+                      </ActionButton>
+                    </div>
+                  </div>
+                </article>
               ))}
             </div>
           </div>

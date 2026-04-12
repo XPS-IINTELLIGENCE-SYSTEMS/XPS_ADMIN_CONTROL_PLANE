@@ -84,7 +84,7 @@ export default function Sidebar({ collapsed, onToggle, activePanel, onNavigate }
               XPS INTELLIGENCE
             </div>
             <div className="xps-gold-text" style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.8, lineHeight: 1, marginTop: 3 }}>
-              SIMPLIFIED OPS
+              ADMIN CONTROL PLANE
             </div>
           </div>
         )}

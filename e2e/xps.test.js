@@ -45,6 +45,20 @@ test.describe('XPS Intelligence control plane shell', () => {
     await screenshot(page, 'three-panel-shell');
   });
 
+  test('landing page Open Dashboard button bypasses auth and displays production shell', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open dashboard' }).click();
+    await expect(page.getByTestId('control-center')).toBeVisible();
+    await expect(page.getByTestId('chat-rail')).toBeVisible();
+  });
+
+  test('login quick-access buttons still require no auth', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await page.getByRole('button', { name: 'Google Workspace' }).click();
+    await expect(page.getByTestId('control-center')).toBeVisible();
+  });
+
   test('workspace quick actions create editable outputs', async ({ page }) => {
     await signIn(page);
     await page.getByRole('banner').getByRole('button', { name: 'Workspace' }).click();
@@ -85,6 +99,25 @@ test.describe('XPS Intelligence control plane shell', () => {
     await expect(page.getByTestId('chat-rail-panel').getByText('xps-queue.pdf')).toBeVisible();
     await expect(page.getByTestId('control-center').getByText('xps-queue.pdf')).toBeVisible();
     await expect(page.getByTestId('control-center').getByText('Queue ready')).toBeVisible();
+  });
+
+  test('overview includes zeroed charts and the snapshot gallery', async ({ page }) => {
+    await signIn(page);
+    await expect(page.getByText('Lead funnel')).toBeVisible();
+    await expect(page.getByText('Ingestion trend')).toBeVisible();
+    await expect(page.getByTestId('snapshot-gallery')).toBeVisible();
+    await expect(page.getByTestId('snapshot-gallery').getByRole('img', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByTestId('snapshot-gallery').getByRole('img', { name: 'Admin' })).toBeVisible();
+    await screenshot(page, 'snapshot-gallery');
+  });
+
+  test('chat rail can run a synthetic operator response and keeps the agent visible', async ({ page }) => {
+    await signIn(page);
+    await page.getByLabel('Runtime provider').selectOption('synthetic');
+    await page.getByTestId('chat-input').fill('Summarize the dashboard state.');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByText(/\[Synthetic\] orchestrator received your message/i)).toBeVisible();
+    await screenshot(page, 'chat-synthetic-response');
   });
 
   test('access actions return to sign in and open real external sign-in pages', async ({ page }) => {
