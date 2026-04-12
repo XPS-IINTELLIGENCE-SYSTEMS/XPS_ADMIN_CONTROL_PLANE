@@ -11,20 +11,16 @@ async function screenshot(page, name) {
 
 async function signIn(page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.waitForSelector('text=Welcome back');
-  await page.getByRole('textbox', { name: 'Operator name' }).fill('Alex Operator');
-  await page.getByRole('textbox', { name: /password/i }).fill('demo-password');
-  await page.getByRole('button', { name: 'Enter chat workspace' }).click();
-  await expect(page.getByTestId('chat-input')).toBeVisible();
-}
-
-async function openDashboard(page) {
-  await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
+  await page.getByRole('textbox', { name: 'Email' }).fill('alex@xpsxpress.com');
+  await page.getByLabel(/password/i).fill('demo-password');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await expect(page.getByTestId('control-center')).toBeVisible();
+  await expect(page.getByTestId('chat-rail')).toBeVisible();
 }
 
-test.describe('XPS Intelligence simplified control center', () => {
+test.describe('XPS Intelligence control plane shell', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.clear();
@@ -34,26 +30,21 @@ test.describe('XPS Intelligence simplified control center', () => {
 
   test('landing page restores the branded front door', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('Mobile-ready AI sales operations.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
-    await expect(page.getByText('Launch into a polished landing page')).toBeVisible();
-    await screenshot(page, 'login-front-door');
+    await expect(page.getByText('XPS Intelligence')).toBeVisible();
+    await expect(page.getByText('Locations')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
+    await screenshot(page, 'landing-front-door');
   });
 
-  test('sign in opens the chat-first shell with a dashboard drawer', async ({ page }) => {
+  test('sign in opens the three-panel shell', async ({ page }) => {
     await signIn(page);
-    await expect(page.getByText('Primary chat is live.')).toBeVisible();
-    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
-    await expect(page.getByTestId('chat-input')).toBeVisible();
-    await openDashboard(page);
     await expect(page.getByTestId('control-center').getByText('Ingestion queue', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('control-center').getByText('Unified connectors', { exact: true })).toBeVisible();
-    await screenshot(page, 'control-center-shell');
+    await expect(page.getByTestId('chat-rail').getByTestId('chat-input')).toBeVisible();
+    await screenshot(page, 'three-panel-shell');
   });
 
   test('workspace quick actions create editable outputs', async ({ page }) => {
     await signIn(page);
-    await openDashboard(page);
     await page.getByRole('banner').getByRole('button', { name: 'Workspace' }).click();
     await page.getByRole('button', { name: /Daily brief Create a short editable status brief for today\./ }).click();
     await expect(page.getByText('Review the hottest leads')).toBeVisible();
@@ -63,7 +54,6 @@ test.describe('XPS Intelligence simplified control center', () => {
 
   test('connectors are centralized and support add modify delete', async ({ page }) => {
     await signIn(page);
-    await openDashboard(page);
     await page.getByRole('banner').getByRole('button', { name: 'Connectors' }).click();
 
     await page.getByTestId('custom-connector-name').fill('Slack Alerts');
@@ -82,24 +72,21 @@ test.describe('XPS Intelligence simplified control center', () => {
     await screenshot(page, 'connectors-crud');
   });
 
-  test('chat stays primary and does not replace workspace artifacts', async ({ page }) => {
+  test('chat attachments sync into the dashboard queue', async ({ page }) => {
     await signIn(page);
-    await openDashboard(page);
-    await page.getByRole('banner').getByRole('button', { name: 'Workspace' }).click();
-    await expect(page.getByTestId('workspace-tab-bar')).toContainText('Operations board');
-    await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
+    await page.locator('[data-testid="chat-rail"] input[type="file"]').setInputFiles({
+      name: 'xps-queue.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('xps queue test'),
+    });
 
-    await page.getByTestId('model-selector').selectOption('connectors');
-    await page.getByTestId('chat-input').fill('Show me the connector changes I need to make today.');
-    await page.getByRole('button', { name: 'Send' }).click();
-
-    await expect(page.getByText(/No live provider is configured/i)).toBeVisible();
-    await expect(page.getByTestId('workspace-tab-bar').getByText('Operations board')).toHaveCount(1);
+    await expect(page.getByText('xps-queue.pdf')).toBeVisible();
+    await expect(page.getByTestId('control-center').getByText('xps-queue.pdf')).toBeVisible();
+    await expect(page.getByTestId('control-center').getByText('Queue ready')).toBeVisible();
   });
 
   test('access actions return to sign in and open real external sign-in pages', async ({ page }) => {
     await signIn(page);
-    await openDashboard(page);
     await page.getByRole('banner').getByRole('button', { name: 'Access' }).click();
 
     const [popup] = await Promise.all([
@@ -115,16 +102,16 @@ test.describe('XPS Intelligence simplified control center', () => {
 
   test('header sign in button always returns to the login screen', async ({ page }) => {
     await signIn(page);
-    await page.getByRole('banner').getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('banner').getByRole('button', { name: 'Sign In' }).last().click();
     await expect(page.getByText('Welcome back')).toBeVisible();
   });
 
-  test('mobile opens the dashboard drawer over the primary chat', async ({ page }) => {
+  test('mobile opens the chat rail over the centered dashboard', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page);
-    await expect(page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i })).toBeVisible();
-    await page.getByRole('banner').getByRole('button', { name: /show dashboard drawer/i }).click();
+    await expect(page.getByRole('banner').getByRole('button', { name: /show chat rail/i })).toBeVisible();
+    await page.getByRole('banner').getByRole('button', { name: /show chat rail/i }).click();
+    await expect(page.getByTestId('chat-rail').getByTestId('chat-input')).toBeVisible();
     await expect(page.getByTestId('control-center')).toBeVisible();
-    await expect(page.getByText('Ingestion queue')).toBeVisible();
   });
 });

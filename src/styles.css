@@ -39,7 +39,9 @@
   --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
   --shadow-lg:   0 8px 32px rgba(0,0,0,0.5);
 
-  --sidebar-w: 260px;
+  --side-panel-w: 280px;
+  --sidebar-w: var(--side-panel-w);
+  --chat-rail-w: var(--side-panel-w);
   --header-h:  64px;
   --rail-w:    420px;
 }

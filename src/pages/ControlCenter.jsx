@@ -4,10 +4,10 @@ import Panel from '../components/ui/Panel.jsx';
 import ActiveWorkspace from '../components/workspace/ActiveWorkspace.jsx';
 import { useWorkspace, OBJ_TYPE, RUN_STATUS } from '../lib/workspaceEngine.jsx';
 import { getConnectionPrefs, subscribeConnectionPrefs, updateConnectionPrefs, resetConnectionPrefs } from '../lib/connectionPrefs.js';
+import { loadIngestionQueue, prependIngestionQueue, subscribeIngestionQueue } from '../lib/ingestionQueue.js';
 
 const API_URL = import.meta.env.VITE_API_URL || import.meta.env.API_URL || '';
 const CUSTOM_CONNECTORS_STORAGE_KEY = 'xps.custom-connectors.v1';
-const INGESTION_QUEUE_STORAGE_KEY = 'xps.ingestion.queue.v1';
 const BYTES_PER_KB = 1024;
 const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
 const sectionRefs = {
@@ -128,23 +128,6 @@ function saveCustomConnectors(next) {
   window.localStorage.setItem(CUSTOM_CONNECTORS_STORAGE_KEY, JSON.stringify(next));
 }
 
-function loadIngestionQueue() {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(INGESTION_QUEUE_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveIngestionQueue(next) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(INGESTION_QUEUE_STORAGE_KEY, JSON.stringify(next));
-}
-
 function emptyCustomConnector() {
   return {
     id: '',
@@ -256,6 +239,8 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
     });
   }, []);
 
+  useEffect(() => subscribeIngestionQueue(setIngestionQueue), []);
+
   useEffect(() => {
     const filteredObjects = objects.filter((item) => !isLegacyChatWorkspaceObject(item));
     if (filteredObjects.length !== objects.length) {
@@ -268,8 +253,8 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
       '# Operations board',
       '',
       '- Use the quick actions above the workspace to create editable outputs.',
-      '- Keep the primary chat surface open for live operator work.',
-      '- Pull over the dashboard drawer for ingestion and connector setup.',
+      '- Keep the centered dashboard active for ingestion and connector setup.',
+      '- Use the right-side chat rail for live operator work.',
       '- Return to the sign-in screen from the access section whenever needed.',
     ].join('\n');
     resetWorkspace([
@@ -297,11 +282,8 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   const groqReady = Boolean(connectionPrefs.groqApiKey || liveStatus?.groq?.configured);
 
   const pushIngestionItems = useCallback((items) => {
-    setIngestionQueue((current) => {
-      const next = [...items, ...current].slice(0, 12);
-      saveIngestionQueue(next);
-      return next;
-    });
+    const next = prependIngestionQueue(items);
+    setIngestionQueue(next);
   }, []);
 
   const createWorkspaceItem = useCallback((title, content) => {
