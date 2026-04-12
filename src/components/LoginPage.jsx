@@ -32,14 +32,14 @@ export default function LoginPage({ onContinue }) {
       style={{
         minHeight: '100vh',
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
         background: '#070707',
         color: '#fff',
       }}
     >
       <section
         style={{
-          padding: '40px 48px',
+          padding: 'clamp(24px, 6vw, 48px)',
           borderRight: '1px solid rgba(255,255,255,0.08)',
           background: 'radial-gradient(circle at center left, rgba(212,175,82,0.12), transparent 35%), linear-gradient(180deg, #0b0a08, #080808)',
           display: 'flex',
@@ -80,7 +80,7 @@ export default function LoginPage({ onContinue }) {
 
       <section
         style={{
-          padding: '40px 48px',
+          padding: 'clamp(24px, 6vw, 48px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -103,6 +103,7 @@ export default function LoginPage({ onContinue }) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@xpsxpress.com"
+                autoComplete="email"
                 style={inputStyle}
               />
             </label>
@@ -116,6 +117,7 @@ export default function LoginPage({ onContinue }) {
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Password"
+                  autoComplete="current-password"
                   style={{ ...inputStyle, paddingRight: 50 }}
                 />
                 <button

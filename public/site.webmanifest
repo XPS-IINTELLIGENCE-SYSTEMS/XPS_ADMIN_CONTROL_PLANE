@@ -1,0 +1,22 @@
+{
+  "name": "XPS Intelligence",
+  "short_name": "XPS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08090c",
+  "theme_color": "#08090c",
+  "description": "XPS Admin Control Plane chat-first sales intelligence workspace.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/xps-shield-wings.png",
+      "sizes": "562x444",
+      "type": "image/png"
+    }
+  ]
+}
