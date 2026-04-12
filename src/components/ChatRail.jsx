@@ -30,17 +30,17 @@ const MODE_CONFIG = {
   assistant: {
     label: 'Assistant',
     agent: 'orchestrator',
-    note: 'General operator chat with concise operational guidance.',
+    note: 'OpenClaw-style operator chat with concise Groq-first guidance.',
   },
   research: {
     label: 'Research',
     agent: 'research',
-    note: 'Target-account research and short summaries.',
+    note: 'Research mode for target-account summaries and repo snapshot review.',
   },
   connectors: {
     label: 'Connectors',
     agent: 'orchestrator',
-    note: 'Connector setup, ingestion, and runtime troubleshooting.',
+    note: 'Connector setup, ingestion, and Playwright browser-worker troubleshooting.',
   },
 };
 
@@ -200,6 +200,8 @@ export default function ChatRail({ activePanel, onNavigate, isMobile = false }) 
   }, [llmState.providers.groq?.configured, selectedProvider]);
 
   const runtimeTone = getProviderTone(llmState.mode);
+  const browserWorkerMode = apiStatus?.browser?.mode || (connectionPrefs.browserWorkerUrl ? 'local' : 'blocked');
+  const browserWorkerReady = browserWorkerMode === 'live' || browserWorkerMode === 'local';
   const providerOptions = useMemo(() => ([
     { value: 'auto', label: 'Groq-first auto' },
     { value: 'groq', label: 'Groq' },
@@ -325,7 +327,7 @@ ${error.message}`,
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: 'var(--text-muted)' }}>RIGHT CHAT RAIL</div>
-            <div className="xps-gold-text" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>Operational AI agent</div>
+            <div className="xps-gold-text" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>OpenClaw operator chat</div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
               {MODE_CONFIG[mode].note}
             </div>
@@ -355,6 +357,21 @@ ${error.message}`,
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '7px 12px', background: `${runtimeTone.color}14`, border: `1px solid ${runtimeTone.color}24`, color: runtimeTone.color, fontSize: 12, fontWeight: 700, marginTop: 14 }}>
           <Activity size={13} />
           {llmState.active === 'none' ? 'Synthetic fallback' : `${providerLabel(llmState.active)} ready`}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(212,175,82,0.12)', border: '1px solid rgba(212,175,82,0.24)', color: 'var(--gold)', fontSize: 11, fontWeight: 700 }}>
+            <Sparkles size={11} />
+            Groq-first
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.24)', color: '#93c5fd', fontSize: 11, fontWeight: 700 }}>
+            <Paperclip size={11} />
+            Paperclip uploads
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: browserWorkerReady ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', border: browserWorkerReady ? '1px solid rgba(34,197,94,0.24)' : '1px solid rgba(239,68,68,0.24)', color: browserWorkerReady ? '#4ade80' : '#fca5a5', fontSize: 11, fontWeight: 700 }}>
+            <Activity size={11} />
+            {browserWorkerReady ? 'Playwright worker ready' : 'Playwright worker blocked'}
+          </span>
         </div>
 
         <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
@@ -550,7 +567,7 @@ ${error.message}`,
               <Link2 size={14} className="xps-icon" />
               Connectors
             </button>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PDF, Docs, Sheets · Enter to send</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PDF, Docs, XLS, CSV, text · Enter to send</div>
           </div>
 
           <button

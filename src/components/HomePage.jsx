@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight, LayoutDashboard, MessageSquare, PanelLeft, ShieldCheck } from 'lucide-react';
+import { snapshotCatalog } from '../data/snapshotCatalog.js';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4af52';
@@ -11,30 +12,15 @@ const stats = [
   { value: '0', label: 'Active chats' },
 ];
 
-const showcase = [
-  {
-    title: 'Landing page',
-    note: 'Use the existing XPS screenshots as the only visual reference.',
-    image: '/screenshots/dashboard.png',
-  },
-  {
-    title: 'Dashboard + tools',
-    note: 'Keep the tool rail left, the dashboard centered, and the chat pinned on the right.',
-    image: '/screenshots/connectors.png',
-  },
-  {
-    title: 'Chat rail',
-    note: 'Groq-first chat stays in the right rail with source attachment handoff into the dashboard.',
-    image: '/screenshots/ai-assistant.png',
-  },
-];
-
 const capabilities = [
   { icon: PanelLeft, label: 'Left tool panel' },
   { icon: LayoutDashboard, label: 'Centered dashboard' },
   { icon: MessageSquare, label: 'Right chat rail' },
   { icon: ShieldCheck, label: 'Mobile PWA shell' },
 ];
+
+const showcase = snapshotCatalog.slice(0, 4);
+const includedPages = snapshotCatalog.map((item) => item.title);
 
 export default function HomePage({ onStartSignIn, onEnterApp }) {
   return (
@@ -188,6 +174,30 @@ export default function HomePage({ onStartSignIn, onEnterApp }) {
                 </div>
               ))}
             </div>
+
+            <div style={{ marginTop: 26, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: '18px 18px 16px', background: 'rgba(255,255,255,0.02)' }}>
+              <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.2 }}>INCLUDED SNAPSHOT PAGES</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                {includedPages.map((label) => (
+                  <span
+                    key={label}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      borderRadius: 999,
+                      padding: '9px 12px',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.78)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gap: 18 }}>
@@ -205,13 +215,13 @@ export default function HomePage({ onStartSignIn, onEnterApp }) {
                 <div style={{ aspectRatio: '16 / 9', background: '#090909' }}>
                   <img src={item.image} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </div>
-                <div style={{ padding: '18px 18px 20px' }}>
-                  <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.2 }}>REFERENCE</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, marginTop: 10 }}>{item.title}</div>
-                  <div style={{ marginTop: 8, fontSize: 14, color: 'rgba(255,255,255,0.58)', lineHeight: 1.7 }}>{item.note}</div>
-                </div>
-              </article>
-            ))}
+                  <div style={{ padding: '18px 18px 20px' }}>
+                    <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2.2 }}>{item.category.toUpperCase()}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, marginTop: 10 }}>{item.title}</div>
+                    <div style={{ marginTop: 8, fontSize: 14, color: 'rgba(255,255,255,0.58)', lineHeight: 1.7 }}>{item.note}</div>
+                  </div>
+                </article>
+              ))}
           </div>
         </section>
       </div>
