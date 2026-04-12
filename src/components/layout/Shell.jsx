@@ -10,10 +10,9 @@ import { APP_SHELL_NAV_EVENT } from '../../lib/appShellEvents.js';
 
 const APP_SECTIONS = new Set(['overview', 'workspace', 'connectors', 'access']);
 const MOBILE_BREAKPOINT = 960;
-const WIDE_DRAWER_BREAKPOINT = 1320;
 
 function getViewportWidth() {
-  if (typeof window === 'undefined') return WIDE_DRAWER_BREAKPOINT;
+  if (typeof window === 'undefined') return 1440;
   return window.innerWidth;
 }
 
@@ -22,7 +21,7 @@ export default function Shell() {
   const [activePanel, setActivePanel] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(getViewportWidth);
-  const [dashboardOpen, setDashboardOpen] = useState(() => getViewportWidth() >= WIDE_DRAWER_BREAKPOINT);
+  const [chatOpen, setChatOpen] = useState(() => getViewportWidth() >= MOBILE_BREAKPOINT);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const isMobile = viewportWidth < MOBILE_BREAKPOINT;
@@ -31,7 +30,6 @@ export default function Shell() {
     const nextPanel = APP_SECTIONS.has(panel) ? panel : 'overview';
     setActivePanel(nextPanel);
     if (viewportWidth < MOBILE_BREAKPOINT) {
-      setDashboardOpen(true);
       setMobileNavOpen(false);
     }
   }, [viewportWidth]);
@@ -41,11 +39,7 @@ export default function Shell() {
     setPage('app');
     setActivePanel(APP_SECTIONS.has(panel) ? panel : 'overview');
     setMobileNavOpen(false);
-    if (width < MOBILE_BREAKPOINT) {
-      setDashboardOpen(false);
-    } else if (width >= WIDE_DRAWER_BREAKPOINT) {
-      setDashboardOpen(true);
-    }
+    setChatOpen(width >= MOBILE_BREAKPOINT);
   }, []);
 
   const openLogin = useCallback(() => {
@@ -63,14 +57,12 @@ export default function Shell() {
       const width = getViewportWidth();
       setViewportWidth(width);
       if (width < MOBILE_BREAKPOINT) {
-        setDashboardOpen(false);
         setSidebarCollapsed(false);
+        setChatOpen(false);
         return;
       }
       setMobileNavOpen(false);
-      if (width >= WIDE_DRAWER_BREAKPOINT) {
-        setDashboardOpen(true);
-      }
+      setChatOpen(true);
     };
 
     handleResize();
@@ -136,8 +128,8 @@ export default function Shell() {
               onToggleSidebar={!isMobile ? () => setSidebarCollapsed((current) => !current) : undefined}
               sidebarVisible={!isMobile}
               isMobile={isMobile}
-              dashboardOpen={dashboardOpen}
-              onToggleDashboard={() => setDashboardOpen((current) => !current)}
+              chatOpen={chatOpen}
+              onToggleChat={() => setChatOpen((current) => !current)}
               onToggleNavigation={() => setMobileNavOpen((current) => !current)}
             />
 
@@ -168,41 +160,35 @@ export default function Shell() {
               ) : null}
 
               <main style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <ChatRail
-                  activePanel={activePanel}
-                  onNavigate={navigateToPanel}
-                  onOpenDashboard={() => setDashboardOpen(true)}
-                  dashboardOpen={dashboardOpen}
-                  isMobile={isMobile}
-                />
+                <CenterWorkspace activePanel={activePanel} onNavigate={navigateToPanel} onOpenLogin={openLogin} />
               </main>
 
-              {!isMobile && (
+              {!isMobile ? (
                 <aside
-                  data-testid="dashboard-drawer"
+                  data-testid="chat-rail"
                   style={{
-                    width: dashboardOpen ? 'min(560px, 36vw)' : 0,
-                    minWidth: dashboardOpen ? 360 : 0,
-                    maxWidth: dashboardOpen ? 560 : 0,
-                    borderLeft: dashboardOpen ? '1px solid var(--border)' : 'none',
+                    width: chatOpen ? 'var(--chat-rail-w)' : 0,
+                    minWidth: chatOpen ? 'var(--chat-rail-w)' : 0,
+                    maxWidth: chatOpen ? 'var(--chat-rail-w)' : 0,
+                    borderLeft: chatOpen ? '1px solid var(--border)' : 'none',
                     background: 'var(--bg-sidebar)',
                     overflow: 'hidden',
                     flexShrink: 0,
                     transition: 'width 0.24s ease, min-width 0.24s ease, border-color 0.24s ease',
                   }}
                 >
-                  {dashboardOpen ? <CenterWorkspace activePanel={activePanel} onNavigate={navigateToPanel} onOpenLogin={openLogin} /> : null}
+                  {chatOpen ? <ChatRail activePanel={activePanel} onNavigate={navigateToPanel} /> : null}
                 </aside>
-              )}
+              ) : null}
             </div>
           </div>
 
-          {isMobile && dashboardOpen ? (
+          {isMobile && chatOpen ? (
             <>
               <button
                 type="button"
-                aria-label="Close dashboard drawer"
-                onClick={() => setDashboardOpen(false)}
+                aria-label="Close chat rail"
+                onClick={() => setChatOpen(false)}
                 style={{
                   position: 'fixed',
                   inset: 'var(--header-h) 0 0 0',
@@ -211,21 +197,21 @@ export default function Shell() {
                   zIndex: 40,
                 }}
               />
-               <aside
-                 data-testid="dashboard-drawer"
-                 style={{
-                   position: 'fixed',
-                   inset: 'auto 0 0 0',
-                   height: 'min(78vh, 720px)',
-                   zIndex: 41,
-                   borderTop: '1px solid var(--border)',
-                   borderRadius: '22px 22px 0 0',
-                   background: 'var(--bg-sidebar)',
-                   overflow: 'hidden',
-                   boxShadow: 'var(--shadow-lg)',
-                 }}
-               >
-                <CenterWorkspace activePanel={activePanel} onNavigate={navigateToPanel} onOpenLogin={openLogin} />
+              <aside
+                data-testid="chat-rail"
+                style={{
+                  position: 'fixed',
+                  inset: 'auto 0 0 0',
+                  height: 'min(82vh, 760px)',
+                  zIndex: 41,
+                  borderTop: '1px solid var(--border)',
+                  borderRadius: '22px 22px 0 0',
+                  background: 'var(--bg-sidebar)',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--shadow-lg)',
+                }}
+              >
+                <ChatRail activePanel={activePanel} onNavigate={navigateToPanel} isMobile />
               </aside>
             </>
           ) : null}

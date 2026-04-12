@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Blocks, KeyRound, LayoutDashboard, Menu, PanelLeft, PanelRightClose, PanelRightOpen, Plug } from 'lucide-react';
+import { Blocks, KeyRound, LayoutDashboard, Menu, MessageSquare, PanelLeft, PanelRightClose, PanelRightOpen, Plug } from 'lucide-react';
 import { userContext } from '../../data/synthetic.js';
 import { getConnectionPrefs, subscribeConnectionPrefs } from '../../lib/connectionPrefs.js';
 import { resolveClientProviderState } from '../../lib/providerState.js';
@@ -12,10 +12,10 @@ const panelLabels = {
 };
 
 const panelDescriptions = {
-  overview: 'Zeroed ingestion dashboard and operational status.',
-  workspace: 'Drawer surface for workspace artifacts and production checks.',
-  connectors: 'Connect Groq, Google Drive, HubSpot, Airtable, and runtime services.',
-  access: 'Open the built-in sign-in screen or real external sign-in pages.',
+  overview: 'Centered dashboard with zeroed ingestion, connector, and runtime status.',
+  workspace: 'Editable workspace outputs stay in the center dashboard.',
+  connectors: 'Groq, GPT, Supabase, GitHub, and Google Workspace connector setup.',
+  access: 'Open the built-in sign-in and account pass-through entry points.',
 };
 
 const topNavItems = [
@@ -56,8 +56,8 @@ export default function Header({
   onToggleSidebar,
   sidebarVisible,
   isMobile,
-  dashboardOpen,
-  onToggleDashboard,
+  chatOpen,
+  onToggleChat,
   onToggleNavigation,
 }) {
   const [apiStatus, setApiStatus] = useState(null);
@@ -91,10 +91,10 @@ export default function Header({
   }, []);
 
   const sectionNote = useMemo(() => {
-    if (activePanel === 'connectors') return 'Groq-first runtime setup, ingestion targets, and connector handoff live in the drawer.';
-    if (activePanel === 'access') return 'Use the built-in sign-in route or jump to the real provider login pages.';
-    if (activePanel === 'workspace') return 'Workspace artifacts and deployment checks stay secondary behind the chat surface.';
-    return 'Keep chat primary, then pull over the dashboard when you need ingestion or operations controls.';
+    if (activePanel === 'connectors') return 'Keep connector truth in the center dashboard and use the right rail for live troubleshooting.';
+    if (activePanel === 'access') return 'Use the open sign-in screen or jump to the real provider account pages.';
+    if (activePanel === 'workspace') return 'Workspace artifacts stay centered while the chat agent remains pinned on the right.';
+    return 'Left tools, centered dashboard, and a live chat rail on the right stay visible together.';
   }, [activePanel]);
 
   return (
@@ -145,7 +145,7 @@ export default function Header({
               XPS INTELLIGENCE
             </span>
             <span className="xps-gold-text" style={{ fontWeight: 700, fontSize: 10, letterSpacing: 2, whiteSpace: 'nowrap', marginTop: 3 }}>
-              CHAT OPERATIONS
+              CONTROL PLANE
             </span>
           </div>
         )}
@@ -265,7 +265,7 @@ export default function Header({
 
       <button
         type="button"
-        onClick={onToggleDashboard}
+        onClick={onToggleChat}
         className="xps-electric-hover"
         style={{
           display: 'inline-flex',
@@ -274,16 +274,16 @@ export default function Header({
           padding: isMobile ? '10px 12px' : '8px 12px',
           borderRadius: 10,
           border: '1px solid var(--border)',
-          background: dashboardOpen ? 'var(--bg-active)' : 'var(--bg-card)',
+          background: chatOpen ? 'var(--bg-active)' : 'var(--bg-card)',
           color: 'var(--text-primary)',
           fontSize: 12,
           fontWeight: 700,
           flexShrink: 0,
         }}
-        aria-label={dashboardOpen ? 'Hide dashboard drawer' : 'Show dashboard drawer'}
+        aria-label={chatOpen ? 'Hide chat rail' : 'Show chat rail'}
       >
-        {dashboardOpen ? <PanelRightClose size={15} className="xps-icon" /> : <PanelRightOpen size={15} className="xps-icon" />}
-        {!isMobile ? 'Dashboard' : 'Drawer'}
+        {chatOpen ? <PanelRightClose size={15} className="xps-icon" /> : <PanelRightOpen size={15} className="xps-icon" />}
+        {!isMobile ? 'Chat' : 'Chat'}
       </button>
 
       {!isMobile ? (
