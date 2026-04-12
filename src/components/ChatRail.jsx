@@ -110,7 +110,8 @@ function getProviderTone(mode) {
 }
 
 function getBrowserWorkerMode(apiStatus, connectionPrefs) {
-  if (apiStatus?.browser?.mode) return apiStatus.browser.mode;
+  const apiMode = typeof apiStatus?.browser?.mode === 'string' ? apiStatus.browser.mode.toLowerCase() : '';
+  if (['live', 'local', 'blocked'].includes(apiMode)) return apiMode;
   return connectionPrefs.browserWorkerUrl?.trim() ? 'local' : 'blocked';
 }
 

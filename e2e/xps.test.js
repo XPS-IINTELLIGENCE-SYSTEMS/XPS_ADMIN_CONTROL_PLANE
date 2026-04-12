@@ -45,7 +45,7 @@ test.describe('XPS Intelligence control plane shell', () => {
     await screenshot(page, 'three-panel-shell');
   });
 
-  test('landing open dashboard button bypasses auth and shows the production shell', async ({ page }) => {
+  test('landing page Open Dashboard button bypasses auth and displays production shell', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open dashboard' }).click();
     await expect(page.getByTestId('control-center')).toBeVisible();

@@ -83,7 +83,7 @@ const CORE_CONNECTORS = [
       label: 'Playwright browser worker',
       fields: [
         { key: 'browserWorkerUrl', label: 'Worker URL', placeholder: 'https://worker.example.com' },
-        { key: 'runtimeTarget', label: 'Runtime target', placeholder: 'headful local or cloud' },
+        { key: 'runtimeTarget', label: 'Runtime target', placeholder: 'headful (local debug) or cloud' },
       ],
     },
   {
@@ -221,10 +221,6 @@ const ingestionTrendChart = [
 
 const SNAPSHOT_WORKSPACE_EXPLANATION = 'This repo snapshot is included in the centered dashboard gallery so the production reference stays visible while the live shell remains interactive.';
 
-function sanitizeSnapshotValue(value) {
-  return String(value ?? '').replace(/[<>`]/g, '').trim();
-}
-
 export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }) {
   const { objects, createObject, resetWorkspace } = useWorkspace();
   const [liveStatus, setLiveStatus] = useState(null);
@@ -324,10 +320,11 @@ export default function ControlCenter({ activeSection, onNavigate, onOpenLogin }
   }, [createObject, onNavigate]);
 
   const openSnapshotWorkspaceItem = useCallback((snapshot) => {
-    const title = sanitizeSnapshotValue(snapshot.title);
-    const category = sanitizeSnapshotValue(snapshot.category);
-    const image = sanitizeSnapshotValue(snapshot.image);
-    const note = sanitizeSnapshotValue(snapshot.note);
+    const safeSnapshot = snapshotCatalog.find((item) => item.id === snapshot.id) || snapshotCatalog[0];
+    const title = safeSnapshot.title;
+    const category = safeSnapshot.category;
+    const image = safeSnapshot.image;
+    const note = safeSnapshot.note;
     createWorkspaceItem(
       `${title} snapshot`,
       `# ${title}\n\n- Category: ${category}\n- Reference image: ${image}\n- Note: ${note}\n\n${SNAPSHOT_WORKSPACE_EXPLANATION}`,
