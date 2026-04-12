@@ -11,7 +11,7 @@ async function screenshot(page, name) {
 
 async function signIn(page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForSelector('text=Welcome back');
   await page.getByRole('textbox', { name: 'Operator name' }).fill('Alex Operator');
   await page.getByRole('textbox', { name: /password/i }).fill('demo-password');
@@ -35,7 +35,7 @@ test.describe('XPS Intelligence simplified control center', () => {
   test('landing page restores the branded front door', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('Mobile-ready AI sales operations.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
     await expect(page.getByText('Launch into a polished landing page')).toBeVisible();
     await screenshot(page, 'login-front-door');
   });
