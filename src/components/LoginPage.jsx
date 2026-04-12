@@ -1,30 +1,29 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 const BRAND_LOGO = '/brand/xps-shield-wings.png';
 const GOLD = '#d4af52';
 
-const highlights = [
-  { value: '0', label: 'LOCATIONS' },
-  { value: '0', label: 'SALES STAFF' },
-  { value: '0', label: 'LEADS' },
-  { value: '0', label: 'AI SUPPORT' },
+const previewImages = [
+  '/screenshots/dashboard.png',
+  '/screenshots/ai-assistant.png',
+  '/screenshots/connectors.png',
 ];
 
-export default function LoginPage({ onContinue }) {
-  const [email, setEmail] = useState('');
+export default function LoginPage({ onContinue, onBack }) {
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState('Use Sign In to enter the workspace shell. Connected authentication remains optional until configured.');
+  const [message, setMessage] = useState('Any operator name and password can continue in this build.');
+  const selectedPreview = useMemo(() => {
+    const seed = (name.trim().length + password.trim().length) % previewImages.length;
+    return previewImages[seed];
+  }, [name, password]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onContinue();
-  };
-
-  const handleAuxAction = (event) => {
-    event.preventDefault();
-    setMessage('Authentication is disabled in this build. Use Sign In to continue.');
+    setMessage(`Signed in as ${name.trim() || 'Operator'}. Authentication is intentionally open in this build.`);
+    onContinue?.();
   };
 
   return (
@@ -33,92 +32,77 @@ export default function LoginPage({ onContinue }) {
         minHeight: '100vh',
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
-        background: '#070707',
         color: '#fff',
+        background: 'radial-gradient(circle at top left, rgba(212,175,82,0.14), transparent 24%), #050505',
       }}
     >
       <section
         style={{
-          padding: 'clamp(24px, 6vw, 48px)',
+          padding: 'clamp(22px, 5vw, 44px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           borderRight: '1px solid rgba(255,255,255,0.08)',
-          background: 'radial-gradient(circle at center left, rgba(212,175,82,0.12), transparent 35%), linear-gradient(180deg, #0b0a08, #080808)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          background: 'linear-gradient(180deg, rgba(13,11,8,0.96), rgba(6,6,6,0.98))',
         }}
       >
-        <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
-          <div className="xps-logo xps-brand-logo-glow" style={{ width: 96, height: 96, borderRadius: 24, margin: '0 auto 34px' }}>
-            <img src={BRAND_LOGO} alt="XPS" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <div style={{ width: '100%', maxWidth: 620 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: 'rgba(255,255,255,0.02)',
+              color: '#fff',
+              borderRadius: 999,
+              padding: '9px 14px',
+              marginBottom: 20,
+            }}
+          >
+            <ArrowLeft size={14} />
+            Back to landing
+          </button>
+
+          <div className="xps-logo xps-brand-logo-glow" style={{ width: 92, height: 92, borderRadius: 24, marginBottom: 22 }}>
+            <img src={BRAND_LOGO} alt="XPS" />
           </div>
 
-          <h1 style={{ fontSize: 'clamp(42px, 5vw, 64px)', lineHeight: 1.08, marginBottom: 18 }}>
-            XPS Intelligence
+          <div className="xps-gold-text" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2.6 }}>SIGN IN</div>
+          <h1 style={{ fontSize: 'clamp(42px, 7vw, 66px)', lineHeight: 0.98, marginTop: 14 }}>
+            Welcome back
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: 20, lineHeight: 1.55, maxWidth: 460, margin: '0 auto' }}>
-            AI-Powered Sales Command Center for Xtreme Polishing Systems
+          <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7, marginTop: 16, maxWidth: 520 }}>
+            Use any operator name and password to enter the XPS mobile command center and launch the Groq-first chat shell.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 20, marginTop: 48 }}>
-            {highlights.map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(255,255,255,0.02)',
-                  borderRadius: 18,
-                  padding: '24px 18px',
-                }}
-              >
-                <div style={{ color: GOLD, fontSize: 40, fontWeight: 800, lineHeight: 1 }}>{item.value}</div>
-                <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 13, letterSpacing: 1.1, marginTop: 10 }}>{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          padding: 'clamp(24px, 6vw, 48px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'linear-gradient(180deg, #090909, #060606)',
-        }}
-      >
-        <div style={{ width: '100%', maxWidth: 480 }}>
-          <div className="xps-gold-text" style={{ fontWeight: 800, letterSpacing: 2, fontSize: 13, marginBottom: 10 }}>LOGIN</div>
-          <h2 style={{ fontSize: 50, lineHeight: 1.05, marginBottom: 14 }}>Welcome back</h2>
-          <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: 16, marginBottom: 36 }}>
-            Sign in to your XPS Intelligence account
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            <label style={{ display: 'block', marginBottom: 22 }}>
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', marginBottom: 10 }}>Email</div>
+          <form onSubmit={handleSubmit} style={{ marginTop: 28 }}>
+            <label style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.74)' }}>Operator name</span>
               <input
-                id="login-email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@xpsxpress.com"
-                autoComplete="email"
+                id="login-name"
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Jane Smith"
+                autoComplete="username"
                 style={inputStyle}
               />
             </label>
 
-            <label style={{ display: 'block' }}>
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', marginBottom: 10 }}>Password</div>
+            <label style={{ display: 'grid', gap: 10 }}>
+              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.74)' }}>Password</span>
               <div style={{ position: 'relative' }}>
                 <input
                   id="login-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
+                  placeholder="Any password works"
                   autoComplete="current-password"
-                  style={{ ...inputStyle, paddingRight: 50 }}
+                  style={{ ...inputStyle, paddingRight: 52 }}
                 />
                 <button
                   type="button"
@@ -128,13 +112,11 @@ export default function LoginPage({ onContinue }) {
                     right: 14,
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    background: 'transparent',
                     border: 'none',
-                    color: 'rgba(255,255,255,0.48)',
-                    padding: 0,
+                    background: 'transparent',
+                    color: 'rgba(255,255,255,0.54)',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    padding: 0,
                   }}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -143,10 +125,11 @@ export default function LoginPage({ onContinue }) {
               </div>
             </label>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-              <button type="button" onClick={handleAuxAction} style={{ background: 'transparent', border: 'none', color: GOLD, fontSize: 14 }}>
-                Forgot password?
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, borderRadius: 16, border: '1px solid rgba(212,175,82,0.18)', background: 'rgba(212,175,82,0.08)', padding: '14px 16px' }}>
+              <ShieldCheck size={18} color={GOLD} />
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.68)', lineHeight: 1.6 }}>
+                Open access mode is enabled for demo and production-preview routing.
+              </div>
             </div>
 
             <button
@@ -158,28 +141,40 @@ export default function LoginPage({ onContinue }) {
                 borderRadius: 16,
                 background: GOLD,
                 color: '#090909',
-                padding: '18px 20px',
+                padding: '17px 18px',
                 fontSize: 17,
                 fontWeight: 800,
               }}
             >
-              Sign In
+              Enter chat workspace
             </button>
           </form>
 
-          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.62)', marginTop: 30, fontSize: 15 }}>
-            Don&apos;t have an account?{' '}
-            <button
-              type="button"
-              onClick={handleAuxAction}
-              style={{ background: 'transparent', border: 'none', color: GOLD, fontSize: 15, fontWeight: 700, padding: 0 }}
-            >
-              Sign up
-            </button>
-          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.44)', lineHeight: 1.7, marginTop: 18 }}>{message}</div>
+        </div>
+      </section>
 
-          <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 12, marginTop: 18, textAlign: 'center' }}>
-            {message}
+      <section
+        style={{
+          padding: 'clamp(22px, 5vw, 40px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(180deg, rgba(10,10,10,0.98), rgba(6,6,6,0.96))',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: 600 }}>
+          <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 28, overflow: 'hidden', boxShadow: '0 26px 80px rgba(0,0,0,0.42)' }}>
+            <div style={{ aspectRatio: '4 / 3', background: '#090909' }}>
+              <img src={selectedPreview} alt="XPS product preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </div>
+            <div style={{ padding: '18px 18px 20px', background: 'linear-gradient(180deg, rgba(17,17,17,0.98), rgba(10,10,10,0.98))' }}>
+              <div className="xps-gold-text" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2 }}>LIVE PREVIEW</div>
+              <div style={{ fontSize: 24, fontWeight: 800, marginTop: 10 }}>Chat, dashboard, and mobile navigation in one shell.</div>
+              <div style={{ marginTop: 10, color: 'rgba(255,255,255,0.58)', lineHeight: 1.7 }}>
+                The dashboard stays one pull away, the side menu stays accessible on mobile, and Groq remains the primary runtime target.
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -191,7 +186,7 @@ const inputStyle = {
   width: '100%',
   background: 'rgba(255,255,255,0.03)',
   border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 14,
+  borderRadius: 16,
   padding: '16px 18px',
   color: '#fff',
   fontSize: 16,

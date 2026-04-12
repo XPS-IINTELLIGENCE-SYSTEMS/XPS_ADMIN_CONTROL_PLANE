@@ -11,8 +11,11 @@ async function screenshot(page, name) {
 
 async function signIn(page) {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForSelector('text=Welcome back');
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.getByRole('textbox', { name: 'Operator name' }).fill('Alex Operator');
+  await page.getByRole('textbox', { name: /password/i }).fill('demo-password');
+  await page.getByRole('button', { name: 'Enter chat workspace' }).click();
   await expect(page.getByTestId('chat-input')).toBeVisible();
 }
 
@@ -29,11 +32,11 @@ test.describe('XPS Intelligence simplified control center', () => {
     });
   });
 
-  test('login page restores the branded front door', async ({ page }) => {
+  test('landing page restores the branded front door', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('Welcome back')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
-    await expect(page.getByText('Use Sign In to enter the workspace shell.')).toBeVisible();
+    await expect(page.getByText('Mobile-ready AI sales operations.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByText('Launch into a polished landing page')).toBeVisible();
     await screenshot(page, 'login-front-door');
   });
 
